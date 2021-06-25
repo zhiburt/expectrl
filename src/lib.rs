@@ -235,6 +235,20 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn release_pty_master() -> Result<()> {
+        let master = Master::open()?;
+        let old_master_fd = master.fd.as_raw_fd();
+
+        drop(master);
+
+        let master = Master::open()?;
+
+        assert_eq!(master.fd.as_raw_fd(), old_master_fd);
+
+        Ok(())
+    }
+
     fn write<W: Write + Read, S: AsRef<str>>(mut writer: W, msg: S) -> usize {
         let msg = msg.as_ref();
         write!(writer, "{}", msg).unwrap();
