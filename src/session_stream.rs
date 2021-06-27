@@ -67,6 +67,10 @@ impl Write for Stream {
     fn flush(&mut self) -> io::Result<()> {
         self.file.flush()
     }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.file.write_vectored(bufs)
+    }
 }
 
 impl Read for Stream {
