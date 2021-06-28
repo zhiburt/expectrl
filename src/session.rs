@@ -5,6 +5,7 @@
 */
 
 use futures_lite::{AsyncRead, AsyncReadExt, AsyncWrite};
+use nix::sys::wait::WaitStatus;
 
 use crate::{error::Error, process::PtyProcess, session_stream::Stream};
 use std::{
@@ -56,6 +57,16 @@ impl PtySession {
         self.flush()?;
 
         Ok(n)
+    }
+
+    pub fn exit(&mut self) -> Result<(), Error> {
+        self.proc.exit()?;
+        Ok(())
+    }
+
+    pub fn wait(&mut self) -> Result<WaitStatus, Error> {
+        let status = self.proc.wait()?;
+        Ok(status)
     }
 }
 
@@ -124,7 +135,9 @@ mod tests {
         let mut buf = String::new();
         session.read_to_string(&mut buf)?;
 
-        assert_eq!(buf, "Hello World\n");
+        // cat repeats a send line after <enter> is presend
+        // <enter> is basically a new line
+        assert_eq!(buf, "Hello World\r\nHello World\r\n");
 
         Ok(())
     }
@@ -134,25 +147,27 @@ mod tests {
         let mut session = PtySession::spawn("cat")?;
         let n = session.send_line("Hello World")?;
 
-        println!("{}", n);
+        #[cfg(windows)]
+        {
+            assert_eq!(n, 11 + 2);
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(n, 11 + 1);
+        }
 
         thread::sleep(Duration::from_millis(300));
-        session.write_all(&[3])?; // Ctrl+C
-        session.flush()?;
+        session.exit()?;
 
         let mut buf = String::new();
         session.read_to_string(&mut buf)?;
 
-        println!("{}", buf);
-
-        #[cfg(windows)]
-        {
-            assert_eq!(buf, "Hello World\r\n");
-        }
-        #[cfg(not(windows))]
-        {
-            assert_eq!(buf, "Hello World\n");
-        }
+        // cat repeats a send line after <enter> is presend
+        // <enter> is basically a new line
+        //
+        // NOTE: in debug mode though it equals 'Hello World\r\n'
+        // : stty -a are the same
+        assert_eq!(buf, "Hello World\r\nHello World\r\n");
 
         Ok(())
     }

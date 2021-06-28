@@ -1,3 +1,4 @@
+use nix::errno::Errno;
 use nix::fcntl::{open, OFlag};
 use nix::libc::{signal, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::PtyMaster;
@@ -11,11 +12,14 @@ use signal::Signal::SIGHUP;
 use std::fs::File;
 use std::os::unix::prelude::{AsRawFd, CommandExt, FromRawFd, RawFd};
 use std::process::Command;
+use std::thread;
+use std::time::{self, Duration};
 
 #[derive(Debug)]
 pub(crate) struct PtyProcess {
     master: Master,
     child_pid: Pid,
+    timeout: Option<Duration>,
 }
 
 impl PtyProcess {
@@ -44,24 +48,9 @@ impl PtyProcess {
             ForkResult::Parent { child } => Ok(Self {
                 master,
                 child_pid: child,
+                timeout: Some(Duration::from_millis(30000)),
             }),
         }
-    }
-
-    pub fn status(&self) -> Result<WaitStatus> {
-        waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG))
-    }
-
-    pub fn signal(&self, signal: signal::Signal) -> Result<()> {
-        signal::kill(self.child_pid, signal)
-    }
-
-    pub fn exit(&self) -> Result<()> {
-        self.signal(signal::SIGTERM)
-    }
-
-    pub fn wait(&self) -> Result<WaitStatus> {
-        waitpid(self.child_pid, None)
     }
 
     pub fn get_file_handle(&self) -> Result<File> {
@@ -70,13 +59,64 @@ impl PtyProcess {
 
         Ok(file)
     }
+
+    pub fn set_exit_timeout(&mut self, timeout: Option<Duration>) {
+        self.timeout = timeout;
+    }
+
+    pub fn status(&self) -> Result<WaitStatus> {
+        waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG))
+    }
+
+    pub fn kill(&mut self, signal: signal::Signal) -> Result<()> {
+        signal::kill(self.child_pid, signal)
+    }
+
+    pub fn wait(&self) -> Result<WaitStatus> {
+        waitpid(self.child_pid, None)
+    }
+
+    pub fn exit(&mut self) -> Result<WaitStatus> {
+        match self.terminate(signal::SIGTERM) {
+            Err(nix::Error::Sys(nix::errno::Errno::ESRCH)) => {
+                Ok(WaitStatus::Exited(self.child_pid, 0))
+            }
+            _ => match self.status() {
+                Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => {
+                    Ok(WaitStatus::Exited(self.child_pid, 0))
+                }
+                result => result,
+            },
+        }
+    }
+
+    fn terminate(&mut self, signal: signal::Signal) -> Result<()> {
+        let start = time::Instant::now();
+        loop {
+            self.kill(signal)?;
+
+            let status = self.status()?;
+            if status != wait::WaitStatus::StillAlive {
+                return Ok(());
+            }
+
+            thread::sleep(time::Duration::from_millis(100));
+
+            // kill -9 if timout is reached
+            if let Some(timeout) = self.timeout {
+                if start.elapsed() > timeout {
+                    self.kill(signal::Signal::SIGKILL)?;
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 impl Drop for PtyProcess {
     fn drop(&mut self) {
         if let Ok(WaitStatus::StillAlive) = self.status() {
             self.exit().unwrap();
-            self.wait().unwrap();
         }
     }
 }
@@ -203,6 +243,23 @@ mod tests {
             WaitStatus::Signaled(proc.child_pid, signal::Signal::SIGINT, false),
             proc.wait()?
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn pty_cat_multiline() -> Result<()> {
+        let command = Command::new("cat");
+        let mut proc = PtyProcess::spawn(command)?;
+        let file = proc.get_file_handle()?;
+
+        write(&file, "hello cat\n");
+
+        thread::sleep(time::Duration::from_millis(600));
+        proc.exit()?;
+
+        let (output, _) = read_all(file);
+        assert_eq!(output, "hello cat\r\nhello cat\r\n");
 
         Ok(())
     }
