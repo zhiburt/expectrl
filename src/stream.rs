@@ -74,7 +74,7 @@ impl Write for BufStream {
 impl Read for BufStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.read_from_buffer(buf)?;
-        self.inner.read(&mut buf[n..])
+        self.inner.read(&mut buf[n..]).map(|c| n + c)
     }
 }
 

@@ -8,7 +8,5 @@ edition = "2018"
 
 [dependencies]
 nix = "0.21.0"
-async-fs = "1.5.0"
-futures-lite = "1.12.0"
-futures-timer = "3.0.2"
 polling = "2.1.0"
+regex = "1.5.4"
