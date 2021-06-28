@@ -77,16 +77,15 @@ impl PtyProcess {
     }
 
     pub fn exit(&mut self) -> Result<WaitStatus> {
-        match self.terminate(signal::SIGTERM) {
-            Err(nix::Error::Sys(nix::errno::Errno::ESRCH)) => {
+        if let Err(nix::Error::Sys(nix::errno::Errno::ESRCH)) = self.terminate(signal::SIGTERM) {
+            return Ok(WaitStatus::Exited(self.child_pid, 0))
+        }
+
+        match self.status() {
+            Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => {
                 Ok(WaitStatus::Exited(self.child_pid, 0))
             }
-            _ => match self.status() {
-                Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => {
-                    Ok(WaitStatus::Exited(self.child_pid, 0))
-                }
-                result => result,
-            },
+            result => result,
         }
     }
 

@@ -8,6 +8,8 @@ pub enum Error {
     IO(io::Error),
     Nix(nix::Error),
     CommandParsing,
+    RegexParsing,
+    ExpectTimeout,
     Other(String),
 }
 
@@ -17,6 +19,8 @@ impl Display for Error {
             Error::IO(err) => write!(f, "IO error {}", err),
             Error::Nix(err) => write!(f, "Nix error {}", err),
             Error::CommandParsing => write!(f, "Can't parse a command string, please check it out"),
+            Error::RegexParsing => write!(f, "Can't parse a regex expression"),
+            Error::ExpectTimeout => write!(f, "Reached a timeout for expect type of command"),
             Error::Other(message) => write!(f, "Error {}", message),
         }
     }

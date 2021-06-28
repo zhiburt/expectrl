@@ -1,4 +1,5 @@
 mod process;
 mod session;
 mod error;
-mod session_stream;
+mod stream;
+mod expect;

@@ -4,10 +4,14 @@
     - proc methods: kill wait etc.
 */
 
-use futures_lite::{AsyncRead, AsyncReadExt, AsyncWrite};
 use nix::sys::wait::WaitStatus;
 
-use crate::{error::Error, process::PtyProcess, session_stream::Stream};
+use crate::{
+    error::Error,
+    expect::Expect,
+    process::PtyProcess,
+    stream::{is_timeout_error, BufStream, Stream},
+};
 use std::{
     convert::TryFrom,
     fmt,
@@ -16,11 +20,14 @@ use std::{
     os::unix::prelude::{AsRawFd, FromRawFd},
     process::Command,
     task::Poll,
+    thread,
+    time::{self, Duration},
 };
 
 pub struct PtySession {
     proc: PtyProcess,
-    master: Stream,
+    master: BufStream,
+    timeout: Option<Duration>,
 }
 
 impl PtySession {
@@ -28,12 +35,34 @@ impl PtySession {
         let command = build_command(cmd)?;
         let ptyproc = PtyProcess::spawn(command)?;
         let master = ptyproc.get_file_handle()?;
-        let stream = Stream::new(master)?;
+        let stream = BufStream::new(Stream::new(master)?);
 
         Ok(Self {
             proc: ptyproc,
             master: stream,
+            timeout: Some(Duration::from_millis(10000)),
         })
+    }
+
+    pub fn expect<E: Expect>(&mut self, expect: E) -> Result<E::Output, Error> {
+        let start = time::Instant::now();
+        loop {
+            self.master.try_fill(self.timeout)?;
+
+            let buf = self.master.as_bytes();
+            let eof = self.master.is_eof();
+
+            if let Some((out, m)) = expect.expect(&buf, eof) {
+                self.master.drain(m.end());
+                return Ok(out);
+            }
+
+            if let Some(timeout) = self.timeout {
+                if start.elapsed() > timeout {
+                    return Err(Error::ExpectTimeout);
+                }
+            }
+        }
     }
 
     pub fn send<S: AsRef<str>>(&mut self, str: S) -> Result<usize, Error> {
@@ -170,5 +199,23 @@ mod tests {
         assert_eq!(buf, "Hello World\r\nHello World\r\n");
 
         Ok(())
+    }
+
+    #[test]
+    fn expect_str() {
+        let mut session = PtySession::spawn("cat").unwrap();
+        session.send("Hello World").unwrap();
+        session.expect("Hello World").unwrap();
+    }
+
+    #[test]
+    fn read_after_expect_str() {
+        let mut session = PtySession::spawn("cat").unwrap();
+        session.send("Hello World").unwrap();
+        session.expect("Hello").unwrap();
+
+        let mut buf = [0; 6];
+        session.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b" World");
     }
 }
