@@ -1,4 +1,4 @@
-use expectrl::{NBytes, Eof, Regex, Session};
+use expectrl::{Eof, NBytes, Regex, Session};
 use std::{
     io::{Read, Write},
     thread,

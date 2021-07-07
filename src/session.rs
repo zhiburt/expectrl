@@ -1,9 +1,3 @@
-/*
-    - test why tests with new lines fails
-    - expect set of calls
-    - proc methods: kill wait etc.
-*/
-
 use crate::{
     error::Error,
     expect::{Expect, Match},
@@ -23,6 +17,10 @@ pub struct Session {
 impl Session {
     pub fn spawn(cmd: &str) -> Result<Self, Error> {
         let command = build_command(cmd)?;
+        Self::spawn_cmd(command)
+    }
+
+    pub fn spawn_cmd(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
 
         Ok(Self {

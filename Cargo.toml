@@ -7,5 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ptyprocess = { git="https://github.com/zhiburt/ptyprocess", branch="main", ref="e007b827a571e328896f53176d9d38e47c168dc1" }
+ptyprocess = { git="https://github.com/zhiburt/ptyprocess", branch="main", ref="998ccea688935b695fc15407ac49f3b9f7e24459" }
 regex = "1.5.4"
