@@ -1,19 +1,7 @@
-use std::ptr::NonNull;
-
 use crate::error::Error;
 
 pub trait Expect {
-    type Output;
-
-    fn expect(&self, buf: &[u8], eof: bool) -> Option<(Self::Output, Match)>;
-
-    fn expect_str(&self, buf: &str, eof: bool) -> Option<(Self::Output, Match)> {
-        self.expect(buf.as_bytes(), eof)
-    }
-
-    fn expect_length(&self, buf: &str, eof: bool) -> Option<usize> {
-        None
-    }
+    fn expect(&self, buf: &[u8], eof: bool) -> Result<Option<Match>, Error>;
 }
 
 pub struct Match {
@@ -41,106 +29,56 @@ impl From<regex::Match<'_>> for Match {
     }
 }
 
-pub struct Regex {
-    re: regex::Regex,
-}
+pub struct Regex<Re: AsRef<str>>(pub Re);
 
-impl Regex {
-    pub fn parse<S: AsRef<str>>(re: S) -> Result<Self, Error> {
-        let regex = regex::Regex::new(re.as_ref()).map_err(|_| Error::RegexParsing)?;
-
-        Ok(Self { re: regex })
-    }
-}
-
-impl Expect for Regex {
-    type Output = (String, String);
-
-    fn expect(&self, buf: &[u8], eof: bool) -> Option<(Self::Output, Match)> {
-        if buf.is_ascii() {
-            let buf = String::from_utf8_lossy(buf);
-            return self.expect_str(&buf, eof);
-        }
-
-        let buf = String::from_utf8_lossy(buf);
-        match self.expect_str(&buf, eof) {
-            Some((output, Match { start, end })) => {
-                // Convert Match indexes to byte indexes
-                todo!();
-            }
-            None => None,
+impl<Re: AsRef<str>> Expect for Regex<Re> {
+    fn expect(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
+        let regex = regex::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
+        match String::from_utf8(buf.to_vec()) {
+            Ok(s) => Ok(regex.find(&s).map(|m| m.into())), // indexes in UTF-8 are broken?
+            _ => Ok(None),
         }
     }
-
-    fn expect_str(&self, buf: &str, eof: bool) -> Option<(Self::Output, Match)> {
-        self.re.find(buf).map(|m| {
-            (
-                (
-                    buf[..m.start()].to_owned(),
-                    buf[m.start()..m.start() + m.end()].to_owned(),
-                ),
-                m.into(),
-            )
-        })
-    }
 }
 
-pub struct EOF;
+pub struct Eof;
 
-impl Expect for EOF {
-    type Output = Vec<u8>;
-
-    fn expect(&self, buf: &[u8], eof: bool) -> Option<(Self::Output, Match)> {
+impl Expect for Eof {
+    fn expect(&self, buf: &[u8], eof: bool) -> Result<Option<Match>, Error> {
         match eof {
-            true => Some((buf.to_vec(), Match::new(0, buf.len()))),
-            false => None,
+            true => Ok(Some(Match::new(0, buf.len()))),
+            false => Ok(None),
         }
     }
 }
 
-pub struct Bytes {
-    count: usize,
-}
+pub struct NBytes(pub usize);
 
-impl Bytes {
-    pub fn new(count: usize) -> Self {
-        Self { count }
+impl NBytes {
+    fn count(&self) -> usize {
+        self.0
     }
 }
 
-impl Expect for Bytes {
-    type Output = Vec<u8>;
-
-    fn expect(&self, buf: &[u8], _: bool) -> Option<(Self::Output, Match)> {
-        match buf.len() < self.count {
-            true => Some((buf.to_vec(), Match::new(0, self.count))),
-            false => None,
+impl Expect for NBytes {
+    fn expect(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
+        match buf.len() > self.count() {
+            true => Ok(Some(Match::new(0, self.count()))),
+            false => Ok(None),
         }
     }
 }
 
 impl<S: AsRef<str>> Expect for S {
-    type Output = ();
-
-    fn expect(&self, buf: &[u8], eof: bool) -> Option<(Self::Output, Match)> {
-        if buf.is_ascii() {
-            let buf = String::from_utf8_lossy(buf);
-            return self.expect_str(&buf, eof);
-        }
-
-        let buf = String::from_utf8_lossy(buf);
-        match self.expect_str(&buf, eof) {
-            Some(((), Match { start, end })) => {
-                // Convert Match indexes to byte indexes
-                todo!();
-            }
-            None => None,
-        }
-    }
-
-    fn expect_str(&self, buf: &str, eof: bool) -> Option<(Self::Output, Match)> {
-        let needle = self.as_ref();
-        buf.find(needle)
-            .map(|pos| ((), Match::new(pos, pos + needle.len())))
+    fn expect(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
+        String::from_utf8(buf.to_vec())
+            .map_or(None, |s| {
+                let needle = self.as_ref();
+                // indexes aren't corrent in UTF-8?
+                s.find(needle)
+                    .map(|pos| Match::new(pos, pos + needle.len()))
+            })
+            .map(Ok)
+            .transpose()
     }
 }

@@ -6,10 +6,11 @@ use std::io;
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),
-    Nix(nix::Error),
+    Nix(ptyprocess::Error),
     CommandParsing,
     RegexParsing,
     ExpectTimeout,
+    Eof,
     Other(String),
 }
 
@@ -22,6 +23,7 @@ impl Display for Error {
             Error::RegexParsing => write!(f, "Can't parse a regex expression"),
             Error::ExpectTimeout => write!(f, "Reached a timeout for expect type of command"),
             Error::Other(message) => write!(f, "Error {}", message),
+            Error::Eof => write!(f, "EOF was reached; the read may successed later"),
         }
     }
 }
@@ -34,8 +36,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<nix::Error> for Error {
-    fn from(err: nix::Error) -> Self {
+impl From<ptyprocess::Error> for Error {
+    fn from(err: ptyprocess::Error) -> Self {
         Self::Nix(err)
     }
 }
