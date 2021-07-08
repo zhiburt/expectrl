@@ -4,6 +4,7 @@ pub trait Expect {
     fn expect(&self, buf: &[u8], eof: bool) -> Result<Option<Match>, Error>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Match {
     start: usize,
     end: usize,

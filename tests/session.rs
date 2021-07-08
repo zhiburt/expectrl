@@ -103,3 +103,13 @@ fn read_after_expect_str() {
     session.read_exact(&mut buf).unwrap();
     assert_eq!(&buf, b" World");
 }
+
+#[test]
+fn expect_eof_timeout() {
+    let mut p = Session::spawn("sleep 3").expect("cannot run sleep 3");
+    p.set_expect_timeout(Some(Duration::from_millis(100)));
+    match p.expect(Eof) {
+        Err(expectrl::Error::ExpectTimeout) => {}
+        r => panic!("should raise TimeOut {:?}", r),
+    }
+}

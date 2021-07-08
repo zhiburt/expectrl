@@ -3,12 +3,14 @@ use crate::{
     expect::{Expect, Match},
 };
 use ptyprocess::PtyProcess;
+use regex::Regex;
 use std::{
     ops::{Deref, DerefMut},
     process::Command,
     time::{self, Duration},
 };
 
+#[derive(Debug)]
 pub struct Session {
     proc: PtyProcess,
     expect_timeout: Option<Duration>,
@@ -16,7 +18,14 @@ pub struct Session {
 
 impl Session {
     pub fn spawn(cmd: &str) -> Result<Self, Error> {
-        let command = build_command(cmd)?;
+        let args = tokenize_command(cmd);
+        if args.is_empty() {
+            return Err(Error::CommandParsing);
+        }
+
+        let mut command = Command::new(&args[0]);
+        command.args(args.iter().skip(1));
+
         Self::spawn_cmd(command)
     }
 
@@ -83,6 +92,7 @@ impl DerefMut for Session {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     buf: Vec<u8>,
     m: Match,
@@ -102,13 +112,44 @@ impl Found {
     }
 }
 
-// todo: create builder for Session
-fn build_command(cmd: &str) -> Result<Command, Error> {
-    let mut args = cmd.split_whitespace();
-    let bin = args.next().ok_or(Error::CommandParsing)?;
+/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
+/// It takes care of single and double quotes but,
+///
+/// It doesn't cover all edge cases.
+/// So it may not be compatible with real shell arguments parsing.
+fn tokenize_command(program: &str) -> Vec<String> {
+    let re = Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
+    let mut res = vec![];
+    for cap in re.captures_iter(program) {
+        res.push(cap[0].to_string());
+    }
+    res
+}
 
-    let mut cmd = Command::new(bin);
-    cmd.args(args);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Ok(cmd)
+    #[test]
+    fn test_tokenize_command() {
+        let res = tokenize_command("prog arg1 arg2");
+        assert_eq!(vec!["prog", "arg1", "arg2"], res);
+
+        let res = tokenize_command("prog -k=v");
+        assert_eq!(vec!["prog", "-k=v"], res);
+
+        let res = tokenize_command("prog 'my text'");
+        assert_eq!(vec!["prog", "'my text'"], res);
+
+        let res = tokenize_command(r#"prog "my text""#);
+        assert_eq!(vec!["prog", r#""my text""#], res);
+    }
+
+    #[test]
+    fn test_spawn_no_command() {
+        assert!(matches!(
+            Session::spawn("").unwrap_err(),
+            Error::CommandParsing
+        ));
+    }
 }
