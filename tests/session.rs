@@ -1,3 +1,5 @@
+#![cfg(feature = "sync")]
+
 use expectrl::{Eof, NBytes, Regex, Session};
 use std::{
     io::{Read, Write},

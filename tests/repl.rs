@@ -1,3 +1,5 @@
+#![cfg(feature = "sync")]
+
 use expectrl::repl::{spawn_bash, spawn_python};
 use ptyprocess::{ControlCode, WaitStatus};
 use std::{io::BufRead, thread, time::Duration};

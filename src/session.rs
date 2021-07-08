@@ -38,6 +38,42 @@ impl Session {
         })
     }
 
+    #[cfg(feature = "async")]
+    pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        let start = time::Instant::now();
+        let mut eof_reached = false;
+        let mut buf = Vec::new();
+        loop {
+            // We read by byte so there's no need for buffering.
+            // If it would read by block's we would be required to create an internal buffer
+            // and implement std::io::Read and async_io::AsyncRead to use it.
+            // But instead we just reuse it from `ptyprocess` via `Deref`.
+            //
+            // It's worth to use this approch if there's a performance issue.
+            match self.proc.try_read_byte().await? {
+                Some(None) => eof_reached = true,
+                Some(Some(b)) => buf.push(b),
+                None => {}
+            };
+
+            if let Some(m) = expect.check(&buf, eof_reached)? {
+                let buf = buf.drain(..m.end()).collect();
+                return Ok(Found::new(buf, m));
+            }
+
+            if eof_reached {
+                return Err(Error::Eof);
+            }
+
+            if let Some(timeout) = self.expect_timeout {
+                if start.elapsed() > timeout {
+                    return Err(Error::ExpectTimeout);
+                }
+            }
+        }
+    }
+    
+    #[cfg(feature = "sync")]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
         let mut eof_reached = false;
