@@ -67,6 +67,7 @@ fn bash_control_chars() {
     futures_lite::future::block_on(async {
         let mut p = spawn_bash().await.unwrap();
         p.send_line("cat <(echo ready) -").await.unwrap();
+        thread::sleep(Duration::from_millis(100));
         p.send_control(ControlCode::EndOfText).await.unwrap(); // abort: SIGINT
         p.expect_prompt().await.unwrap();
         p.send_line("cat <(echo ready) -").await.unwrap();
