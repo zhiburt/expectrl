@@ -9,11 +9,12 @@ use crate::{error::Error, Session};
 ///
 /// It uses a custom prompt to be able to controll shell better.
 pub fn spawn_bash() -> Result<ReplSession, Error> {
-    // First line of a spawned bash seemingly has an old prompt.
-    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT> ";
+    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT>";
     let mut cmd = Command::new("bash");
     cmd.env("PS1", DEFAULT_PROMPT);
-    let bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    cmd.env_remove("PROMPT_COMMAND");
+    let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    bash.expect_prompt()?;
 
     Ok(bash)
 }
