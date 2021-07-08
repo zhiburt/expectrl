@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    expect::{Expect, Match},
+    expect::{Match, Needle},
 };
 use ptyprocess::PtyProcess;
 use regex::Regex;
@@ -38,7 +38,7 @@ impl Session {
         })
     }
 
-    pub fn expect<E: Expect>(&mut self, expect: E) -> Result<Found, Error> {
+    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
@@ -55,7 +55,7 @@ impl Session {
                 None => {}
             };
 
-            if let Some(m) = expect.expect(&buf, eof_reached)? {
+            if let Some(m) = expect.check(&buf, eof_reached)? {
                 let buf = buf.drain(..m.end()).collect();
                 return Ok(Found::new(buf, m));
             }
