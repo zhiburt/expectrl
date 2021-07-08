@@ -67,17 +67,25 @@ impl Expect for NBytes {
     }
 }
 
-impl<S: AsRef<str>> Expect for S {
+impl<B: AsRef<[u8]>> Expect for B {
     fn expect(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
-        String::from_utf8(buf.to_vec())
-            .map_or(None, |s| {
-                let needle = self.as_ref();
-                // indexes aren't corrent in UTF-8?
-                s.find(needle)
-                    .map(|pos| Match::new(pos, pos + needle.len()))
-            })
-            .map(Ok)
-            .transpose()
+        let this = self.as_ref();
+        if buf.len() < this.len() {
+            return Ok(None);
+        }
+
+        for l_bound in 0..buf.len() {
+            let r_bound = l_bound + this.len();
+            if r_bound > buf.len() {
+                return Ok(None);
+            }
+
+            if this == &buf[l_bound..r_bound] {
+                return Ok(Some(Match::new(l_bound, r_bound)));
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -125,5 +133,34 @@ mod tests {
         );
         assert_eq!("123".expect(b"qwerty", false).unwrap(), None);
         assert_eq!("".expect(b"qwerty", false).unwrap(), Some(Match::new(0, 0)));
+    }
+
+    #[test]
+    fn test_bytes() {
+        assert_eq!(
+            b"wer".expect(b"qwerty", false).unwrap(),
+            Some(Match::new(1, 4))
+        );
+        assert_eq!(b"123".expect(b"qwerty", false).unwrap(), None);
+        assert_eq!(
+            b"".expect(b"qwerty", false).unwrap(),
+            Some(Match::new(0, 0))
+        );
+    }
+
+    #[test]
+    fn test_bytes_ref() {
+        assert_eq!(
+            (&[b'q', b'w', b'e']).expect(b"qwerty", false).unwrap(),
+            Some(Match::new(0, 3))
+        );
+        assert_eq!(
+            (&[b'1', b'2', b'3']).expect(b"qwerty", false).unwrap(),
+            None
+        );
+        assert_eq!(
+            (&[]).expect(b"qwerty", false).unwrap(),
+            Some(Match::new(0, 0))
+        );
     }
 }

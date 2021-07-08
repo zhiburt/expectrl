@@ -1,7 +1,4 @@
-use expectrl::{
-    repl::{spawn_bash, spawn_python},
-    Regex,
-};
+use expectrl::repl::{spawn_bash, spawn_python};
 use ptyprocess::{ControlCode, WaitStatus};
 use std::{io::BufRead, thread, time::Duration};
 
@@ -56,13 +53,11 @@ fn bash_pwd() {
 #[test]
 fn bash_control_chars() {
     let mut p = spawn_bash().unwrap();
-    p.execute("cat <(echo ready) -").unwrap();
+    p.send_line("cat <(echo ready) -").unwrap();
     p.send_control(ControlCode::EndOfText).unwrap(); // abort: SIGINT
     p.expect_prompt().unwrap();
-    p.execute("cat <(echo ready) -").unwrap();
+    p.send_line("cat <(echo ready) -").unwrap();
+    thread::sleep(Duration::from_millis(100));
     p.send_control(ControlCode::Substitute).unwrap(); // suspend:SIGTSTPcon
-    p.expect(Regex(r"(Stopped|suspended)\s+cat .*")).unwrap();
-    p.send_line("fg").unwrap();
-    p.execute("cat <(echo ready) -").unwrap();
-    p.send_control(ControlCode::EndOfText).unwrap(); // abort: SIGINT
+    p.expect_prompt().unwrap();
 }
