@@ -24,8 +24,8 @@ impl Match {
     }
 }
 
-impl From<regex::Match<'_>> for Match {
-    fn from(m: regex::Match) -> Self {
+impl From<regex::bytes::Match<'_>> for Match {
+    fn from(m: regex::bytes::Match) -> Self {
         Self::new(m.start(), m.end())
     }
 }
@@ -34,11 +34,8 @@ pub struct Regex<Re: AsRef<str>>(pub Re);
 
 impl<Re: AsRef<str>> Expect for Regex<Re> {
     fn expect(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
-        let regex = regex::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
-        match String::from_utf8(buf.to_vec()) {
-            Ok(s) => Ok(regex.find(&s).map(|m| m.into())), // indexes in UTF-8 are broken?
-            _ => Ok(None),
-        }
+        let regex = regex::bytes::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
+        Ok(regex.find(&buf).map(|m| m.into()))
     }
 }
 
@@ -81,5 +78,52 @@ impl<S: AsRef<str>> Expect for S {
             })
             .map(Ok)
             .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_regex() {
+        assert_eq!(
+            Regex("[0-9]+").expect(b"+012345", false).unwrap(),
+            Some(Match::new(1, 7))
+        );
+        // we use a first left match
+        assert_eq!(
+            Regex(r"\w+").expect(b"What's Up Boys", false).unwrap(),
+            Some(Match::new(0, 4))
+        );
+    }
+
+    #[test]
+    fn test_eof() {
+        assert_eq!(Eof.expect(b"qwe", true).unwrap(), Some(Match::new(0, 3)));
+        assert_eq!(Eof.expect(b"qwe", false).unwrap(), None);
+    }
+
+    #[test]
+    fn test_n_bytes() {
+        assert_eq!(
+            NBytes(1).expect(b"qwe", false).unwrap(),
+            Some(Match::new(0, 1))
+        );
+        assert_eq!(
+            NBytes(0).expect(b"qwe", false).unwrap(),
+            Some(Match::new(0, 0))
+        );
+        assert_eq!(NBytes(10).expect(b"qwe", false).unwrap(), None);
+    }
+
+    #[test]
+    fn test_str() {
+        assert_eq!(
+            "wer".expect(b"qwerty", false).unwrap(),
+            Some(Match::new(1, 4))
+        );
+        assert_eq!("123".expect(b"qwerty", false).unwrap(), None);
+        assert_eq!("".expect(b"qwerty", false).unwrap(), Some(Match::new(0, 0)));
     }
 }
