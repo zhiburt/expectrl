@@ -49,7 +49,7 @@ fn bash_pwd() {
     p.send_line("pwd").unwrap();
     let mut pwd = String::new();
     p.read_line(&mut pwd).unwrap();
-    assert_eq!("/tmp\r\n", pwd);
+    assert!(pwd.contains("/tmp\r\n"));
 }
 
 #[test]

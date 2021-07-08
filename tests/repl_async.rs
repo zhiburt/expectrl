@@ -1,8 +1,8 @@
 #![cfg(feature = "async")]
 
 use expectrl::repl::{spawn_bash, spawn_python};
-use ptyprocess::{ControlCode, WaitStatus};
 use futures_lite::io::AsyncBufReadExt;
+use ptyprocess::{ControlCode, WaitStatus};
 use std::{thread, time::Duration};
 
 #[test]
@@ -12,8 +12,6 @@ fn bash() {
 
         p.send_line("echo Hello World").await.unwrap();
         let mut msg = String::new();
-        p.read_line(&mut msg).await.unwrap();
-        p.read_line(&mut msg).await.unwrap();
         p.read_line(&mut msg).await.unwrap();
         assert!(msg.ends_with("Hello World\r\n"));
 
@@ -41,6 +39,7 @@ fn python() {
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
         p.read_line(&mut msg).await.unwrap();
+        thread::sleep(Duration::from_millis(300));
         assert_eq!(msg, ">>> \r\nKeyboardInterrupt\r\n");
 
         p.send_control(ControlCode::EndOfTransmission)
@@ -59,7 +58,7 @@ fn bash_pwd() {
         p.send_line("pwd").await.unwrap();
         let mut pwd = String::new();
         p.read_line(&mut pwd).await.unwrap();
-        assert_eq!("/tmp\r\n", pwd);
+        assert!(pwd.contains("/tmp\r\n"));
     });
 }
 

@@ -5,13 +5,13 @@ authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
 edition = "2018"
 
 [features]
-default = ["sync"]
+default = ["async"]
 async = ["ptyprocess/async"]
 sync = ["ptyprocess/sync"]
 
 
 [dependencies]
-ptyprocess = { git="https://github.com/zhiburt/ptyprocess", branch="main", ref="998ccea688935b695fc15407ac49f3b9f7e24459", default-features=false }
+ptyprocess = { git="https://github.com/zhiburt/ptyprocess", branch="main", default-features=false }
 regex = "1.5.4"
 
 [dev-dependencies]
