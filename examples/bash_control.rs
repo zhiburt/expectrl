@@ -44,7 +44,6 @@ fn main() -> Result<(), Error> {
         p.expect("ping 8.8.8.8").await?;
         p.send_control(ControlCode::EndOfText).await?;
         p.expect("packet loss").await?;
-    });
-
-    Ok(())
+        Ok(())
+    })
 }
