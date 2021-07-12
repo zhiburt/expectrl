@@ -8,6 +8,7 @@ use crate::{error::Error, Session};
 /// Spawn a bash session.
 ///
 /// It uses a custom prompt to be able to controll shell better.
+#[cfg(feature = "sync")]
 pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT>";
     let mut cmd = Command::new("bash");
@@ -15,6 +16,21 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     cmd.env_remove("PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
     bash.expect_prompt()?;
+
+    Ok(bash)
+}
+
+/// Spawn a bash session.
+///
+/// It uses a custom prompt to be able to controll shell better.
+#[cfg(feature = "async")]
+pub async fn spawn_bash() -> Result<ReplSession, Error> {
+    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT>";
+    let mut cmd = Command::new("bash");
+    cmd.env("PS1", DEFAULT_PROMPT);
+    cmd.env_remove("PROMPT_COMMAND");
+    let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    bash.expect_prompt().await?;
 
     Ok(bash)
 }
@@ -40,7 +56,7 @@ pub struct ReplSession {
     is_echo_on: bool,
 }
 
-impl<'a> ReplSession {
+impl ReplSession {
     pub fn new<P: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
         prompt: P,
@@ -59,6 +75,57 @@ impl<'a> ReplSession {
         })
     }
 
+    /// Get a size in bytes of a prompt, may be usefull for triming it.
+    pub fn prompt_len(&self) -> usize {
+        self.prompt.as_bytes().len()
+    }
+}
+
+#[cfg(feature = "async")]
+impl ReplSession {
+    /// Block until prompt is found
+    pub async fn expect_prompt(&mut self) -> Result<(), Error> {
+        let prompt = self.prompt.clone();
+        self.expect(&prompt).await?;
+        Ok(())
+    }
+
+    /// Send a command to a repl and verifies that it exited.
+    pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
+        self.send_line(cmd.clone()).await?;
+        if self.is_echo_on {
+            self.expect(cmd.as_ref()).await?;
+        }
+        self.expect_prompt().await?;
+        Ok(())
+    }
+
+    /// Sends line to repl (and flush the output).
+    ///
+    /// If echo_on=true wait for the input to appear.
+    pub async fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+        self.session.send_line(line.as_ref()).await?;
+        if self.is_echo_on {
+            self.expect(line.as_ref()).await?;
+        }
+        Ok(())
+    }
+
+    /// Send a quit command.
+    ///
+    /// In async version we it won't be send on Drop so,
+    /// If you wan't it to be send you must do it yourself.
+    pub async fn exit(&mut self) -> Result<(), Error> {
+        if let Some(quit_command) = self.quit_command.clone() {
+            self.session.send_line(quit_command).await?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "sync")]
+impl ReplSession {
     /// Block until prompt is found
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
         let prompt = self.prompt.clone();
@@ -67,10 +134,10 @@ impl<'a> ReplSession {
     }
 
     /// Send a command to a repl and verifies that it exited.
-    pub fn execute(&mut self, cmd: &str) -> Result<(), Error> {
-        self.send_line(cmd)?;
+    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
+        self.send_line(cmd.clone())?;
         if self.is_echo_on {
-            self.expect(cmd)?;
+            self.expect(cmd.as_ref())?;
         }
         self.expect_prompt()?;
         Ok(())
@@ -79,20 +146,16 @@ impl<'a> ReplSession {
     /// Sends line to repl (and flush the output).
     ///
     /// If echo_on=true wait for the input to appear.
-    pub fn send_line(&mut self, line: &str) -> Result<(), Error> {
-        self.session.send_line(line)?;
+    pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+        self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
-            self.expect(line)?;
+            self.expect(line.as_ref())?;
         }
         Ok(())
     }
-
-    /// Get a size in bytes of a prompt, may be usefull for triming it.
-    pub fn prompt_len(&self) -> usize {
-        self.prompt.as_bytes().len()
-    }
 }
 
+#[cfg(feature = "sync")]
 impl Drop for ReplSession {
     fn drop(&mut self) {
         if let Some(quit_command) = self.quit_command.clone() {

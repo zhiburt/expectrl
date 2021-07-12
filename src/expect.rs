@@ -142,10 +142,7 @@ mod tests {
             Some(Match::new(1, 4))
         );
         assert_eq!(b"123".check(b"qwerty", false).unwrap(), None);
-        assert_eq!(
-            b"".check(b"qwerty", false).unwrap(),
-            Some(Match::new(0, 0))
-        );
+        assert_eq!(b"".check(b"qwerty", false).unwrap(), Some(Match::new(0, 0)));
     }
 
     #[test]
@@ -154,10 +151,7 @@ mod tests {
             (&[b'q', b'w', b'e']).check(b"qwerty", false).unwrap(),
             Some(Match::new(0, 3))
         );
-        assert_eq!(
-            (&[b'1', b'2', b'3']).check(b"qwerty", false).unwrap(),
-            None
-        );
+        assert_eq!((&[b'1', b'2', b'3']).check(b"qwerty", false).unwrap(), None);
         assert_eq!(
             (&[]).check(b"qwerty", false).unwrap(),
             Some(Match::new(0, 0))
