@@ -1,8 +1,17 @@
+[![Build](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml/badge.svg)](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zhiburt/expectrl/branch/main/graph/badge.svg?token=QBQLAT904B)](https://codecov.io/gh/zhiburt/expectrl)
+[![crate](https://img.shields.io/crates/v/expectrl)](https://crates.io/crates/expectrl)
+[![docs.rs](https://img.shields.io/docsrs/expectrl?color=blue)](https://docs.rs/expectrl/0.1.0/expectrl/)
+
 # expectrl
 
-Spawn, control, and respond to expected patterns of child applications and processes, enabling the automation of interactions and testing.
+A tool for automating terminal applications in Unix.
 
-It also has an async support.
+Using the library you can:
+
+- Spawn process
+- Control process
+- Expect/Verify responces
 
 It was heavily inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
@@ -40,8 +49,7 @@ fn main() {
 ### Example bash with `async` feature
 
 ```rust
-use expectrl::{repl::spawn_bash, Regex, Error};
-use ptyprocess::ControlCode;
+use expectrl::{repl::spawn_bash, Regex, Error, ControlCode};
 use futures_lite::io::AsyncBufReadExt;
 
 #[tokio::main]
@@ -68,8 +76,7 @@ goes into nowhere. There are 2 handy function `execute` for this purpouse:
 - `expect_prompt` - ensures that the prompt is shown.
 
 ```rust
-use expectrl::{repl::spawn_bash, Error};
-use ptyprocess::ControlCode;
+use expectrl::{repl::spawn_bash, Error, ControlCode};
 
 fn main() -> Result<(), Error> {
     let mut p = spawn_bash()?;
@@ -95,6 +102,15 @@ fn main() -> Result<(), Error> {
 
 ## Examples
 
-[For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/master/examples)
+[For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
+
+## Comparison to [philippkeller/rexpect](https://github.com/philippkeller/rexpect)
+
+It will be fair to say that without it there would be no `expectrl`.
+
+- It has an `async` support.
+- It does a couple of inner things diferently.
+- It has a different interface.
+- ...
 
 Licensed under [MIT License](LICENSE)

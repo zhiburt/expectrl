@@ -10,10 +10,10 @@ use crate::{error::Error, Session};
 /// It uses a custom prompt to be able to controll shell better.
 #[cfg(feature = "sync")]
 pub fn spawn_bash() -> Result<ReplSession, Error> {
-    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT>";
+    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     cmd.env("PS1", DEFAULT_PROMPT);
-    cmd.env_remove("PROMPT_COMMAND");
+    cmd.env("PROMPT_COMMAND", "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
@@ -27,10 +27,10 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
 /// It uses a custom prompt to be able to controll shell better.
 #[cfg(feature = "async")]
 pub async fn spawn_bash() -> Result<ReplSession, Error> {
-    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT>";
+    const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     cmd.env("PS1", DEFAULT_PROMPT);
-    cmd.env_remove("PROMPT_COMMAND");
+    cmd.env("PROMPT_COMMAND", "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
