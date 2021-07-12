@@ -15,7 +15,7 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     cmd.env("PS1", DEFAULT_PROMPT);
     cmd.env_remove("PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
-    
+
     // read a prompt to make it not available on next read.
     bash.expect_prompt()?;
 
@@ -32,7 +32,7 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
     cmd.env("PS1", DEFAULT_PROMPT);
     cmd.env_remove("PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
-    
+
     // read a prompt to make it not available on next read.
     bash.expect_prompt().await?;
 
@@ -85,9 +85,17 @@ impl ReplSession {
     }
 }
 
-#[cfg(feature = "async")]
 impl ReplSession {
     /// Block until prompt is found
+    #[cfg(feature = "sync")]
+    pub fn expect_prompt(&mut self) -> Result<(), Error> {
+        let prompt = self.prompt.clone();
+        self.expect(&prompt)?;
+        Ok(())
+    }
+
+    /// Block until prompt is found
+    #[cfg(feature = "async")]
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
         let prompt = self.prompt.clone();
         self.expect(&prompt).await?;
@@ -95,6 +103,18 @@ impl ReplSession {
     }
 
     /// Send a command to a repl and verifies that it exited.
+    #[cfg(feature = "sync")]
+    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
+        self.send_line(cmd.clone())?;
+        if self.is_echo_on {
+            self.expect(cmd.as_ref())?;
+        }
+        self.expect_prompt()?;
+        Ok(())
+    }
+
+    /// Send a command to a repl and verifies that it exited.
+    #[cfg(feature = "async")]
     pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
         self.send_line(cmd.clone()).await?;
         if self.is_echo_on {
@@ -107,6 +127,19 @@ impl ReplSession {
     /// Sends line to repl (and flush the output).
     ///
     /// If echo_on=true wait for the input to appear.
+    #[cfg(feature = "sync")]
+    pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+        self.session.send_line(line.as_ref())?;
+        if self.is_echo_on {
+            self.expect(line.as_ref())?;
+        }
+        Ok(())
+    }
+
+    /// Sends line to repl (and flush the output).
+    ///
+    /// If echo_on=true wait for the input to appear.
+    #[cfg(feature = "async")]
     pub async fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
         self.session.send_line(line.as_ref()).await?;
         if self.is_echo_on {
@@ -119,42 +152,12 @@ impl ReplSession {
     ///
     /// In async version we it won't be send on Drop so,
     /// If you wan't it to be send you must do it yourself.
+    #[cfg(feature = "async")]
     pub async fn exit(&mut self) -> Result<(), Error> {
         if let Some(quit_command) = self.quit_command.clone() {
             self.session.send_line(quit_command).await?;
         }
 
-        Ok(())
-    }
-}
-
-#[cfg(feature = "sync")]
-impl ReplSession {
-    /// Block until prompt is found
-    pub fn expect_prompt(&mut self) -> Result<(), Error> {
-        let prompt = self.prompt.clone();
-        self.expect(&prompt)?;
-        Ok(())
-    }
-
-    /// Send a command to a repl and verifies that it exited.
-    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
-        self.send_line(cmd.clone())?;
-        if self.is_echo_on {
-            self.expect(cmd.as_ref())?;
-        }
-        self.expect_prompt()?;
-        Ok(())
-    }
-
-    /// Sends line to repl (and flush the output).
-    ///
-    /// If echo_on=true wait for the input to appear.
-    pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
-        self.session.send_line(line.as_ref())?;
-        if self.is_echo_on {
-            self.expect(line.as_ref())?;
-        }
         Ok(())
     }
 }
