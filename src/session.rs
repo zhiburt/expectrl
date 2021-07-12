@@ -72,7 +72,7 @@ impl Session {
             }
         }
     }
-    
+
     #[cfg(feature = "sync")]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
