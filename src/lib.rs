@@ -4,7 +4,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```no_run,ignore
 //! use expectrl::{spawn, Regex, Eof, WaitStatus};
 //!
 //! let mut p = spawn("ftp speedtest.tele2.net").unwrap();
@@ -39,7 +39,7 @@ pub use session::Session;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run,ignore
 /// use expectrl::{spawn, ControlCode};
 /// use std::{thread, time::Duration};
 /// use std::io::{Read, Write};
