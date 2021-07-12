@@ -1,5 +1,5 @@
 [![Build](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml/badge.svg)](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/zhiburt/expectrl/branch/main/graph/badge.svg?token=QBQLAT904B)](https://codecov.io/gh/zhiburt/expectrl)
+[![coverage status](https://coveralls.io/repos/github/zhiburt/expectrl/badge.svg?branch=main)](https://coveralls.io/github/zhiburt/expectrl?branch=main)
 [![crate](https://img.shields.io/crates/v/expectrl)](https://crates.io/crates/expectrl)
 [![docs.rs](https://img.shields.io/docsrs/expectrl?color=blue)](https://docs.rs/expectrl/0.1.0/expectrl/)
 
