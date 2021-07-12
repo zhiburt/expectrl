@@ -15,6 +15,8 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     cmd.env("PS1", DEFAULT_PROMPT);
     cmd.env_remove("PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    
+    // read a prompt to make it not available on next read.
     bash.expect_prompt()?;
 
     Ok(bash)
@@ -30,6 +32,8 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
     cmd.env("PS1", DEFAULT_PROMPT);
     cmd.env_remove("PROMPT_COMMAND");
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    
+    // read a prompt to make it not available on next read.
     bash.expect_prompt().await?;
 
     Ok(bash)

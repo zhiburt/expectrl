@@ -139,6 +139,7 @@ fn bash_pwd() {
 fn bash_control_chars() {
     let mut p = spawn_bash().unwrap();
     p.send_line("cat <(echo ready) -").unwrap();
+    thread::sleep(Duration::from_millis(300));
     p.send_control(ControlCode::EndOfText).unwrap(); // abort: SIGINT
     p.expect_prompt().unwrap();
     p.send_line("cat <(echo ready) -").unwrap();
