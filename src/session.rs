@@ -10,6 +10,8 @@ use std::{
     time::{self, Duration},
 };
 
+/// Session represents a process and its streams.
+/// It controlls process and communication with it.
 #[derive(Debug)]
 pub struct Session {
     proc: PtyProcess,
@@ -17,6 +19,7 @@ pub struct Session {
 }
 
 impl Session {
+    /// Spawn spawn a cmd process
     pub fn spawn(cmd: &str) -> Result<Self, Error> {
         let args = tokenize_command(cmd);
         if args.is_empty() {
@@ -29,6 +32,7 @@ impl Session {
         Self::spawn_cmd(command)
     }
 
+    /// Spawn spawns a command
     pub fn spawn_cmd(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
 
@@ -38,6 +42,9 @@ impl Session {
         })
     }
 
+    /// Expect waits until a pattern is matched.
+    ///
+    /// It return error if expect_timeout is reached.
     #[cfg(feature = "async")]
     pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
@@ -73,6 +80,9 @@ impl Session {
         }
     }
 
+    /// Expect waits until a pattern is matched.
+    ///
+    /// It return error if expect_timeout is reached.
     #[cfg(feature = "sync")]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
@@ -128,6 +138,7 @@ impl DerefMut for Session {
     }
 }
 
+/// Found is a represention of a matched pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     buf: Vec<u8>,
@@ -135,14 +146,17 @@ pub struct Found {
 }
 
 impl Found {
+    /// New returns an instance of Found.
     pub fn new(buf: Vec<u8>, m: Match) -> Self {
         Self { buf, m }
     }
 
+    /// Found_match returns a matched bytes.
     pub fn found_match(&self) -> &[u8] {
         &self.buf[self.m.start()..self.m.end()]
     }
 
+    /// Before_match returns a bytes before match.
     pub fn before_match(&self) -> &[u8] {
         &self.buf[..self.m.start()]
     }

@@ -3,15 +3,22 @@ name = "expectrl"
 version = "0.1.0"
 authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
 edition = "2018"
+description = "A tool for automating terminal applications in Unix like Don libes expect"
+repository  = "https://github.com/zhiburt/expectrl"
+homepage    = "https://github.com/zhiburt/expectrl"
+documentation = "https://docs.rs/expectrl"
+license     = "MIT"
+categories  = ["os::unix-apis"]
+keywords    = ["pty", "automation", "testing", "expect", "rexpect"]
+readme      = "README.md"
 
 [features]
-default = ["async"]
+default = ["sync"]
 async = ["ptyprocess/async"]
 sync = ["ptyprocess/sync"]
 
-
 [dependencies]
-ptyprocess = { git="https://github.com/zhiburt/ptyprocess", branch="main", default-features=false }
+ptyprocess = { git = "https://github.com/zhiburt/ptyprocess", branch = "main", default-features = false }
 regex = "1.5.4"
 
 [dev-dependencies]

@@ -1,9 +1,12 @@
 use crate::error::Error;
 
+/// Needle an interface for search of a match in a buffer.
 pub trait Needle {
+    // Check function verifies if it matched or not.
     fn check(&self, buf: &[u8], eof: bool) -> Result<Option<Match>, Error>;
 }
 
+/// Match structure represent a range of bytes where match was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Match {
     start: usize,
@@ -11,14 +14,17 @@ pub struct Match {
 }
 
 impl Match {
+    /// New construct's an intanse of a Match.
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
 
+    /// Start returns a start index of a match.
     pub fn start(&self) -> usize {
         self.start
     }
 
+    /// End returns an end index of a match.
     pub fn end(&self) -> usize {
         self.end
     }
@@ -30,6 +36,7 @@ impl From<regex::bytes::Match<'_>> for Match {
     }
 }
 
+/// Regex checks a match by regex.
 pub struct Regex<Re: AsRef<str>>(pub Re);
 
 impl<Re: AsRef<str>> Needle for Regex<Re> {
@@ -39,6 +46,7 @@ impl<Re: AsRef<str>> Needle for Regex<Re> {
     }
 }
 
+/// Eof consider a match when it's reached a EOF.
 pub struct Eof;
 
 impl Needle for Eof {
@@ -50,6 +58,7 @@ impl Needle for Eof {
     }
 }
 
+/// NBytes matches N bytes.
 pub struct NBytes(pub usize);
 
 impl NBytes {
