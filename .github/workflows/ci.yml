@@ -12,7 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         rust: [nightly, stable]
-        platform: [ubuntu-latest, macos-latest]
+        platform: [
+          ubuntu-latest, 
+          # macos-latest
+        ]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
@@ -30,7 +33,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-latest, macos-latest]
+        platform: [
+          ubuntu-latest, 
+          # macos-latest
+        ]
         feauture: [sync, async]
     runs-on: ${{ matrix.platform }}
     steps:
