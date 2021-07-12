@@ -55,11 +55,12 @@ fn python() {
         p.send_control(ControlCode::EndOfText).await.unwrap();
         thread::sleep(Duration::from_millis(300));
 
-        let mut msg = String::new();
-        p.read_line(&mut msg).await.unwrap();
-        p.read_line(&mut msg).await.unwrap();
+        let mut msg1 = String::new();
+        p.read_line(&mut msg1).await.unwrap();
+        let mut msg2 = String::new();
+        p.read_line(&mut msg2).await.unwrap();
         thread::sleep(Duration::from_millis(300));
-        assert_eq!(msg, ">>> \r\nKeyboardInterrupt\r\n");
+        assert_eq!(msg1 + &msg2, ">>> \r\nKeyboardInterrupt\r\n");
 
         p.send_control(ControlCode::EndOfTransmission)
             .await

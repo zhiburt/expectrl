@@ -190,7 +190,6 @@ fn expect_n_bytes() {
 #[test]
 fn expect_eof() {
     let mut session = Session::spawn("echo 'Hello World'").unwrap();
-    session.send_line("Hello World").unwrap();
     session.set_expect_timeout(None);
     let m = session.expect(Eof).unwrap();
     assert_eq!(m.found_match(), b"'Hello World'\r\n");
@@ -202,7 +201,6 @@ fn expect_eof() {
 fn expect_eof() {
     futures_lite::future::block_on(async {
         let mut session = Session::spawn("echo 'Hello World'").unwrap();
-        session.send_line("Hello World").await.unwrap();
         session.set_expect_timeout(None);
         let m = session.expect(Eof).await.unwrap();
         assert_eq!(m.found_match(), b"'Hello World'\r\n");
