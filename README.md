@@ -111,6 +111,7 @@ It will be fair to say that without it there would be no `expectrl`.
 - It has an `async` support.
 - It does a couple of inner things diferently.
 - It has a different interface.
+- It supports (not full coverage) logging.
 - ...
 
 Licensed under [MIT License](LICENSE)
