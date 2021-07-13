@@ -237,22 +237,21 @@ mod test {
     #[cfg(feature = "async")]
     #[test]
     fn log_bash() {
-        use futures_lite::AsyncReadExt;
+        use futures_lite::AsyncBufReadExt;
 
         futures_lite::future::block_on(async {
             let mut bash = crate::repl::spawn_bash().await.unwrap();
             let writer = StubWriter::default();
             bash.set_writer(writer.clone());
-            bash.send_line("Hello World").await.unwrap();
+            bash.send_line("echo Hello World").await.unwrap();
 
-            let mut buf = vec![0; 1024];
-            let _ = bash.read(&mut buf).await.unwrap();
+            let mut buf = String::new();
+            let _ = bash.read_line(&mut buf).await.unwrap();
 
             let bytes = writer.inner.lock().unwrap();
             assert_eq!(
                 String::from_utf8_lossy(bytes.get_ref()),
-                "send_line \"Hello World\"\n\
-                 read \"\\u{1b}[?2004l\\r\"\n"
+                "send_line \"echo Hello World\"\n"
             )
         })
     }
