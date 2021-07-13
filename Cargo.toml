@@ -13,7 +13,7 @@ keywords = ["pty", "automation", "testing", "expect", "rexpect"]
 readme = "README.md"
 
 [features]
-default = ["async", "async_log"]
+default = ["sync"]
 async = ["ptyprocess/async"]
 sync = ["ptyprocess/sync"]
 log = []
