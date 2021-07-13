@@ -98,6 +98,25 @@ impl<B: AsRef<[u8]>> Needle for B {
     }
 }
 
+/// Any matches first Needle which returns a match.
+///
+/// ```no_run,ignore
+/// Any(vec![Box::new("we"), Box::new(NBytes(3))])
+/// ```
+pub struct Any(pub Vec<Box<dyn Needle>>);
+
+impl Needle for Any {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Option<Match>, Error> {
+        for needle in &self.0 {
+            if let Some(m) = needle.check(buf, eof)? {
+                return Ok(Some(m));
+            }
+        }
+
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,6 +183,22 @@ mod tests {
         assert_eq!(
             (&[]).check(b"qwerty", false).unwrap(),
             Some(Match::new(0, 0))
+        );
+    }
+
+    #[test]
+    fn test_any() {
+        assert_eq!(
+            Any(vec![Box::new("we"), Box::new(NBytes(3))])
+                .check(b"qwerty", false)
+                .unwrap(),
+            Some(Match::new(1, 3))
+        );
+        assert_eq!(
+            Any(vec![Box::new("123"), Box::new(NBytes(100))])
+                .check(b"qwerty", false)
+                .unwrap(),
+            None,
         );
     }
 }
