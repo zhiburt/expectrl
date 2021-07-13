@@ -24,13 +24,20 @@
 
 mod error;
 mod expect;
+mod log;
 pub mod repl;
 mod session;
 
 pub use error::Error;
 pub use expect::{Eof, NBytes, Needle, Regex};
 pub use ptyprocess::{ControlCode, Signal, WaitStatus};
-pub use session::Session;
+
+#[cfg(not(feature = "log"))]
+#[cfg(not(feature = "async_log"))]
+pub type Session = session::Session;
+
+#[cfg(any(feature = "log", feature = "async_log"))]
+pub type Session = log::SessionWithLog;
 
 /// Spawn spawnes a new session.
 ///
