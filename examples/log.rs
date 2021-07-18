@@ -13,7 +13,6 @@ fn main() -> Result<(), expectrl::Error> {
 }
 
 #[cfg(not(feature = "log"))]
-#[cfg(not(feature = "async"))]
 fn main() {
     println!(
         "To run the example set necessary features `--no-default-features --features log,sync`"
