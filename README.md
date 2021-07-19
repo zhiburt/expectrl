@@ -15,14 +15,9 @@ Using the library you can:
 
 It was inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
-## Basic usage
+It supports `async` calls. To enable them you must turn on an `async` feature.
 
-Add the following line to your `Cargo.toml` file:
-
-```toml
-[dependencies]
-expectrl = "0.1"
-```
+## Usage
 
 ### An example for interacting via ftp:
 
@@ -111,7 +106,8 @@ It will be fair to say that without it there would be no `expectrl`.
 - It has an `async` support.
 - It does a couple of inner things diferently.
 - It has a different interface.
-- It supports (not full coverage) logging.
+- It supports logging.
+- It supports interact function.
 - ...
 
 Licensed under [MIT License](LICENSE)
