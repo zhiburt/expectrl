@@ -82,7 +82,7 @@ impl Session {
 
     /// Expect waits until a pattern is matched.
     ///
-    /// It return error if expect_timeout is reached.
+    /// It return an error if expect_timeout is reached.
     #[cfg(feature = "sync")]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
