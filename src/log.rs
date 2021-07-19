@@ -195,6 +195,8 @@ mod test {
     use std::{
         io::Cursor,
         sync::{Arc, Mutex},
+        thread,
+        time::Duration,
     };
 
     #[cfg(feature = "sync")]
@@ -208,14 +210,17 @@ mod test {
         session.set_log(writer.clone());
         session.send_line("Hello World").unwrap();
 
+        // give some time to cat
+        // since sometimes we doesn't keep up to read whole string
+        thread::sleep(Duration::from_millis(300));
+
         let mut buf = vec![0; 1024];
         let _ = session.read(&mut buf).unwrap();
 
         let bytes = writer.inner.lock().unwrap();
         assert_eq!(
             String::from_utf8_lossy(bytes.get_ref()),
-            "send_line \"Hello World\"\n\
-             read \"Hello World\\r\\n\"\n"
+            "send_line \"Hello World\"\nread \"Hello World\\r\\n\"\n"
         )
     }
 
@@ -254,14 +259,17 @@ mod test {
             session.set_log(writer.clone());
             session.send_line("Hello World").await.unwrap();
 
+            // give some time to cat
+            // since sometimes we doesn't keep up to read whole string
+            thread::sleep(Duration::from_millis(300));
+
             let mut buf = vec![0; 1024];
             let _ = session.read(&mut buf).await.unwrap();
 
             let bytes = writer.inner.lock().unwrap();
             assert_eq!(
                 String::from_utf8_lossy(bytes.get_ref()),
-                "send_line \"Hello World\"\n\
-             read \"Hello World\\r\\n\"\n"
+                "send_line \"Hello World\"\nread \"Hello World\\r\\n\"\n"
             )
         })
     }
