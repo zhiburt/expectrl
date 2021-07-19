@@ -13,7 +13,7 @@ Using the library you can:
 - Control process
 - Expect/Verify responces
 
-It was heavily inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
+It was inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
 ## Basic usage
 
