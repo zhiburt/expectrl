@@ -8,7 +8,7 @@ fn main() {
 
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
-    
+
     bash.interact().expect("Failed to start interact");
 
     println!("Quiting");
@@ -16,8 +16,7 @@ fn main() {
 
 #[cfg(feature = "async")]
 fn main() {
-    let mut bash =
-        futures_lite::future::block_on(spawn_bash()).expect("Error while spawning bash");
+    let mut bash = futures_lite::future::block_on(spawn_bash()).expect("Error while spawning bash");
 
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
