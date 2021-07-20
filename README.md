@@ -11,7 +11,7 @@ Using the library you can:
 
 - Spawn process
 - Control process
-- Expect/Verify responces
+- Expect/Verify responses
 
 It was inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
