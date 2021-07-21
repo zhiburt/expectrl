@@ -9,9 +9,9 @@ fn main() {
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
 
-    bash.interact().expect("Failed to start interact");
+    let status = bash.interact().expect("Failed to start interact");
 
-    println!("Quiting");
+    println!("Quiting status {:?}", status);
 }
 
 #[cfg(feature = "async")]
@@ -21,7 +21,7 @@ fn main() {
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
 
-    futures_lite::future::block_on(bash.interact()).expect("Failed to start interact");
+    let status = futures_lite::future::block_on(bash.interact()).expect("Failed to start interact");
 
-    println!("Quiting");
+    println!("Quiting status {:?}", status);
 }
