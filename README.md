@@ -1,7 +1,7 @@
 [![Build](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml/badge.svg)](https://github.com/zhiburt/expectrl/actions/workflows/ci.yml)
 [![coverage status](https://coveralls.io/repos/github/zhiburt/expectrl/badge.svg?branch=main)](https://coveralls.io/github/zhiburt/expectrl?branch=main)
 [![crate](https://img.shields.io/crates/v/expectrl)](https://crates.io/crates/expectrl)
-[![docs.rs](https://img.shields.io/docsrs/expectrl?color=blue)](https://docs.rs/expectrl/0.1.0/expectrl/)
+[![docs.rs](https://img.shields.io/docsrs/expectrl?color=blue)](https://docs.rs/expectrl/*/expectrl/)
 
 # expectrl
 
@@ -11,18 +11,13 @@ Using the library you can:
 
 - Spawn process
 - Control process
-- Expect/Verify responces
+- Expect/Verify responses
 
-It was heavily inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
+It was inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
-## Basic usage
+It supports `async` calls. To enable them you must turn on an `async` feature.
 
-Add the following line to your `Cargo.toml` file:
-
-```toml
-[dependencies]
-expectrl = "0.1"
-```
+## Usage
 
 ### An example for interacting via ftp:
 
@@ -111,7 +106,8 @@ It will be fair to say that without it there would be no `expectrl`.
 - It has an `async` support.
 - It does a couple of inner things diferently.
 - It has a different interface.
-- It supports (not full coverage) logging.
+- It supports logging.
+- It supports interact function.
 - ...
 
 Licensed under [MIT License](LICENSE)
