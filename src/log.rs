@@ -189,6 +189,30 @@ impl futures_lite::io::AsyncRead for SessionWithLog {
     }
 }
 
+#[cfg(feature = "async_log")]
+impl SessionWithLog {
+    /// The function behaives in the same way as [futures_lite::io::AsyncBufReadExt].
+    ///
+    /// The function is crated as a hack because [futures_lite::io::AsyncBufReadExt] has a default implmentation.
+    pub async fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
+        use futures_lite::AsyncBufReadExt;
+        let size = self.inner.read_until(byte, buf).await?;
+        self.log("read", &buf[..size]);
+        Ok(size)
+    }
+
+    /// The function behaives in the same way as [futures_lite::io::AsyncBufReadExt].
+    ///
+    /// The function is crated as a hack because [futures_lite::io::AsyncBufReadExt] has a default implmentation.
+    pub async fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
+        use futures_lite::AsyncBufReadExt;
+        let start_index = buf.as_bytes().len();
+        let size = self.inner.read_line(buf).await?;
+        self.log("read", &buf.as_bytes()[start_index..start_index + size]);
+        Ok(size)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -302,8 +326,6 @@ mod test {
     #[cfg(feature = "async")]
     #[test]
     fn log_bash() {
-        use futures_lite::AsyncBufReadExt;
-
         futures_lite::future::block_on(async {
             let mut bash = crate::repl::spawn_bash().await.unwrap();
             let writer = StubWriter::default();
@@ -316,7 +338,29 @@ mod test {
             let bytes = writer.inner.lock().unwrap();
             assert_eq!(
                 String::from_utf8_lossy(bytes.get_ref()),
-                "send_line \"echo Hello World\"\n"
+                "send_line \"echo Hello World\"\nread \"\\u{1b}[?2004l\\rHello World\\r\\n\"\n"
+            )
+        })
+    }
+
+    #[cfg(feature = "async")]
+    #[cfg(feature = "async_log")]
+    #[test]
+    fn log_read_line() {
+        futures_lite::future::block_on(async {
+            let mut session = SessionWithLog::spawn("cat").unwrap();
+            let writer = StubWriter::default();
+            session.set_log(writer.clone());
+            session.send_line("Hello World").await.unwrap();
+
+            let mut buf = String::new();
+            let _ = session.read_line(&mut buf).await.unwrap();
+            assert_eq!(buf, "Hello World\r\n");
+
+            let bytes = writer.inner.lock().unwrap();
+            assert_eq!(
+                String::from_utf8_lossy(bytes.get_ref()),
+                "send_line \"Hello World\"\nread \"Hello World\\r\\n\"\n"
             )
         })
     }
