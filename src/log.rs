@@ -336,10 +336,10 @@ mod test {
             let _ = bash.read_line(&mut buf).await.unwrap();
 
             let bytes = writer.inner.lock().unwrap();
-            assert_eq!(
-                String::from_utf8_lossy(bytes.get_ref()),
-                "send_line \"echo Hello World\"\nread \"\\u{1b}[?2004l\\rHello World\\r\\n\"\n"
-            )
+            let s = String::from_utf8_lossy(bytes.get_ref());
+            assert!(s.starts_with("send_line \"echo Hello World\""));
+            // We use contains and not direct comparision because the actuall output depends on the shell.
+            assert!(s.contains("read"));
         })
     }
 
