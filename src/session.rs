@@ -2,11 +2,10 @@ use crate::{
     error::Error,
     expect::{Match, Needle},
 };
-use ptyprocess::{stream::Stream, PtyProcess, WaitStatus};
+use ptyprocess::PtyProcess;
 use regex::Regex;
 use std::{
     ops::{Deref, DerefMut},
-    os::unix::prelude::{AsRawFd, FromRawFd},
     process::Command,
     time::{self, Duration},
 };
@@ -122,98 +121,6 @@ impl Session {
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
-    }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    #[cfg(feature = "sync")]
-    pub fn interact(&mut self) -> Result<WaitStatus, Error> {
-        use std::io::Write;
-
-        use ptyprocess::ControlCode;
-
-        // flush buffers
-        self.flush()?;
-
-        let stdin = unsafe { std::fs::File::from_raw_fd(std::io::stdin().as_raw_fd()) };
-        let mut stdin_stream = Stream::new(stdin);
-        let mut buf = [0; 512];
-        loop {
-            let status = self.status();
-            if !matches!(status, Ok(WaitStatus::StillAlive)) {
-                return Ok(status?);
-            }
-
-            if let Some(n) = self.try_read(&mut buf)? {
-                std::io::stdout().write_all(&buf[..n])?;
-                std::io::stdout().flush()?;
-            }
-
-            if let Some(n) = stdin_stream.try_read(&mut buf)? {
-                for i in 0..n {
-                    // Ctrl-]
-                    if buf[i] == ControlCode::GroupSeparator.into() {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return Ok(self.status()?);
-                    }
-
-                    self.write_all(&buf[i..i + 1])?;
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-        use futures_lite::AsyncWriteExt;
-        use ptyprocess::ControlCode;
-        use std::io::Write;
-
-        // flush buffers
-        self.flush().await?;
-
-        let stdin = unsafe { std::fs::File::from_raw_fd(std::io::stdin().as_raw_fd()) };
-        let mut stdin_stream = Stream::new(stdin);
-        let mut buf = [0; 512];
-        loop {
-            let status = self.status();
-            if !matches!(status, Ok(WaitStatus::StillAlive)) {
-                return Ok(status?);
-            }
-
-            if let Some(n) = self.try_read(&mut buf).await? {
-                std::io::stdout().write_all(&buf[..n])?;
-                std::io::stdout().flush()?;
-            }
-
-            if let Some(n) = stdin_stream.try_read(&mut buf).await? {
-                for i in 0..n {
-                    // Ctrl-]
-                    if buf[i] == ControlCode::GroupSeparator.into() {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return Ok(self.status()?);
-                    }
-
-                    self.write_all(&buf[i..i + 1]).await?;
-                }
-            }
-        }
     }
 }
 
