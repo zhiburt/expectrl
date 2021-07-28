@@ -8,6 +8,9 @@ use crate::{error::Error, Session};
 /// Spawn a bash session.
 ///
 /// It uses a custom prompt to be able to controll shell better.
+///
+/// If you wan't to use [Session::interact] method it is better to use just Session.
+/// Because we don't handle echoes here (currently). Ideally we need to.
 #[cfg(feature = "sync")]
 pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
@@ -90,7 +93,7 @@ impl ReplSession {
     #[cfg(feature = "sync")]
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
         let prompt = self.prompt.clone();
-        self.expect(&prompt)?;
+        self.expect(prompt)?;
         Ok(())
     }
 
