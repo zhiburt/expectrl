@@ -3,7 +3,7 @@ use std::{
     process::Command,
 };
 
-use crate::{error::Error, Session};
+use crate::{error::Error, session::Found, Session};
 
 /// Spawn a bash session.
 ///
@@ -92,39 +92,52 @@ impl ReplSession {
     /// Block until prompt is found
     #[cfg(feature = "sync")]
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt)?;
+        self._expect_prompt()?;
         Ok(())
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn _expect_prompt(&mut self) -> Result<Found, Error> {
+        let prompt = self.prompt.clone();
+        self.expect(prompt)
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn _expect_prompt(&mut self) -> Result<Found, Error> {
+        let prompt = self.prompt.clone();
+        self.expect(prompt).await
     }
 
     /// Block until prompt is found
     #[cfg(feature = "async")]
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
-        let prompt = self.prompt.clone();
-        self.expect(&prompt).await?;
+        self._expect_prompt().await?;
         Ok(())
     }
 
     /// Send a command to a repl and verifies that it exited.
+    /// Returning it's output.
     #[cfg(feature = "sync")]
-    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
+    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd.clone())?;
         if self.is_echo_on {
             self.expect(cmd.as_ref())?;
         }
-        self.expect_prompt()?;
-        Ok(())
+
+        let found = self._expect_prompt()?;
+        Ok(found.before_match().to_vec())
     }
 
     /// Send a command to a repl and verifies that it exited.
     #[cfg(feature = "async")]
-    pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<(), Error> {
+    pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd.clone()).await?;
         if self.is_echo_on {
             self.expect(cmd.as_ref()).await?;
         }
-        self.expect_prompt().await?;
-        Ok(())
+
+        let found = self._expect_prompt().await?;
+        Ok(found.before_match().to_vec())
     }
 
     /// Sends line to repl (and flush the output).

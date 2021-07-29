@@ -5,16 +5,14 @@ use ptyprocess::ControlCode;
 
 #[cfg(feature = "sync")]
 fn main() {
-    use std::io::BufRead;
-
     let mut p = spawn_bash().unwrap();
 
-    // case 1: wait until program is done
-    p.send_line("hostname").unwrap();
-    let mut hostname = String::new();
-    p.read_line(&mut hostname).unwrap();
-    p.expect_prompt().unwrap(); // go sure `hostname` is really done
-    println!("Current hostname: {:?}", hostname); // it prints some undetermined characters before hostname ...
+    // case 1: execute
+    let hostname = p.execute("hostname").unwrap();
+    println!(
+        "Current hostname: {:?}",
+        String::from_utf8(hostname).unwrap()
+    );
 
     // case 2: wait until done, only extract a few infos
     p.send_line("wc /etc/passwd").unwrap();
