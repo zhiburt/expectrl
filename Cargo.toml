@@ -1,6 +1,6 @@
 [package]
 name = "expectrl"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
 edition = "2018"
 description = "A tool for automating terminal applications in Unix like Don libes expect"
