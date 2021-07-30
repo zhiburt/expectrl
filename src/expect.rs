@@ -42,7 +42,7 @@ pub struct Regex<Re: AsRef<str>>(pub Re);
 impl<Re: AsRef<str>> Needle for Regex<Re> {
     fn check(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
         let regex = regex::bytes::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
-        Ok(regex.find(&buf).map(|m| m.into()))
+        Ok(regex.find(buf).map(|m| m.into()))
     }
 }
 
