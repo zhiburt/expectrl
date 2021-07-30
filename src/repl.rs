@@ -16,10 +16,21 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     cmd.env("PS1", DEFAULT_PROMPT);
-    cmd.env("PROMPT_COMMAND", "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND");
+    // bind 'set enable-bracketed-paste off' turns off paste mode,
+    // without it each command in bash starts and ends with an invisible sequence.
+    //
+    // We might need to turn it off optionally?
+    cmd.env(
+        "PROMPT_COMMAND",
+        "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
+    );
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
+    //
+    // fix: somehow this line causes a different behaviour in iteract method.
+    //      the issue most likely that with this line in interact mode ENTER produces CTRL-M
+    //      when without the line it produces \r\n
     bash.expect_prompt()?;
 
     Ok(bash)
@@ -33,7 +44,14 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     cmd.env("PS1", DEFAULT_PROMPT);
-    cmd.env("PROMPT_COMMAND", "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND");
+    // bind 'set enable-bracketed-paste off' turns off paste mode,
+    // without it each command in bash starts and ends with an invisible sequence.
+    //
+    // We might need to turn it off optionally?
+    cmd.env(
+        "PROMPT_COMMAND",
+        "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
+    );
     let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
