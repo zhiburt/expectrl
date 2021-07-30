@@ -176,6 +176,88 @@ fn tokenize_command(program: &str) -> Vec<String> {
     res
 }
 
+#[cfg(feature = "sync")]
+impl std::io::Write for Session {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.deref_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.deref_mut().flush()
+    }
+}
+
+#[cfg(feature = "sync")]
+impl std::io::Read for Session {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.deref_mut().read(buf)
+    }
+}
+
+#[cfg(feature = "sync")]
+impl std::io::BufRead for Session {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        self.deref_mut().fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.deref_mut().consume(amt)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncWrite for Session {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(self.deref_mut()).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(self.deref_mut()).poll_flush(cx)
+    }
+
+    fn poll_close(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(self.deref_mut()).poll_flush(cx)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncRead for Session {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        futures_lite::io::AsyncRead::poll_read(std::pin::Pin::new(self.deref_mut()), cx, buf)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncBufRead for Session {
+    fn poll_fill_buf(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<&[u8]>> {
+        let this = self.get_mut();
+        let proc = std::pin::Pin::new(this.proc.deref_mut());
+        proc.poll_fill_buf(cx)
+    }
+
+    fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
+        use futures_lite::AsyncBufReadExt;
+        self.deref_mut().consume(amt);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +283,38 @@ mod tests {
             Session::spawn("").unwrap_err(),
             Error::CommandParsing
         ));
+    }
+
+    #[test]
+    #[ignore = "it's a compile time check"]
+    fn session_as_writer() {
+        #[cfg(feature = "sync")]
+        {
+            let _: Box<dyn std::io::Write> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::Write>;
+            let _: Box<dyn std::io::Read> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::Read>;
+            let _: Box<dyn std::io::BufRead> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+
+            fn _io_copy(mut session: Session) {
+                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+            }
+        }
+        #[cfg(feature = "async")]
+        {
+            let _: Box<dyn futures_lite::AsyncWrite> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
+            let _: Box<dyn futures_lite::AsyncRead> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
+            let _: Box<dyn futures_lite::AsyncBufRead> =
+                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+
+            async fn _io_copy(mut session: Session) {
+                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+                    .await
+                    .unwrap();
+            }
+        }
     }
 }
