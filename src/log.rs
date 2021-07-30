@@ -164,7 +164,7 @@ impl futures_lite::io::AsyncWrite for SessionWithLog {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(self.inner.deref_mut().deref_mut()).poll_flush(cx)
+        std::pin::Pin::new(self.inner.deref_mut().deref_mut()).poll_close(cx)
     }
 }
 

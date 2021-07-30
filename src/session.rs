@@ -179,29 +179,29 @@ fn tokenize_command(program: &str) -> Vec<String> {
 #[cfg(feature = "sync")]
 impl std::io::Write for Session {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.deref_mut().write(buf)
+        self.proc.deref_mut().write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.deref_mut().flush()
+        self.proc.deref_mut().flush()
     }
 }
 
 #[cfg(feature = "sync")]
 impl std::io::Read for Session {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.deref_mut().read(buf)
+        self.proc.deref_mut().read(buf)
     }
 }
 
 #[cfg(feature = "sync")]
 impl std::io::BufRead for Session {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-        self.deref_mut().fill_buf()
+        self.proc.deref_mut().fill_buf()
     }
 
     fn consume(&mut self, amt: usize) {
-        self.deref_mut().consume(amt)
+        self.proc.deref_mut().consume(amt)
     }
 }
 
@@ -212,21 +212,21 @@ impl futures_lite::io::AsyncWrite for Session {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        std::pin::Pin::new(self.deref_mut()).poll_write(cx, buf)
+        std::pin::Pin::new(self.proc.deref_mut()).poll_write(cx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(self.deref_mut()).poll_flush(cx)
+        std::pin::Pin::new(self.proc.deref_mut()).poll_flush(cx)
     }
 
     fn poll_close(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(self.deref_mut()).poll_flush(cx)
+        std::pin::Pin::new(self.proc.deref_mut()).poll_close(cx)
     }
 }
 
@@ -237,7 +237,7 @@ impl futures_lite::io::AsyncRead for Session {
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        futures_lite::io::AsyncRead::poll_read(std::pin::Pin::new(self.deref_mut()), cx, buf)
+        futures_lite::io::AsyncRead::poll_read(std::pin::Pin::new(self.proc.deref_mut()), cx, buf)
     }
 }
 
@@ -253,8 +253,7 @@ impl futures_lite::io::AsyncBufRead for Session {
     }
 
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
-        use futures_lite::AsyncBufReadExt;
-        self.deref_mut().consume(amt);
+        std::pin::Pin::new(self.proc.deref_mut()).consume(amt);
     }
 }
 
