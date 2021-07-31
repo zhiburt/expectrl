@@ -69,7 +69,7 @@ impl NBytes {
 
 impl Needle for NBytes {
     fn check(&self, buf: &[u8], _: bool) -> Result<Option<Match>, Error> {
-        match buf.len() > self.count() {
+        match buf.len() >= self.count() {
             true => Ok(Some(Match::new(0, self.count()))),
             false => Ok(None),
         }
