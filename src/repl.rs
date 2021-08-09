@@ -114,23 +114,23 @@ impl ReplSession {
         Ok(())
     }
 
-    #[cfg(feature = "sync")]
-    pub fn _expect_prompt(&mut self) -> Result<Found, Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt)
-    }
-
-    #[cfg(feature = "async")]
-    pub async fn _expect_prompt(&mut self) -> Result<Found, Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt).await
-    }
-
     /// Block until prompt is found
     #[cfg(feature = "async")]
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
         self._expect_prompt().await?;
         Ok(())
+    }
+
+    #[cfg(feature = "sync")]
+    fn _expect_prompt(&mut self) -> Result<Found, Error> {
+        let prompt = self.prompt.clone();
+        self.expect(prompt)
+    }
+
+    #[cfg(feature = "async")]
+    async fn _expect_prompt(&mut self) -> Result<Found, Error> {
+        let prompt = self.prompt.clone();
+        self.expect(prompt).await
     }
 
     /// Send a command to a repl and verifies that it exited.
