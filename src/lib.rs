@@ -29,7 +29,8 @@ pub mod repl;
 mod session;
 
 pub use error::Error;
-pub use expect::{Eof, NBytes, Needle, Regex};
+pub use expect::{Any, Eof, NBytes, Needle, Regex};
+pub use session::Found;
 pub use ptyprocess::{ControlCode, Signal, WaitStatus};
 
 #[cfg(not(feature = "log"))]
