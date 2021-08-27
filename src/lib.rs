@@ -30,11 +30,11 @@ pub mod repl;
 mod session;
 mod stream;
 
+pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
 pub use ptyprocess::{Signal, WaitStatus};
 pub use session::Found;
-pub use control_code::ControlCode;
 
 #[cfg(not(feature = "log"))]
 pub type Session = session::Session;

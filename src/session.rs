@@ -351,7 +351,7 @@ impl Session {
     /// ```no_run
     /// use expectrl::{Session, ControlCode};
     /// use std::process::Command;
-    /// 
+    ///
     /// # futures_lite::future::block_on(async {
     /// let mut process = Session::spawn_cmd(Command::new("cat")).unwrap();
     /// process.send_control(ControlCode::EndOfText).await.unwrap(); // sends CTRL^C

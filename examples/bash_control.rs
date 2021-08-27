@@ -1,6 +1,6 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
-use expectrl::{repl::spawn_bash, Error, ControlCode};
+use expectrl::{repl::spawn_bash, ControlCode, Error};
 
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
