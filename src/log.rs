@@ -11,7 +11,7 @@ use std::{
 /// A logging wrapper of session
 pub struct SessionWithLog {
     inner: Session,
-    logger: Option<Box<dyn Write>>,
+    logger: Option<Box<dyn Write + Send>>,
 }
 
 impl SessionWithLog {
@@ -40,7 +40,7 @@ impl SessionWithLog {
     /// Set a writer for which is used for logging.
     ///
     /// Logger is suppose to be called on all IO operations.
-    pub fn set_log<W: Write + 'static>(&mut self, w: W) {
+    pub fn set_log<W: Write + Send + 'static>(&mut self, w: W) {
         self.logger = Some(Box::new(w));
     }
 
