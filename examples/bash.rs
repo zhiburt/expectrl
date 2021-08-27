@@ -1,9 +1,8 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
-use expectrl::{repl::spawn_bash, Regex};
-use ptyprocess::ControlCode;
+use expectrl::{repl::spawn_bash, ControlCode, Regex};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_bash().unwrap();
 

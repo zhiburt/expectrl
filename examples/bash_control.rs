@@ -1,9 +1,8 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
-use expectrl::{repl::spawn_bash, Error};
-use ptyprocess::ControlCode;
+use expectrl::{repl::spawn_bash, Error, ControlCode};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
     let mut p = spawn_bash()?;
     p.send_line("ping 8.8.8.8")?;

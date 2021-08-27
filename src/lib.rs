@@ -22,16 +22,19 @@
 //! assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 //! ```
 
+mod control_code;
 mod error;
 mod expect;
 mod log;
 pub mod repl;
 mod session;
+mod stream;
 
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
+pub use ptyprocess::{Signal, WaitStatus};
 pub use session::Found;
-pub use ptyprocess::{ControlCode, Signal, WaitStatus};
+pub use control_code::ControlCode;
 
 #[cfg(not(feature = "log"))]
 #[cfg(not(feature = "async_log"))]

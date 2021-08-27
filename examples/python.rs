@@ -1,6 +1,6 @@
 use expectrl::{repl::spawn_python, Regex};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_python().unwrap();
 

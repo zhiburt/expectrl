@@ -1,4 +1,4 @@
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[cfg(feature = "log")]
 fn main() -> Result<(), expectrl::Error> {
     let mut p = expectrl::Session::spawn("cat")?;

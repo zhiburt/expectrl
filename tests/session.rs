@@ -3,10 +3,10 @@ use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 use std::io::{Read, Write};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn send() {
     let mut session = Session::spawn("cat").unwrap();
@@ -42,7 +42,7 @@ fn send() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn send_multiline() {
     let mut session = Session::spawn("cat").unwrap();
@@ -80,7 +80,7 @@ fn send_multiline() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn send_line() {
     let mut session = Session::spawn("cat").unwrap();
@@ -124,7 +124,7 @@ fn send_line() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn expect_str() {
     let mut session = Session::spawn("cat").unwrap();
@@ -142,7 +142,7 @@ fn expect_str() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn expect_regex() {
     let mut session = Session::spawn("cat").unwrap();
@@ -164,7 +164,7 @@ fn expect_regex() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn expect_n_bytes() {
     let mut session = Session::spawn("cat").unwrap();
@@ -186,7 +186,7 @@ fn expect_n_bytes() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn expect_eof() {
     let mut session = Session::spawn("echo 'Hello World'").unwrap();
@@ -208,7 +208,7 @@ fn expect_eof() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn read_after_expect_str() {
     let mut session = Session::spawn("cat").unwrap();
@@ -234,7 +234,7 @@ fn read_after_expect_str() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn expect_eof_timeout() {
     let mut p = Session::spawn("sleep 3").expect("cannot run sleep 3");

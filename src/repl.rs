@@ -11,7 +11,7 @@ use crate::{error::Error, session::Found, Session};
 ///
 /// If you wan't to use [Session::interact] method it is better to use just Session.
 /// Because we don't handle echoes here (currently). Ideally we need to.
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
@@ -108,7 +108,7 @@ impl ReplSession {
 
 impl ReplSession {
     /// Block until prompt is found
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
         self._expect_prompt()?;
         Ok(())
@@ -121,7 +121,7 @@ impl ReplSession {
         Ok(())
     }
 
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     fn _expect_prompt(&mut self) -> Result<Found, Error> {
         let prompt = self.prompt.clone();
         self.expect(prompt)
@@ -135,7 +135,7 @@ impl ReplSession {
 
     /// Send a command to a repl and verifies that it exited.
     /// Returning it's output.
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd.clone())?;
         if self.is_echo_on {
@@ -161,7 +161,7 @@ impl ReplSession {
     /// Sends line to repl (and flush the output).
     ///
     /// If echo_on=true wait for the input to appear.
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
@@ -196,7 +196,7 @@ impl ReplSession {
     }
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 impl Drop for ReplSession {
     fn drop(&mut self) {
         if let Some(quit_command) = self.quit_command.clone() {

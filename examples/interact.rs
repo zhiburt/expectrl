@@ -2,7 +2,7 @@
 /// `cargo run --example interact`.
 use expectrl::repl::spawn_bash;
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut bash = spawn_bash().expect("Error while spawning bash");
 

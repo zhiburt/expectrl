@@ -1,12 +1,14 @@
-use expectrl::repl::{spawn_bash, spawn_python};
+use expectrl::{
+    repl::{spawn_bash, spawn_python},
+    ControlCode, WaitStatus,
+};
 #[cfg(feature = "async")]
 use futures_lite::io::AsyncBufReadExt;
-use ptyprocess::{ControlCode, WaitStatus};
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 use std::io::BufRead;
 use std::{thread, time::Duration};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn bash() {
     let mut p = spawn_bash().unwrap();
@@ -70,7 +72,7 @@ fn python() {
     })
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn python() {
     let mut p = spawn_python().unwrap();
@@ -123,7 +125,7 @@ fn bash_control_chars() {
     });
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn bash_pwd() {
     let mut p = spawn_bash().unwrap();
@@ -134,7 +136,7 @@ fn bash_pwd() {
     assert!(pwd.contains("/tmp\r\n"));
 }
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 #[test]
 fn bash_control_chars() {
     let mut p = spawn_bash().unwrap();

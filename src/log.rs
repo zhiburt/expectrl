@@ -223,7 +223,7 @@ mod test {
         time::Duration,
     };
 
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     #[cfg(feature = "log")]
     #[test]
     fn log() {
@@ -248,7 +248,7 @@ mod test {
         )
     }
 
-    #[cfg(feature = "sync")]
+    #[cfg(not(feature = "async"))]
     #[cfg(feature = "log")]
     #[test]
     fn log_read_line() {

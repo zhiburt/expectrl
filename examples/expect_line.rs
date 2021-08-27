@@ -2,7 +2,7 @@
 
 use expectrl::{self, Any, Eof};
 
-#[cfg(feature = "sync")]
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut session = expectrl::spawn("ls -al").expect("Can't spawn a session");
 
@@ -26,8 +26,6 @@ fn main() {
 
 #[cfg(feature = "async")]
 fn main() {
-    use futures_lite::io::AsyncBufReadExt;
-
     futures_lite::future::block_on(async {
         let mut session = expectrl::spawn("ls -al").expect("Can't spawn a session");
 
@@ -36,16 +34,16 @@ fn main() {
                 .expect(Any(vec![Box::new("\r"), Box::new("\n"), Box::new(Eof)]))
                 .await
                 .expect("Expect failed");
-    
+
             let is_eof = m.found_match().is_empty();
             if is_eof {
                 break;
             }
-    
+
             if m.found_match() == [b'\n'] {
                 continue;
             }
-    
+
             println!("{:?}", String::from_utf8_lossy(m.before_match()));
         }
     })
