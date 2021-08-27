@@ -15,7 +15,6 @@ readme = "README.md"
 [features]
 async = ["futures-lite", "async-io"]
 log = []
-async_log = []
 
 [dependencies]
 ptyprocess = { git = "https://github.com/zhiburt/ptyprocess" }

@@ -1,4 +1,4 @@
-#![cfg(any(feature = "log", feature = "async_log"))]
+#![cfg(feature = "log")]
 //! A wrapper of Session to log a read/write operations
 
 use crate::{error::Error, session::Session};
@@ -54,7 +54,7 @@ impl SessionWithLog {
     }
 }
 
-#[cfg(feature = "log")]
+#[cfg(all(feature = "log", not(feature = "async")))]
 impl SessionWithLog {
     pub fn send<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
         self.log("send", s.as_ref().as_bytes());
@@ -67,7 +67,7 @@ impl SessionWithLog {
     }
 }
 
-#[cfg(feature = "async_log")]
+#[cfg(feature = "async")]
 impl SessionWithLog {
     pub async fn send<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
         self.log("send", s.as_ref().as_bytes());
@@ -94,7 +94,7 @@ impl DerefMut for SessionWithLog {
     }
 }
 
-#[cfg(feature = "log")]
+#[cfg(not(feature = "async"))]
 impl std::io::Write for SessionWithLog {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.log("write", buf);
@@ -106,7 +106,7 @@ impl std::io::Write for SessionWithLog {
     }
 }
 
-#[cfg(feature = "log")]
+#[cfg(not(feature = "async"))]
 impl std::io::Read for SessionWithLog {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let result = self.deref_mut().read(buf);
@@ -118,7 +118,7 @@ impl std::io::Read for SessionWithLog {
     }
 }
 
-#[cfg(feature = "log")]
+#[cfg(not(feature = "async"))]
 impl std::io::BufRead for SessionWithLog {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.inner.fill_buf()
@@ -142,33 +142,33 @@ impl std::io::BufRead for SessionWithLog {
     }
 }
 
-#[cfg(feature = "async_log")]
+#[cfg(feature = "async")]
 impl futures_lite::io::AsyncWrite for SessionWithLog {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        self.log("write", &buf);
-        std::pin::Pin::new(self.inner.deref_mut().deref_mut()).poll_write(cx, buf)
+        self.log("write", buf);
+        std::pin::Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(self.inner.deref_mut().deref_mut()).poll_flush(cx)
+        std::pin::Pin::new(&mut self.inner).poll_flush(cx)
     }
 
     fn poll_close(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(self.inner.deref_mut().deref_mut()).poll_close(cx)
+        std::pin::Pin::new(&mut self.inner).poll_close(cx)
     }
 }
 
-#[cfg(feature = "async_log")]
+#[cfg(feature = "async")]
 impl futures_lite::io::AsyncRead for SessionWithLog {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
@@ -176,7 +176,7 @@ impl futures_lite::io::AsyncRead for SessionWithLog {
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
         let result = futures_lite::io::AsyncRead::poll_read(
-            std::pin::Pin::new(self.inner.deref_mut().deref_mut()), // haven't foudn any better way
+            std::pin::Pin::new(&mut self.inner), // haven't foudn any better way
             cx,
             buf,
         );
@@ -189,7 +189,7 @@ impl futures_lite::io::AsyncRead for SessionWithLog {
     }
 }
 
-#[cfg(feature = "async_log")]
+#[cfg(feature = "async")]
 impl SessionWithLog {
     /// The function behaives in the same way as [futures_lite::io::AsyncBufReadExt].
     ///
@@ -271,8 +271,6 @@ mod test {
         )
     }
 
-    #[cfg(feature = "async_log")]
-    #[cfg(feature = "async")]
     #[test]
     fn log() {
         use futures_lite::AsyncReadExt;
@@ -298,8 +296,6 @@ mod test {
         })
     }
 
-    #[cfg(feature = "async_log")]
-    #[cfg(feature = "async")]
     #[test]
     fn deref() {
         use futures_lite::AsyncReadExt;
@@ -322,8 +318,6 @@ mod test {
         })
     }
 
-    #[cfg(feature = "async_log")]
-    #[cfg(feature = "async")]
     #[test]
     fn log_bash() {
         futures_lite::future::block_on(async {
@@ -343,8 +337,6 @@ mod test {
         })
     }
 
-    #[cfg(feature = "async")]
-    #[cfg(feature = "async_log")]
     #[test]
     fn log_read_line() {
         futures_lite::future::block_on(async {

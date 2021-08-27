@@ -37,10 +37,9 @@ pub use session::Found;
 pub use control_code::ControlCode;
 
 #[cfg(not(feature = "log"))]
-#[cfg(not(feature = "async_log"))]
 pub type Session = session::Session;
 
-#[cfg(any(feature = "log", feature = "async_log"))]
+#[cfg(feature = "log")]
 pub type Session = log::SessionWithLog;
 
 /// Spawn spawnes a new session.
