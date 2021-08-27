@@ -271,6 +271,7 @@ mod test {
         )
     }
 
+    #[cfg(all(feature = "async", feature = "log"))]
     #[test]
     fn log() {
         use futures_lite::AsyncReadExt;
@@ -296,6 +297,7 @@ mod test {
         })
     }
 
+    #[cfg(all(feature = "async", feature = "log"))]
     #[test]
     fn deref() {
         use futures_lite::AsyncReadExt;
@@ -318,6 +320,7 @@ mod test {
         })
     }
 
+    #[cfg(all(feature = "async", feature = "log"))]
     #[test]
     fn log_bash() {
         futures_lite::future::block_on(async {
@@ -337,6 +340,7 @@ mod test {
         })
     }
 
+    #[cfg(all(feature = "async", feature = "log"))]
     #[test]
     fn log_read_line() {
         futures_lite::future::block_on(async {

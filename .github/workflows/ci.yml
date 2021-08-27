@@ -37,14 +37,14 @@ jobs:
           ubuntu-latest, 
           # macos-latest
         ]
-        feauture: [default, async, log, 'async,log']
+        feauture: [async, log, 'async,log']
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --verbose --no-default-features --features ${{ matrix.feauture }}
+          args: --verbose --features ${{ matrix.feauture }}
 
   fmt:
     name: Rustfmt
