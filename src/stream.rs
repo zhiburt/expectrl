@@ -45,13 +45,12 @@ mod sync_stream {
         ///     - Ok(None) if there's nothing to read.
         ///     - Ok(Some(n)) an amount of bytes were read.
         ///     - Err(err) an IO error which occured.
-        pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<Option<usize>> {
+        pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
             let fd = self.inner.as_raw_fd();
             make_non_blocking(fd).map_err(nix_error_to_io)?;
 
             let result = match self.read(&mut buf) {
-                Ok(n) => Ok(Some(n)),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
+                Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
 
@@ -62,23 +61,12 @@ mod sync_stream {
             result
         }
 
-        /// Try to read a byte in a non-blocking mode.
-        ///
-        /// Returns:
-        ///     - `None` if there's nothing to read.
-        ///     - `Some(None)` on eof.
-        ///     - `Some(Some(byte))` on sucessfull call.
-        ///
-        /// For more information look at [`try_read`].
-        ///
-        /// [`try_read`]: struct.PtyProcess.html#method.try_read
-        pub fn try_read_byte(&mut self) -> io::Result<Option<Option<u8>>> {
-            let mut buf = [0; 1];
-            match self.try_read(&mut buf)? {
-                Some(1) => Ok(Some(Some(buf[0]))),
-                Some(0) => Ok(Some(None)),
-                None => Ok(None),
-                Some(_) => unreachable!(),
+        pub fn is_empty(&mut self) -> io::Result<bool> {
+            match self.try_read(&mut []) {
+                Ok(0) => Ok(true),
+                Ok(_) => Ok(false),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
+                Err(err) => Err(err),
             }
         }
     }
@@ -178,7 +166,7 @@ mod async_stream {
         ///     - Ok(None) if there's nothing to read.
         ///     - Ok(Some(n)) an amount of bytes were read.
         ///     - Err(err) an IO error which occured.
-        pub async fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<Option<usize>> {
+        pub async fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
             // future::poll_once was testing but it doesn't work why?
             // let a = future::poll_once(self.reader.read(buf)).await;
             // match a {
@@ -192,29 +180,17 @@ mod async_stream {
 
             // A fd already in a non-blocking mode
             match self.reader.get_mut().as_mut().read(&mut buf) {
-                Ok(n) => Ok(Some(n)),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
+                Ok(n) => Ok(n),
                 Err(err) => Err(err),
             }
         }
 
-        /// Try to read a byte in a non-blocking mode.
-        ///
-        /// Returns:
-        ///     - `None` if there's nothing to read.
-        ///     - `Some(None)` on eof.
-        ///     - `Some(Some(byte))` on sucessfull call.
-        ///
-        /// For more information look at [`try_read`].
-        ///
-        /// [`try_read`]: struct.PtyProcess.html#method.try_read
-        pub async fn try_read_byte(&mut self) -> io::Result<Option<Option<u8>>> {
-            let mut buf = [0; 1];
-            match self.try_read(&mut buf).await? {
-                Some(1) => Ok(Some(Some(buf[0]))),
-                Some(0) => Ok(Some(None)),
-                None => Ok(None),
-                Some(_) => unreachable!(),
+        pub async fn is_empty(&mut self) -> io::Result<bool> {
+            match self.try_read(&mut []).await {
+                Ok(0) => Ok(true),
+                Ok(_) => Ok(false),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
+                Err(err) => Err(err),
             }
         }
     }

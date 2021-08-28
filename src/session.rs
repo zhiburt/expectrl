@@ -75,10 +75,16 @@ impl Session {
             // But instead we just reuse it from `ptyprocess` via `Deref`.
             //
             // It's worth to use this approch if there's a performance issue.
-            match self.stream.try_read_byte().await? {
-                Some(None) => eof_reached = true,
-                Some(Some(b)) => buf.push(b),
-                None => {}
+            let mut b = [0; 1];
+            match self.stream.try_read(&mut b).await {
+                Ok(0) => {
+                    eof_reached = true;
+                }
+                Ok(n) => {
+                    buf.extend(&b[..n]);
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(Error::IO(err)),
             };
 
             if let Some(m) = expect.check(&buf, eof_reached)? {
@@ -113,10 +119,16 @@ impl Session {
             // But instead we just reuse it from `ptyprocess` via `Deref`.
             //
             // It's worth to use this approch if there's a performance issue.
-            match self.stream.try_read_byte()? {
-                Some(None) => eof_reached = true,
-                Some(Some(b)) => buf.push(b),
-                None => {}
+            let mut b = [0; 1];
+            match self.stream.try_read(&mut b) {
+                Ok(0) => {
+                    eof_reached = true;
+                }
+                Ok(n) => {
+                    buf.extend(&b[..n]);
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(Error::IO(err)),
             };
 
             if let Some(m) = expect.check(&buf, eof_reached)? {
@@ -286,34 +298,42 @@ impl Session {
             // by echoing it.
             //
             // the setting must be set before calling the function.
-            if let Some(n) = self.try_read(&mut buf)? {
-                if n == 0 {
-                    // it might be too much to call a `status()` here,
-                    // do it just in case.
-                    return self.status().map_err(nix_error_to_io);
-                }
-
-                std::io::stdout().write_all(&buf[..n])?;
-                std::io::stdout().flush()?;
-            }
-
-            if let Some(n) = stdin_stream.try_read(&mut buf)? {
-                if n == 0 {
-                    // it might be too much to call a `status()` here,
-                    // do it just in case.
-                    return self.status().map_err(nix_error_to_io);
-                }
-
-                for i in 0..n {
-                    // Ctrl-]
-                    if buf[i] == ControlCode::GroupSeparator.into() {
+            match self.try_read(&mut buf) {
+                Ok(n) => {
+                    if n == 0 {
                         // it might be too much to call a `status()` here,
                         // do it just in case.
                         return self.status().map_err(nix_error_to_io);
                     }
 
-                    self.write_all(&buf[i..i + 1])?;
+                    std::io::stdout().write_all(&buf[..n])?;
+                    std::io::stdout().flush()?;
                 }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
+            }
+
+            match stdin_stream.try_read(&mut buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        // it might be too much to call a `status()` here,
+                        // do it just in case.
+                        return self.status().map_err(nix_error_to_io);
+                    }
+
+                    for i in 0..n {
+                        // Ctrl-]
+                        if buf[i] == ControlCode::GroupSeparator.into() {
+                            // it might be too much to call a `status()` here,
+                            // do it just in case.
+                            return self.status().map_err(nix_error_to_io);
+                        }
+
+                        self.write_all(&buf[i..i + 1])?;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
             }
         }
     }
@@ -461,22 +481,30 @@ impl Session {
             // by echoing it.
             //
             // the setting must be set before calling the function.
-            if let Some(n) = self.try_read(&mut buf).await? {
-                std::io::stdout().write_all(&buf[..n])?;
-                std::io::stdout().flush()?;
+            match self.try_read(&mut buf).await {
+                Ok(n) => {
+                    std::io::stdout().write_all(&buf[..n])?;
+                    std::io::stdout().flush()?;
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
             }
 
-            if let Some(n) = stdin_stream.try_read(&mut buf).await? {
-                for i in 0..n {
-                    // Ctrl-]
-                    if buf[i] == ControlCode::GroupSeparator.into() {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return self.status().map_err(nix_error_to_io);
-                    }
+            match stdin_stream.try_read(&mut buf).await {
+                Ok(n) => {
+                    for i in 0..n {
+                        // Ctrl-]
+                        if buf[i] == ControlCode::GroupSeparator.into() {
+                            // it might be too much to call a `status()` here,
+                            // do it just in case.
+                            return self.status().map_err(nix_error_to_io);
+                        }
 
-                    self.write_all(&buf[i..i + 1]).await?;
+                        self.write_all(&buf[i..i + 1]).await?;
+                    }
                 }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
             }
         }
     }
@@ -538,26 +566,15 @@ fn tokenize_command(program: &str) -> Vec<String> {
 impl Session {
     /// Try to read in a non-blocking mode.
     ///
-    /// It returns:
-    ///     - Ok(None) if there's nothing to read.
-    ///     - Ok(Some(n)) an amount of bytes were read.
-    ///     - Err(err) an IO error which occured.
-    pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<Option<usize>> {
+    /// Returns `[std::io::ErrorKind::WouldBlock]`
+    /// in case if there's nothing to read.
+    pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.try_read(buf).await
     }
 
-    /// Try to read a byte in a non-blocking mode.
-    ///
-    /// Returns:
-    ///     - `None` if there's nothing to read.
-    ///     - `Some(None)` on eof.
-    ///     - `Some(Some(byte))` on sucessfull call.
-    ///
-    /// For more information look at [`try_read`].
-    ///
-    /// [`try_read`]: struct.PtyProcess.html#method.try_read
-    pub async fn try_read_byte(&mut self) -> io::Result<Option<Option<u8>>> {
-        self.stream.try_read_byte().await
+    /// Verifyes if stream is empty or not.
+    pub async fn is_empty(&mut self) -> io::Result<bool> {
+        self.stream.is_empty().await
     }
 }
 
@@ -565,26 +582,15 @@ impl Session {
 impl Session {
     /// Try to read in a non-blocking mode.
     ///
-    /// It returns:
-    ///     - Ok(None) if there's nothing to read.
-    ///     - Ok(Some(n)) an amount of bytes were read.
-    ///     - Err(err) an IO error which occured.
-    pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<Option<usize>> {
+    /// Returns `[std::io::ErrorKind::WouldBlock]`
+    /// in case if there's nothing to read.
+    pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.try_read(buf)
     }
 
-    /// Try to read a byte in a non-blocking mode.
-    ///
-    /// Returns:
-    ///     - `None` if there's nothing to read.
-    ///     - `Some(None)` on eof.
-    ///     - `Some(Some(byte))` on sucessfull call.
-    ///
-    /// For more information look at [`try_read`].
-    ///
-    /// [`try_read`]: struct.PtyProcess.html#method.try_read
-    pub fn try_read_byte(&mut self) -> io::Result<Option<Option<u8>>> {
-        self.stream.try_read_byte()
+    /// Verifyes if stream is empty or not.
+    pub fn is_empty(&mut self) -> io::Result<bool> {
+        self.stream.is_empty()
     }
 }
 
