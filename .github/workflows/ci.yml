@@ -37,7 +37,7 @@ jobs:
           ubuntu-latest, 
           # macos-latest
         ]
-        feauture: [async, log, 'async,log']
+        feauture: ['', async, log, 'async,log']
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
