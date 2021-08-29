@@ -50,7 +50,7 @@ fn send_line() {
 }
 
 #[test]
-fn try_read_byte() {
+fn try_read_by_byte() {
     let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
 
     assert_eq!(
@@ -86,7 +86,7 @@ fn try_read_byte() {
 }
 
 #[test]
-fn blocking_read_after_non_blocking_try_read_byte() {
+fn blocking_read_after_non_blocking() {
     let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
 
     assert!(_p_is_empty(&mut proc).unwrap());
@@ -188,33 +188,27 @@ fn try_read_after_eof() {
 }
 
 #[test]
+// #[cfg(not(target_os = "macos"))]
 fn try_read_after_process_exit() {
     let mut command = Command::new("echo");
     command.arg("hello cat");
     let mut proc = Session::spawn_cmd(command).unwrap();
 
-    // on macos we may not able to read after process is dead.
-    // I assume that kernel consumes proceses resorces without any code check of parent,
-    // which what is happening on linux.
-    //
-    // So we check that there may be None or Some(0)
+    assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
-    match _p_try_read(&mut proc, &mut [0; 128]) {
-        Ok(11) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-        Ok(_) => panic!("Unepxcted amount of bytes"),
-        Err(err) => Err(err).unwrap(),
-    }
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    assert!(_p_is_empty(&mut proc).unwrap());
 
-    match _p_try_read(&mut proc, &mut [0; 128]) {
-        Ok(0) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-        Ok(_) => panic!("Unepxcted amount of bytes"),
-        Err(err) => Err(err).unwrap(),
-    }
+    // // on macos we may not able to read after process is dead.
+    // // I assume that kernel consumes proceses resorces without any code check of parent,
+    // // which what is happening on linux.
+    // //
+    // // So we check that there may be None or Some(0)
 
-    // on macos we can't put it before read's for some reason something get blocked
-    // assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
+    // // on macos we can't put it before read's for some reason something get blocked
+    // // assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 }
 
 #[test]
@@ -226,7 +220,6 @@ fn try_read_to_end() {
     let mut buf = vec![0; 128];
     loop {
         match _p_try_read(&mut proc, &mut buf) {
-            Ok(0) => {}
             Ok(_) => break,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(err) => Err(err).unwrap(),
