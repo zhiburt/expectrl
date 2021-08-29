@@ -207,6 +207,7 @@ mod test {
     use super::*;
     use std::{
         io::Cursor,
+        process::Command,
         sync::{Arc, Mutex},
         thread,
         time::Duration,
@@ -218,7 +219,7 @@ mod test {
     fn log() {
         use std::io::Read;
 
-        let mut session = SessionWithLog::spawn("cat").unwrap();
+        let mut session = SessionWithLog::spawn(Command::new("cat")).unwrap();
         let writer = StubWriter::default();
         session.set_log(writer.clone());
         session.send_line("Hello World").unwrap();
@@ -243,7 +244,7 @@ mod test {
     fn log_read_line() {
         use std::io::BufRead;
 
-        let mut session = SessionWithLog::spawn("cat").unwrap();
+        let mut session = SessionWithLog::spawn(Command::new("cat")).unwrap();
         let writer = StubWriter::default();
         session.set_log(writer.clone());
         session.send_line("Hello World").unwrap();
@@ -266,7 +267,7 @@ mod test {
         use futures_lite::AsyncReadExt;
 
         futures_lite::future::block_on(async {
-            let mut session = SessionWithLog::spawn("cat").unwrap();
+            let mut session = SessionWithLog::spawn(Command::new("cat")).unwrap();
             let writer = StubWriter::default();
             session.set_log(writer.clone());
             session.send_line("Hello World").await.unwrap();
@@ -292,7 +293,7 @@ mod test {
         use futures_lite::AsyncReadExt;
 
         futures_lite::future::block_on(async {
-            let mut session = crate::Session::spawn("cat").unwrap();
+            let mut session = crate::Session::spawn(Command::new("cat")).unwrap();
             let writer = StubWriter::default();
             session.set_log(writer.clone());
             session.send_line("Hello World").await.unwrap();
@@ -333,7 +334,7 @@ mod test {
     #[test]
     fn log_read_line() {
         futures_lite::future::block_on(async {
-            let mut session = SessionWithLog::spawn("cat").unwrap();
+            let mut session = SessionWithLog::spawn(Command::new("cat")).unwrap();
             let writer = StubWriter::default();
             session.set_log(writer.clone());
             session.send_line("Hello World").await.unwrap();
