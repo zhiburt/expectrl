@@ -179,6 +179,22 @@ impl futures_lite::io::AsyncRead for SessionWithLog {
 }
 
 #[cfg(feature = "async")]
+impl futures_lite::io::AsyncBufRead for SessionWithLog {
+    fn poll_fill_buf(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<&[u8]>> {
+        let this = self.get_mut();
+        let proc = std::pin::Pin::new(&mut this.inner);
+        proc.poll_fill_buf(cx)
+    }
+
+    fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
+        std::pin::Pin::new(&mut self.inner).consume(amt);
+    }
+}
+
+#[cfg(feature = "async")]
 impl SessionWithLog {
     /// The function behaives in the same way as [futures_lite::io::AsyncBufReadExt].
     ///

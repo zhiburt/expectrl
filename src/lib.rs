@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_spawn_no_command() {
-        assert!(matches!(spawn("").unwrap_err(), Error::CommandParsing));
+        assert!(matches!(spawn(""), Err(Error::CommandParsing)));
     }
 
     #[test]

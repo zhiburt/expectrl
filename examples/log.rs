@@ -1,7 +1,7 @@
 #[cfg(not(feature = "async"))]
 #[cfg(feature = "log")]
 fn main() -> Result<(), expectrl::Error> {
-    let mut p = expectrl::Session::spawn("cat")?;
+    let mut p = expectrl::spawn("cat")?;
     p.set_log(std::io::stdout());
     p.send_line("Hello World")?;
 
