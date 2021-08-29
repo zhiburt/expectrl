@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-latest, macos-latest]
+        platform: [ubuntu-latest]
         feauture:
           ["", "--features async", "--features log", '--features "async,log"']
     runs-on: ${{ matrix.platform }}
