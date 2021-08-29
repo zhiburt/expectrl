@@ -24,7 +24,7 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
-    let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    let mut bash = ReplSession::spawn(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
     //
@@ -52,7 +52,7 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
-    let mut bash = ReplSession::new(cmd, DEFAULT_PROMPT, Some("quit"))?;
+    let mut bash = ReplSession::spawn(cmd, DEFAULT_PROMPT, Some("quit"))?;
 
     // read a prompt to make it not available on next read.
     bash.expect_prompt().await?;
@@ -62,7 +62,7 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
 
 /// Spawn default python's IDLE.
 pub fn spawn_python() -> Result<ReplSession, Error> {
-    let idle = ReplSession::new(Command::new("python"), ">>> ", Some("quit()"))?;
+    let idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
     Ok(idle)
 }
 
@@ -82,12 +82,12 @@ pub struct ReplSession {
 }
 
 impl ReplSession {
-    pub fn new<P: AsRef<str>, Q: AsRef<str>>(
+    pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
         prompt: P,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session = Session::spawn_cmd(cmd)?;
+        let session = Session::spawn(cmd)?;
         let is_echo_on = session.get_echo()?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());

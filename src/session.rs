@@ -1,5 +1,3 @@
-// todo: rename spawn_cmd to spawn
-
 use crate::{
     control_code::ControlCode,
     error::Error,
@@ -12,7 +10,6 @@ use nix::{
     unistd::{dup, isatty},
 };
 use ptyprocess::{set_raw, PtyProcess, WaitStatus};
-use regex::Regex;
 use std::{
     convert::TryInto,
     io::{self, Write},
@@ -35,21 +32,8 @@ pub struct Session {
 }
 
 impl Session {
-    /// Spawn spawn a cmd process
-    pub fn spawn(cmd: &str) -> Result<Self, Error> {
-        let args = tokenize_command(cmd);
-        if args.is_empty() {
-            return Err(Error::CommandParsing);
-        }
-
-        let mut command = Command::new(&args[0]);
-        command.args(args.iter().skip(1));
-
-        Self::spawn_cmd(command)
-    }
-
     /// Spawn spawns a command
-    pub fn spawn_cmd(command: Command) -> Result<Self, Error> {
+    pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
         let stream = Stream::new(ptyproc.get_pty_handle()?);
 
@@ -192,7 +176,7 @@ impl Session {
     /// use expectrl::{Session, ControlCode};
     /// use std::process::Command;
     ///
-    /// let mut process = Session::spawn_cmd(Command::new("cat")).unwrap();
+    /// let mut process = Session::spawn(Command::new("cat")).unwrap();
     /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
     /// process.send_control('C'); // sends CTRL^C
     /// process.send_control("^C"); // sends CTRL^C
@@ -373,7 +357,7 @@ impl Session {
     /// use std::process::Command;
     ///
     /// # futures_lite::future::block_on(async {
-    /// let mut process = Session::spawn_cmd(Command::new("cat")).unwrap();
+    /// let mut process = Session::spawn(Command::new("cat")).unwrap();
     /// process.send_control(ControlCode::EndOfText).await.unwrap(); // sends CTRL^C
     /// process.send_control('C').await.unwrap(); // sends CTRL^C
     /// process.send_control("^C").await.unwrap(); // sends CTRL^C
@@ -548,20 +532,6 @@ impl Found {
     }
 }
 
-/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
-/// It takes care of single and double quotes but,
-///
-/// It doesn't cover all edge cases.
-/// So it may not be compatible with real shell arguments parsing.
-fn tokenize_command(program: &str) -> Vec<String> {
-    let re = Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
-    let mut res = vec![];
-    for cap in re.captures_iter(program) {
-        res.push(cap[0].to_string());
-    }
-    res
-}
-
 #[cfg(feature = "async")]
 impl Session {
     /// Try to read in a non-blocking mode.
@@ -686,66 +656,5 @@ fn nix_error_to_io(err: nix::Error) -> io::Error {
             io::ErrorKind::Other,
             "Unexpected error type conversion from nix to io",
         ),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tokenize_command() {
-        let res = tokenize_command("prog arg1 arg2");
-        assert_eq!(vec!["prog", "arg1", "arg2"], res);
-
-        let res = tokenize_command("prog -k=v");
-        assert_eq!(vec!["prog", "-k=v"], res);
-
-        let res = tokenize_command("prog 'my text'");
-        assert_eq!(vec!["prog", "'my text'"], res);
-
-        let res = tokenize_command(r#"prog "my text""#);
-        assert_eq!(vec!["prog", r#""my text""#], res);
-    }
-
-    #[test]
-    fn test_spawn_no_command() {
-        assert!(matches!(
-            Session::spawn("").unwrap_err(),
-            Error::CommandParsing
-        ));
-    }
-
-    #[test]
-    #[ignore = "it's a compile time check"]
-    fn session_as_writer() {
-        #[cfg(not(feature = "async"))]
-        {
-            let _: Box<dyn std::io::Write> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::Write>;
-            let _: Box<dyn std::io::Read> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::Read>;
-            let _: Box<dyn std::io::BufRead> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
-
-            fn _io_copy(mut session: Session) {
-                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
-            }
-        }
-        #[cfg(feature = "async")]
-        {
-            let _: Box<dyn futures_lite::AsyncWrite> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
-            let _: Box<dyn futures_lite::AsyncRead> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
-            let _: Box<dyn futures_lite::AsyncBufRead> =
-                Box::new(Session::spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
-
-            async fn _io_copy(mut session: Session) {
-                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
-                    .await
-                    .unwrap();
-            }
-        }
     }
 }

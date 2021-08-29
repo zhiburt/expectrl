@@ -15,22 +15,11 @@ pub struct SessionWithLog {
 }
 
 impl SessionWithLog {
-    /// Spawn a session wrapped with logger.
-    ///
-    /// See [Session].
-    pub fn spawn(cmd: &str) -> Result<Self, Error> {
-        let session = Session::spawn(cmd)?;
-        Ok(Self {
-            inner: session,
-            logger: None,
-        })
-    }
-
     /// Spawn session wrapped with logger.
     ///
     /// See [Session].
-    pub fn spawn_cmd(cmd: Command) -> Result<Self, Error> {
-        let session = Session::spawn_cmd(cmd)?;
+    pub fn spawn(cmd: Command) -> Result<Self, Error> {
+        let session = Session::spawn(cmd)?;
         Ok(Self {
             inner: session,
             logger: None,

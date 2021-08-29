@@ -12,14 +12,14 @@ use std::io::{BufRead, Read, Write};
 
 #[test]
 fn send_controll() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send_control(&mut proc, ControlCode::EOT).unwrap();
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0),);
 }
 
 #[test]
 fn send() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     _p_send(&mut proc, "hello cat\n").unwrap();
 
@@ -35,7 +35,7 @@ fn send() {
 
 #[test]
 fn send_line() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     _p_send_line(&mut proc, "hello cat").unwrap();
 
@@ -51,7 +51,7 @@ fn send_line() {
 
 #[test]
 fn try_read_by_byte() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     assert_eq!(
         _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
@@ -87,7 +87,7 @@ fn try_read_by_byte() {
 
 #[test]
 fn blocking_read_after_non_blocking() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     assert!(_p_is_empty(&mut proc).unwrap());
 
@@ -116,7 +116,7 @@ fn blocking_read_after_non_blocking() {
 
 #[test]
 fn try_read() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     let mut buf = vec![0; 128];
     assert_eq!(
@@ -139,7 +139,7 @@ fn try_read() {
 
 #[test]
 fn blocking_read_after_non_blocking_try_read() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     let mut buf = vec![0; 1];
     assert_eq!(
@@ -171,7 +171,7 @@ fn blocking_read_after_non_blocking_try_read() {
 
 #[test]
 fn try_read_after_eof() {
-    let mut proc = Session::spawn_cmd(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     _p_send_line(&mut proc, "hello").unwrap();
 
@@ -192,7 +192,7 @@ fn try_read_after_eof() {
 fn try_read_after_process_exit() {
     let mut command = Command::new("echo");
     command.arg("hello cat");
-    let mut proc = Session::spawn_cmd(command).unwrap();
+    let mut proc = Session::spawn(command).unwrap();
 
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
@@ -215,7 +215,7 @@ fn try_read_after_process_exit() {
 fn try_read_to_end() {
     let mut cmd = Command::new("echo");
     cmd.arg("Hello World");
-    let mut proc = Session::spawn_cmd(cmd).unwrap();
+    let mut proc = Session::spawn(cmd).unwrap();
 
     let mut buf = vec![0; 128];
     loop {
@@ -241,7 +241,7 @@ fn continues_try_reads() {
         yn=input('input');",
     ]);
 
-    let mut proc = Session::spawn_cmd(cmd).unwrap();
+    let mut proc = Session::spawn(cmd).unwrap();
 
     let mut buf = [0; 128];
     loop {
@@ -260,7 +260,7 @@ fn continues_try_reads() {
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn automatic_stop_of_interact() {
-    let mut p = Session::spawn_cmd(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let status = _p_interact(&mut p).unwrap();
 
     // It may be finished not only because process is done but
@@ -271,7 +271,7 @@ fn automatic_stop_of_interact() {
     ));
 
     // check that second spawn works
-    let mut p = Session::spawn_cmd(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let status = _p_interact(&mut p).unwrap();
     assert!(matches!(
         status,
@@ -282,10 +282,10 @@ fn automatic_stop_of_interact() {
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn spawn_after_interact() {
-    let mut p = Session::spawn_cmd(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let _ = _p_interact(&mut p).unwrap();
 
-    let p = Session::spawn_cmd(Command::new("ls")).unwrap();
+    let p = Session::spawn(Command::new("ls")).unwrap();
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
 }
 

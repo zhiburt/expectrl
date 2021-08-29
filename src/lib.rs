@@ -30,6 +30,8 @@ pub mod repl;
 mod session;
 mod stream;
 
+use std::process::Command;
+
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
@@ -45,7 +47,7 @@ pub type Session = log::SessionWithLog;
 /// Spawn spawnes a new session.
 ///
 /// It accepts a command and possibly arguments just as string.
-/// It doesn't parses ENV variables. For complex constrictions use [`Session::spawn_cmd`].
+/// It doesn't parses ENV variables. For complex constrictions use [`Session::spawn`].
 ///
 /// # Example
 ///
@@ -66,7 +68,87 @@ pub type Session = log::SessionWithLog;
 /// assert_eq!(buf, "Hello World\r\n");
 /// ```
 ///
-/// [`Session::spawn_cmd`]: ./struct.Session.html?#spawn_cmd
+/// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
-    Session::spawn(cmd.as_ref())
+    let args = tokenize_command(cmd.as_ref());
+    if args.is_empty() {
+        return Err(Error::CommandParsing);
+    }
+
+    let mut command = Command::new(&args[0]);
+    command.args(args.iter().skip(1));
+
+    Session::spawn(command)
+}
+
+/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
+/// It takes care of single and double quotes but,
+///
+/// It doesn't cover all edge cases.
+/// So it may not be compatible with real shell arguments parsing.
+fn tokenize_command(program: &str) -> Vec<String> {
+    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
+    let mut res = vec![];
+    for cap in re.captures_iter(program) {
+        res.push(cap[0].to_string());
+    }
+    res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenize_command() {
+        let res = tokenize_command("prog arg1 arg2");
+        assert_eq!(vec!["prog", "arg1", "arg2"], res);
+
+        let res = tokenize_command("prog -k=v");
+        assert_eq!(vec!["prog", "-k=v"], res);
+
+        let res = tokenize_command("prog 'my text'");
+        assert_eq!(vec!["prog", "'my text'"], res);
+
+        let res = tokenize_command(r#"prog "my text""#);
+        assert_eq!(vec!["prog", r#""my text""#], res);
+    }
+
+    #[test]
+    fn test_spawn_no_command() {
+        assert!(matches!(spawn("").unwrap_err(), Error::CommandParsing));
+    }
+
+    #[test]
+    #[ignore = "it's a compile time check"]
+    fn session_as_writer() {
+        #[cfg(not(feature = "async"))]
+        {
+            let _: Box<dyn std::io::Write> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
+            let _: Box<dyn std::io::Read> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
+            let _: Box<dyn std::io::BufRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+
+            fn _io_copy(mut session: Session) {
+                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+            }
+        }
+        #[cfg(feature = "async")]
+        {
+            let _: Box<dyn futures_lite::AsyncWrite> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
+            let _: Box<dyn futures_lite::AsyncRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
+            let _: Box<dyn futures_lite::AsyncBufRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+
+            async fn _io_copy(mut session: Session) {
+                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+                    .await
+                    .unwrap();
+            }
+        }
+    }
 }

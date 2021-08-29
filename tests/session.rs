@@ -1,4 +1,4 @@
-use expectrl::{Eof, NBytes, Regex, Session};
+use expectrl::{spawn, Eof, NBytes, Regex};
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 #[cfg(not(feature = "async"))]
 #[test]
 fn send() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send("Hello World").unwrap();
 
     thread::sleep(Duration::from_millis(300));
@@ -27,7 +27,7 @@ fn send() {
 #[test]
 fn send() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send("Hello World").await.unwrap();
 
         thread::sleep(Duration::from_millis(300));
@@ -45,7 +45,7 @@ fn send() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn send_multiline() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send("Hello World\n").unwrap();
 
     thread::sleep(Duration::from_millis(300));
@@ -64,7 +64,7 @@ fn send_multiline() {
 #[test]
 fn send_multiline() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send("Hello World\n").await.unwrap();
 
         thread::sleep(Duration::from_millis(300));
@@ -83,7 +83,7 @@ fn send_multiline() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn send_line() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     let _ = session.send_line("Hello World").unwrap();
 
     thread::sleep(Duration::from_millis(300));
@@ -105,7 +105,7 @@ fn send_line() {
 #[test]
 fn send_line() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         let _ = session.send_line("Hello World").await.unwrap();
 
         thread::sleep(Duration::from_millis(300));
@@ -127,7 +127,7 @@ fn send_line() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_str() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     session.expect("Hello World").unwrap();
 }
@@ -136,7 +136,7 @@ fn expect_str() {
 #[test]
 fn expect_str() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         session.expect("Hello World").await.unwrap();
     })
@@ -145,7 +145,7 @@ fn expect_str() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_regex() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     let m = session.expect(Regex("lo.*")).unwrap();
     assert_eq!(m.before_match(), b"Hel");
@@ -156,7 +156,7 @@ fn expect_regex() {
 #[test]
 fn expect_regex() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         let m = session.expect(Regex("lo.*")).await.unwrap();
         assert_eq!(m.before_match(), b"Hel");
@@ -167,7 +167,7 @@ fn expect_regex() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_n_bytes() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     let m = session.expect(NBytes(3)).unwrap();
     assert_eq!(m.found_match(), b"Hel");
@@ -178,7 +178,7 @@ fn expect_n_bytes() {
 #[test]
 fn expect_n_bytes() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         let m = session.expect(NBytes(3)).await.unwrap();
         assert_eq!(m.found_match(), b"Hel");
@@ -189,7 +189,7 @@ fn expect_n_bytes() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_eof() {
-    let mut session = Session::spawn("echo 'Hello World'").unwrap();
+    let mut session = spawn("echo 'Hello World'").unwrap();
     session.set_expect_timeout(None);
     let m = session.expect(Eof).unwrap();
     assert_eq!(m.found_match(), b"'Hello World'\r\n");
@@ -200,7 +200,7 @@ fn expect_eof() {
 #[test]
 fn expect_eof() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("echo 'Hello World'").unwrap();
+        let mut session = spawn("echo 'Hello World'").unwrap();
         session.set_expect_timeout(None);
         let m = session.expect(Eof).await.unwrap();
         assert_eq!(m.found_match(), b"'Hello World'\r\n");
@@ -211,7 +211,7 @@ fn expect_eof() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn read_after_expect_str() {
-    let mut session = Session::spawn("cat").unwrap();
+    let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     session.expect("Hello").unwrap();
 
@@ -224,7 +224,7 @@ fn read_after_expect_str() {
 #[test]
 fn read_after_expect_str() {
     futures_lite::future::block_on(async {
-        let mut session = Session::spawn("cat").unwrap();
+        let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         session.expect("Hello").await.unwrap();
 
@@ -237,7 +237,7 @@ fn read_after_expect_str() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_eof_timeout() {
-    let mut p = Session::spawn("sleep 3").expect("cannot run sleep 3");
+    let mut p = spawn("sleep 3").expect("cannot run sleep 3");
     p.set_expect_timeout(Some(Duration::from_millis(100)));
     match p.expect(Eof) {
         Err(expectrl::Error::ExpectTimeout) => {}
@@ -249,7 +249,7 @@ fn expect_eof_timeout() {
 #[test]
 fn expect_eof_timeout() {
     futures_lite::future::block_on(async {
-        let mut p = Session::spawn("sleep 3").expect("cannot run sleep 3");
+        let mut p = spawn("sleep 3").expect("cannot run sleep 3");
         p.set_expect_timeout(Some(Duration::from_millis(100)));
         match p.expect(Eof).await {
             Err(expectrl::Error::ExpectTimeout) => {}
