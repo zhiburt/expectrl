@@ -35,7 +35,7 @@ jobs:
       matrix:
         platform: [
           ubuntu-latest, 
-          # macos-latest
+          macos-latest
         ]
         feauture: [async, log, 'async,log']
     runs-on: ${{ matrix.platform }}
