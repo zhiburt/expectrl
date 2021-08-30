@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use expectrl::{
     repl::{spawn_bash, spawn_python},
     ControlCode, WaitStatus,

@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use expectrl::{ControlCode, Session, WaitStatus};
 use std::{process::Command, thread, time::Duration};
 

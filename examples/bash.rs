@@ -1,7 +1,9 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
+#[cfg(unix)]
 use expectrl::{repl::spawn_bash, ControlCode, Regex};
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_bash().unwrap();
@@ -41,6 +43,7 @@ fn main() {
     p.send_control(ControlCode::EOT).unwrap();
 }
 
+#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     use futures_lite::io::AsyncBufReadExt;
@@ -82,4 +85,9 @@ fn main() {
 
         p.send_control(ControlCode::EOT).await.unwrap();
     })
+}
+
+#[cfg(windows)]
+fn main() {
+    panic!("An example doesn't supported on windows")
 }

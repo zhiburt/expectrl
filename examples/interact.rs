@@ -1,7 +1,10 @@
 /// To run an example run the following command
 /// `cargo run --example interact`.
+
+#[cfg(unix)]
 use expectrl::repl::spawn_bash;
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut bash = spawn_bash().expect("Error while spawning bash");
@@ -14,6 +17,7 @@ fn main() {
     println!("Quiting status {:?}", status);
 }
 
+#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     let mut bash = futures_lite::future::block_on(spawn_bash()).expect("Error while spawning bash");
@@ -24,4 +28,9 @@ fn main() {
     let status = futures_lite::future::block_on(bash.interact()).expect("Failed to start interact");
 
     println!("Quiting status {:?}", status);
+}
+
+#[cfg(windows)]
+fn main() {
+    panic!("An example doesn't supported on windows")
 }

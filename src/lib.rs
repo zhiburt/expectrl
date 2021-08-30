@@ -26,6 +26,7 @@ mod control_code;
 mod error;
 mod expect;
 mod log;
+#[cfg(unix)]
 pub mod repl;
 mod session;
 mod stream;
@@ -35,8 +36,10 @@ use std::process::Command;
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
-pub use ptyprocess::{Signal, WaitStatus};
 pub use session::Found;
+
+#[cfg(unix)]
+pub use ptyprocess::{Signal, WaitStatus};
 
 #[cfg(not(feature = "log"))]
 pub type Session = session::Session;
@@ -70,15 +73,22 @@ pub type Session = log::SessionWithLog;
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
-    let args = tokenize_command(cmd.as_ref());
-    if args.is_empty() {
-        return Err(Error::CommandParsing);
+    #[cfg(unix)]
+    {
+        let args = tokenize_command(cmd.as_ref());
+        if args.is_empty() {
+            return Err(Error::CommandParsing);
+        }
+    
+        let mut command = Command::new(&args[0]);
+        command.args(args.iter().skip(1));
+    
+        Session::spawn(command)
     }
-
-    let mut command = Command::new(&args[0]);
-    command.args(args.iter().skip(1));
-
-    Session::spawn(command)
+    #[cfg(windows)]
+    {
+        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
+    }
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]

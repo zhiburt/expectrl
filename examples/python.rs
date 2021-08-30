@@ -1,5 +1,7 @@
+#[cfg(unix)]
 use expectrl::{repl::spawn_python, Regex};
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_python().unwrap();
@@ -13,6 +15,7 @@ fn main() {
     println!("Platform {}", String::from_utf8_lossy(found.found_match()));
 }
 
+#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     let mut p = spawn_python().unwrap();
@@ -26,4 +29,9 @@ fn main() {
 
         println!("Platform {}", String::from_utf8_lossy(found.found_match()));
     })
+}
+
+#[cfg(windows)]
+fn main() {
+    panic!("not supported")
 }

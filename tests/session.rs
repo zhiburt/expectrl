@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use expectrl::{spawn, Eof, NBytes, Regex};
 use std::{thread, time::Duration};
 

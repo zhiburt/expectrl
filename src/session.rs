@@ -4,20 +4,24 @@ use crate::{
     expect::{Match, Needle},
     stream::Stream,
 };
+#[cfg(unix)]
 use nix::{
     libc::STDIN_FILENO,
     sys::termios,
     unistd::{dup, isatty},
 };
+#[cfg(unix)]
 use ptyprocess::{set_raw, PtyProcess, WaitStatus};
 use std::{
     convert::TryInto,
     io::{self, Write},
     ops::{Deref, DerefMut},
-    os::unix::prelude::FromRawFd,
     process::Command,
     time::{self, Duration},
 };
+#[cfg(unix)]
+use std::os::unix::prelude::FromRawFd;
+
 
 #[cfg(feature = "async")]
 use futures_lite::AsyncWriteExt;
@@ -26,13 +30,17 @@ use futures_lite::AsyncWriteExt;
 /// It controlls process and communication with it.
 #[derive(Debug)]
 pub struct Session {
+    #[cfg(unix)]
     proc: PtyProcess,
+    #[cfg(windows)]
+    proc: conpty::Proc,
     stream: Stream,
     expect_timeout: Option<Duration>,
 }
 
 impl Session {
     /// Spawn spawns a command
+    #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
         let stream = Stream::new(ptyproc.get_pty_handle()?);
@@ -43,6 +51,20 @@ impl Session {
             expect_timeout: Some(Duration::from_millis(10000)),
         })
     }
+
+    /// Spawn spawns a command
+    #[cfg(windows)]
+    pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
+        let proc = attr.spawn()?;
+        let stream = Stream::new(proc.input()?, proc.output()?);
+
+        Ok(Self {
+            proc,
+            stream,
+            expect_timeout: Some(Duration::from_millis(10000)),
+        })
+    }
+
 
     /// Expect waits until a pattern is matched.
     ///
@@ -191,6 +213,7 @@ impl Session {
     /// Send `EOF` indicator to a child process.
     ///
     /// Often `eof` char handled as it would be a CTRL-C.
+    #[cfg(unix)]
     pub fn send_eof(&mut self) -> io::Result<()> {
         self.stream.write_all(&[self.proc.get_eof_char()])
     }
@@ -198,6 +221,7 @@ impl Session {
     /// Send `INTR` indicator to a child process.
     ///
     /// Often `intr` char handled as it would be a CTRL-D.
+    #[cfg(unix)]
     pub fn send_intr(&mut self) -> io::Result<()> {
         self.stream.write_all(&[self.proc.get_intr_char()])
     }
@@ -218,6 +242,7 @@ impl Session {
     ///
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
+    #[cfg(unix)]
     pub fn interact(&mut self) -> io::Result<WaitStatus> {
         // flush buffers
         self.flush()?;
@@ -258,6 +283,7 @@ impl Session {
         }
     }
 
+    #[cfg(unix)]
     fn _interact(&mut self) -> io::Result<WaitStatus> {
         // it's crusial to make a DUP call here.
         // If we don't actual stdin will be closed,
@@ -494,6 +520,7 @@ impl Session {
     }
 }
 
+#[cfg(unix)]
 impl Deref for Session {
     type Target = PtyProcess;
 
@@ -502,6 +529,23 @@ impl Deref for Session {
     }
 }
 
+#[cfg(unix)]
+impl DerefMut for Session {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.proc
+    }
+}
+
+#[cfg(windows)]
+impl Deref for Session {
+    type Target = conpty::Proc;
+
+    fn deref(&self) -> &Self::Target {
+        &self.proc
+    }
+}
+
+#[cfg(windows)]
 impl DerefMut for Session {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.proc
@@ -649,6 +693,7 @@ impl futures_lite::io::AsyncBufRead for Session {
     }
 }
 
+#[cfg(unix)]
 fn nix_error_to_io(err: nix::Error) -> io::Error {
     match err.as_errno() {
         Some(code) => io::Error::from_raw_os_error(code as _),

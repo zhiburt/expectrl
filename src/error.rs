@@ -6,7 +6,10 @@ use std::io;
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),
+    #[cfg(unix)]
     Nix(ptyprocess::Error),
+    #[cfg(windows)]
+    Win(conpty::Error),
     CommandParsing,
     RegexParsing,
     ExpectTimeout,
@@ -18,7 +21,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::IO(err) => write!(f, "IO error {}", err),
+            #[cfg(unix)]
             Error::Nix(err) => write!(f, "Nix error {}", err),
+            #[cfg(windows)]
+            Error::Win(err) => write!(f, "Win error {}", err),
             Error::CommandParsing => write!(f, "Can't parse a command string, please check it out"),
             Error::RegexParsing => write!(f, "Can't parse a regex expression"),
             Error::ExpectTimeout => write!(f, "Reached a timeout for expect type of command"),
@@ -36,9 +42,17 @@ impl From<io::Error> for Error {
     }
 }
 
+#[cfg(unix)]
 impl From<ptyprocess::Error> for Error {
     fn from(err: ptyprocess::Error) -> Self {
         Self::Nix(err)
+    }
+}
+
+#[cfg(windows)]
+impl From<conpty::Error> for Error {
+    fn from(err: conpty::Error) -> Self {
+        Self::Win(err)
     }
 }
 
