@@ -12,6 +12,8 @@ use nix::{
 };
 #[cfg(unix)]
 use ptyprocess::{set_raw, PtyProcess, WaitStatus};
+#[cfg(unix)]
+use std::os::unix::prelude::FromRawFd;
 use std::{
     convert::TryInto,
     io::{self, Write},
@@ -19,9 +21,6 @@ use std::{
     process::Command,
     time::{self, Duration},
 };
-#[cfg(unix)]
-use std::os::unix::prelude::FromRawFd;
-
 
 #[cfg(feature = "async")]
 use futures_lite::AsyncWriteExt;
@@ -64,7 +63,6 @@ impl Session {
             expect_timeout: Some(Duration::from_millis(10000)),
         })
     }
-
 
     /// Expect waits until a pattern is matched.
     ///
@@ -172,20 +170,36 @@ impl Session {
     /// Send a line to child's `STDIN`.
     pub fn send_line<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
         #[cfg(windows)]
-        const LINE_ENDING: &[u8] = b"\r\n";
+        {
+            // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
+            // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefilegather
+
+            const LINE_ENDING: &[u8] = b"\r\n";
+            let _ = self.write_all(s.as_ref().as_bytes())?;
+            let _ = self.write_all(LINE_ENDING)?;
+            self.flush()?;
+            Ok(())
+        }
         #[cfg(not(windows))]
-        const LINE_ENDING: &[u8] = b"\n";
+        {
+            const LINE_ENDING: &[u8] = b"\n";
 
-        let bufs = &mut [
-            std::io::IoSlice::new(s.as_ref().as_bytes()),
-            std::io::IoSlice::new(LINE_ENDING),
-            std::io::IoSlice::new(&[]), // we need to add a empty one as it may be not written.
-        ];
+            let bufs = &mut [
+                std::io::IoSlice::new(s.as_ref().as_bytes()),
+                std::io::IoSlice::new(LINE_ENDING),
+                std::io::IoSlice::new(&[]), // we need to add a empty one as it may be not written.
+            ];
 
-        let _ = self.write_vectored(bufs)?;
-        self.flush()?;
+            // As Write trait says it's not guaranteed that write_vectored will write_all data.
+            // But we are sure that write_vectored writes everyting or nothing because underthehood it uses a File.
+            // But we rely on this fact not explicitely.
+            //
+            // todo: check amount of written bytes ands write the rest if not everyting was written already.
+            let _ = self.write_vectored(bufs)?;
+            self.flush()?;
 
-        Ok(())
+            Ok(())
+        }
     }
 
     /// Send controll character to a child process.
@@ -198,7 +212,10 @@ impl Session {
     /// use expectrl::{Session, ControlCode};
     /// use std::process::Command;
     ///
+    /// #[cfg(unix)]
     /// let mut process = Session::spawn(Command::new("cat")).unwrap();
+    /// #[cfg(windows)]
+    /// let mut process = Session::spawn(expectrl::ProcAttr::cmd("cat".to_string())).unwrap();
     /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
     /// process.send_control('C'); // sends CTRL^C
     /// process.send_control("^C"); // sends CTRL^C

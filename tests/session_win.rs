@@ -1,8 +1,8 @@
 #![cfg(windows)]
 
 use expectrl::{spawn, Eof, NBytes, Regex};
-use std::{thread, time::Duration};
 use std::io::{BufRead, Read, Write};
+use std::{thread, time::Duration};
 
 #[test]
 fn send() {
@@ -28,7 +28,6 @@ fn send_multiline() {
 }
 
 #[test]
-#[ignore = "write_vectored not properly implemented for conpty::Proc yet"]
 fn send_line() {
     let mut session = spawn("powershell -C type").unwrap();
     session.send_line("Hello World").unwrap();
@@ -50,7 +49,10 @@ fn expect_str() {
 fn expect_regex() {
     let mut session = spawn("echo Hello World").unwrap();
     let m = session.expect(Regex("lo.*")).unwrap();
-    assert_eq!(m.before_match(), [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]);
+    assert_eq!(
+        m.before_match(),
+        [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
+    );
     assert_eq!(m.found_match(), b"lo");
 }
 

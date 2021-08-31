@@ -226,7 +226,11 @@ mod unix {
                 cx: &mut Context<'_>,
                 bufs: &[io::IoSlice<'_>],
             ) -> Poll<io::Result<usize>> {
-                <Async<Stream> as AsyncWrite>::poll_write_vectored(Pin::new(&mut self.inner), cx, bufs)
+                <Async<Stream> as AsyncWrite>::poll_write_vectored(
+                    Pin::new(&mut self.inner),
+                    cx,
+                    bufs,
+                )
             }
         }
 
@@ -260,9 +264,7 @@ mod unix {
 
 #[cfg(windows)]
 mod win {
-    use std::{
-        io::{self, BufRead, BufReader, Read, Write},
-    };
+    use std::io::{self, BufRead, BufReader, Read, Write};
 
     /// Stream represent a IO stream.
     #[derive(Debug)]

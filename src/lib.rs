@@ -38,6 +38,9 @@ pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
 pub use session::Found;
 
+#[cfg(windows)]
+pub use conpty::ProcAttr;
+
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
 
@@ -79,10 +82,10 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
         if args.is_empty() {
             return Err(Error::CommandParsing);
         }
-    
+
         let mut command = Command::new(&args[0]);
         command.args(args.iter().skip(1));
-    
+
         Session::spawn(command)
     }
     #[cfg(windows)]
