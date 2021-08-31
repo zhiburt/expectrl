@@ -124,6 +124,7 @@ mod tests {
         assert_eq!(vec!["prog", r#""my text""#], res);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_spawn_no_command() {
         assert!(matches!(spawn(""), Err(Error::CommandParsing)));

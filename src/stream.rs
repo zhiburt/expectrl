@@ -332,9 +332,4 @@ mod win {
             self.output.consume(amt)
         }
     }
-
-    fn win_error_to_io(err: conpty::Error) -> io::Error {
-        let code = err.code();
-        io::Error::from_raw_os_error(code.0 as i32)
-    }
 }
