@@ -117,6 +117,7 @@ impl Session {
         let mut eof_reached = false;
         let mut buf = Vec::new();
         loop {
+            println!("{:?}", String::from_utf8_lossy(&buf));
             // We read by byte so there's no need for buffering.
             // If it would read by block's we would be required to create an internal buffer
             // and implement std::io::Read and async_io::AsyncRead to use it.

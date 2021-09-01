@@ -27,7 +27,6 @@ mod error;
 mod expect;
 #[cfg(feature = "log")]
 mod log;
-#[cfg(unix)]
 pub mod repl;
 mod session;
 mod stream;

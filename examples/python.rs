@@ -1,7 +1,7 @@
-#[cfg(unix)]
+// todo: support regex groups -> so Found will contain not only 1 buffer slice.
+
 use expectrl::{repl::spawn_python, Regex};
 
-#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_python().unwrap();
@@ -10,12 +10,11 @@ fn main() {
     p.send_line("platform.node()").unwrap();
 
     // todo: add support for matches in 'Found' + iterator?
-    let found = p.expect(Regex(r"'\w+'")).unwrap();
+    let found = p.expect(Regex(r"'.*'")).unwrap();
 
     println!("Platform {}", String::from_utf8_lossy(found.found_match()));
 }
 
-#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     let mut p = spawn_python().unwrap();
@@ -25,13 +24,8 @@ fn main() {
         p.send_line("platform.node()").await.unwrap();
 
         // todo: add support for matches in 'Found' + iterator?
-        let found = p.expect(Regex(r"'\w+'")).await.unwrap();
+        let found = p.expect(Regex(r"'.*'")).await.unwrap();
 
         println!("Platform {}", String::from_utf8_lossy(found.found_match()));
     })
-}
-
-#[cfg(windows)]
-fn main() {
-    panic!("not supported")
 }
