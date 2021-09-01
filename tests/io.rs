@@ -137,11 +137,16 @@ fn try_read_by_byte() {
         // it shows that on windows ECHO is turned on.
         // Mustn't it be turned down?
 
-        let mut proc = Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
-        _p_send_line(&mut proc, "while (1) { read-host | set r; if (!$r) { break }}").unwrap();
+        let mut proc =
+            Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        _p_send_line(
+            &mut proc,
+            "while (1) { read-host | set r; if (!$r) { break }}",
+        )
+        .unwrap();
         _p_read_until(&mut proc, b'}').unwrap();
         _p_read_line(&mut proc).unwrap();
-        
+
         _p_send_line(&mut proc, "123").unwrap();
 
         thread::sleep(Duration::from_millis(500));
@@ -196,10 +201,15 @@ fn blocking_read_after_non_blocking() {
     }
     #[cfg(windows)]
     {
-        let mut proc = Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
-        _p_send_line(&mut proc, "while (1) { read-host | set r; if (!$r) { break }}").unwrap();
+        let mut proc =
+            Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        _p_send_line(
+            &mut proc,
+            "while (1) { read-host | set r; if (!$r) { break }}",
+        )
+        .unwrap();
         thread::sleep(Duration::from_millis(1000));
-        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() { }
+        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
 
         _p_send_line(&mut proc, "123").unwrap();
 
@@ -241,10 +251,15 @@ fn try_read() {
     }
     #[cfg(windows)]
     {
-        let mut proc = Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
-        _p_send_line(&mut proc, "while (1) { read-host | set r; if (!$r) { break }}").unwrap();
+        let mut proc =
+            Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        _p_send_line(
+            &mut proc,
+            "while (1) { read-host | set r; if (!$r) { break }}",
+        )
+        .unwrap();
         thread::sleep(Duration::from_millis(1000));
-        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() { }
+        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
 
         assert_eq!(
             _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
@@ -304,7 +319,7 @@ fn blocking_read_after_non_blocking_try_read() {
         let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
-        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() { }
+        while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
 
         _p_send_line(&mut proc, "123").unwrap();
 
@@ -321,23 +336,23 @@ fn blocking_read_after_non_blocking_try_read() {
     }
 }
 
-    #[cfg(unix)]
-    #[test]
+#[cfg(unix)]
+#[test]
 fn try_read_after_eof() {
-        let mut proc = Session::spawn(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
-        _p_send_line(&mut proc, "hello").unwrap();
+    _p_send_line(&mut proc, "hello").unwrap();
 
-        // give cat a time to react on input
-        thread::sleep(Duration::from_millis(100));
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(100));
 
-        let mut buf = vec![0; 128];
-        assert_eq!(_p_try_read(&mut proc, &mut buf).unwrap(), 7);
-        assert_eq!(
-            _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
-        assert!(_p_is_empty(&mut proc).unwrap());
+    let mut buf = vec![0; 128];
+    assert_eq!(_p_try_read(&mut proc, &mut buf).unwrap(), 7);
+    assert_eq!(
+        _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    assert!(_p_is_empty(&mut proc).unwrap());
 }
 
 #[test]
@@ -411,7 +426,7 @@ fn try_read_to_end() {
             match _p_try_read(&mut proc, &mut b) {
                 Ok(n) => {
                     v.extend(&b[..n]);
-                },
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(err) => Err(err).unwrap(),
             }
