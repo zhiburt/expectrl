@@ -175,7 +175,6 @@ fn read_after_expect_str() {
     assert_eq!(&buf, b" World");
 }
 
-
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
