@@ -25,6 +25,7 @@
 mod control_code;
 mod error;
 mod expect;
+#[cfg(feature = "log")]
 mod log;
 #[cfg(unix)]
 pub mod repl;
