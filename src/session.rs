@@ -117,13 +117,15 @@ impl Session {
         let mut eof_reached = false;
         let mut buf = Vec::new();
         loop {
-            println!("{:?}", String::from_utf8_lossy(&buf));
             // We read by byte so there's no need for buffering.
             // If it would read by block's we would be required to create an internal buffer
             // and implement std::io::Read and async_io::AsyncRead to use it.
             // But instead we just reuse it from `ptyprocess` via `Deref`.
             //
             // It's worth to use this approch if there's a performance issue.
+            //
+            // fixme: in case of error/timeout we will lose all the readed data
+            // so we need to do buffering in way.
             let mut b = [0; 1];
             match self.stream.try_read(&mut b) {
                 Ok(0) => {
@@ -137,6 +139,7 @@ impl Session {
             };
 
             if let Some(m) = expect.check(&buf, eof_reached)? {
+                println!("BUF {:?}", String::from_utf8_lossy(&buf));
                 let buf = buf.drain(..m.end()).collect();
                 return Ok(Found::new(buf, m));
             }
@@ -147,6 +150,7 @@ impl Session {
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
+                    println!("OUT {:?}", String::from_utf8_lossy(&buf));
                     return Err(Error::ExpectTimeout);
                 }
             }

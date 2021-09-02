@@ -1,5 +1,3 @@
-// An example is based on README.md from https://github.com/philippkeller/rexpect
-
 use expectrl::{self, Any, Eof};
 
 #[cfg(not(feature = "async"))]
