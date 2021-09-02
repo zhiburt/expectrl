@@ -87,43 +87,12 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     // let mut powershell = ReplSession::spawn(ProcAttr::cmd("powershell -noprofile".to_string()), DEFAULT_PROMPT, Some("exit"))?;
     let mut powershell = ReplSession::spawn(ProcAttr::default().commandline(r"C:\Program Files\PowerShell\7\pwsh.exe -noprofile -NonInteractive -NoLogo".to_string()), DEFAULT_PROMPT, Some("exit"))?;
+    powershell.is_echo_on = true;
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
     powershell.send_line(format!(r#"function prompt {{ "{}"; return " " }}"#, DEFAULT_PROMPT))?;
-    // powershell.send_line(format!(r#"function prompt {{ write-host "{}" -NoNewline ; return " " }}"#, DEFAULT_PROMPT))?;
-    // powershell.send_line(r#"function prompt { write-host "NEW_PROMPT" -NoNewline ; return " " }"#)?;
 
-    // let hostname = powershell.expect(DEFAULT_PROMPT).unwrap();
-    // println!(
-    //     "...: {:?}",
-    //     String::from_utf8(hostname.before_match().to_vec()).unwrap()
-    // );
-    // let hostname = powershell.expect(DEFAULT_PROMPT).unwrap();
-    // println!(
-    //     "...: {:?}",
-    //     String::from_utf8(hostname.before_match().to_vec()).unwrap()
-    // );
-
-    powershell.send_line("echo JUST_ECHO_TO_FIND_THE_END")?;
-    powershell.expect("JUST_ECHO_TO_FIND_THE_END")?;
-    powershell.expect_prompt()?;
-
-    // use std::io::{BufRead, Read};
-    // powershell.read(&mut [0; 1024]);
-
-    // powershell.send_line("hostname").unwrap();
-    // let hostname = powershell.expect("DESKTOP-NNSSIDQ").unwrap();
-    // println!(
-    //     "Current hostname: {:?}",
-    //     String::from_utf8(hostname.before_match().to_vec()).unwrap()
-    // );
-    // powershell.expect_prompt()?;
-
-    // let hostname = powershell.execute("hostname").unwrap();
-    // println!(
-    //     "Current hostname: {:?}",
-    //     String::from_utf8(hostname).unwrap()
-    // );
+    powershell.expect_prompt().unwrap();
 
     Ok(powershell)
 }
@@ -219,11 +188,6 @@ impl ReplSession {
     #[cfg(not(feature = "async"))]
     pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd.clone())?;
-        if self.is_echo_on {
-            println!("123123123");
-            self.expect(cmd.as_ref())?;
-        }
-
         let found = self._expect_prompt()?;
         Ok(found.before_match().to_vec())
     }
