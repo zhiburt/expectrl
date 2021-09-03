@@ -86,7 +86,7 @@ pub fn spawn_python() -> Result<ReplSession, Error> {
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     // let mut powershell = ReplSession::spawn(ProcAttr::cmd("powershell -noprofile".to_string()), DEFAULT_PROMPT, Some("exit"))?;
-    let mut powershell = ReplSession::spawn(ProcAttr::default().commandline(r"C:\Program Files\PowerShell\7\pwsh.exe -noprofile -NonInteractive -NoLogo".to_string()), DEFAULT_PROMPT, Some("exit"))?;
+    let mut powershell = ReplSession::spawn(ProcAttr::default().commandline(r"C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -NonInteractive -NoLogo".to_string()), DEFAULT_PROMPT, Some("exit"))?;
     powershell.is_echo_on = true;
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt

@@ -139,7 +139,6 @@ impl Session {
             };
 
             if let Some(m) = expect.check(&buf, eof_reached)? {
-                println!("BUF {:?}", String::from_utf8_lossy(&buf));
                 let buf = buf.drain(..m.end()).collect();
                 return Ok(Found::new(buf, m));
             }
@@ -150,7 +149,6 @@ impl Session {
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
-                    println!("OUT {:?}", String::from_utf8_lossy(&buf));
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -278,7 +276,7 @@ impl Session {
 
         // tcgetattr issues error if a provided fd is not a tty,
         // so we run set_raw only when it's a tty.
-        //
+        
         // todo: simplify.
         if isatty_in {
             let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO).map_err(nix_error_to_io)?;
