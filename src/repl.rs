@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use crate::{error::Error, session::Found, Session};
 
 #[cfg(unix)]
-use process::Command;
+use std::process::Command;
 
 #[cfg(windows)]
 use conpty::ProcAttr;

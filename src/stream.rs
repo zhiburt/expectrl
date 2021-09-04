@@ -1,12 +1,12 @@
 /// Stream represent a IO stream.
 #[cfg(not(feature = "async"))]
 #[cfg(unix)]
-pub type Stream = sync_stream::Stream;
+pub type Stream = unix::sync_stream::Stream;
 
 /// Stream represent a IO stream.
 #[cfg(feature = "async")]
 #[cfg(unix)]
-pub type Stream = async_stream::AsyncStream;
+pub type Stream = unix::async_stream::AsyncStream;
 
 /// Stream represent a IO stream.
 #[cfg(windows)]
