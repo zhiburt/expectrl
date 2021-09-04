@@ -15,7 +15,7 @@ pub type Stream = win::Stream;
 #[cfg(unix)]
 mod unix {
     #[cfg(not(feature = "async"))]
-    mod sync_stream {
+    pub(super) mod sync_stream {
         use nix::{
             fcntl::{fcntl, FcntlArg, OFlag},
             Result,
@@ -138,7 +138,7 @@ mod unix {
     }
 
     #[cfg(feature = "async")]
-    mod async_stream {
+    pub(super) mod async_stream {
         use async_io::Async;
         use futures_lite::{io::BufReader, AsyncBufRead, AsyncRead, AsyncWrite};
         use ptyprocess::stream::Stream;
