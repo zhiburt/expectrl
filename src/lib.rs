@@ -31,8 +31,6 @@ pub mod repl;
 mod session;
 mod stream;
 
-use std::process::Command;
-
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
@@ -83,7 +81,7 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
             return Err(Error::CommandParsing);
         }
 
-        let mut command = Command::new(&args[0]);
+        let mut command = std::process::Command::new(&args[0]);
         command.args(args.iter().skip(1));
 
         Session::spawn(command)
@@ -99,6 +97,7 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
 ///
 /// It doesn't cover all edge cases.
 /// So it may not be compatible with real shell arguments parsing.
+#[cfg(unix)]
 fn tokenize_command(program: &str) -> Vec<String> {
     let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
     let mut res = vec![];
@@ -112,6 +111,7 @@ fn tokenize_command(program: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn test_tokenize_command() {
         let res = tokenize_command("prog arg1 arg2");

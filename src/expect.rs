@@ -131,10 +131,17 @@ mod tests {
         );
         assert_eq!(
             Regex(r"\w+").check(b"What's Up Boys", false).unwrap(),
-            vec![Match::new(0, 4), Match::new(5, 6), Match::new(7, 9), Match::new(10, 14)]
+            vec![
+                Match::new(0, 4),
+                Match::new(5, 6),
+                Match::new(7, 9),
+                Match::new(10, 14)
+            ]
         );
         assert_eq!(
-            Regex(r"(\w+'*\w+)+").check(b"What's Up Boys", false).unwrap(),
+            Regex(r"(\w+'*\w+)+")
+                .check(b"What's Up Boys", false)
+                .unwrap(),
             vec![Match::new(0, 6), Match::new(7, 9), Match::new(10, 14)]
         );
     }
@@ -184,7 +191,10 @@ mod tests {
             (&[b'q', b'w', b'e']).check(b"qwerty", false).unwrap(),
             vec![Match::new(0, 3)]
         );
-        assert_eq!((&[b'1', b'2', b'3']).check(b"qwerty", false).unwrap(), vec![]);
+        assert_eq!(
+            (&[b'1', b'2', b'3']).check(b"qwerty", false).unwrap(),
+            vec![]
+        );
         assert_eq!(
             (&[]).check(b"qwerty", false).unwrap(),
             vec![Match::new(0, 0)]
@@ -197,13 +207,13 @@ mod tests {
             Any(vec![Box::new("we"), Box::new(NBytes(3))])
                 .check(b"qwerty", false)
                 .unwrap(),
-                vec![Match::new(1, 3)]
+            vec![Match::new(1, 3)]
         );
         assert_eq!(
             Any(vec![Box::new("123"), Box::new(NBytes(100))])
                 .check(b"qwerty", false)
                 .unwrap(),
-                vec![],
+            vec![],
         );
     }
 }

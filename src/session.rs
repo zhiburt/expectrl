@@ -4,6 +4,13 @@ use crate::{
     expect::{Match, Needle},
     stream::Stream,
 };
+use std::{
+    convert::TryInto,
+    io::{self, Write},
+    ops::{Deref, DerefMut},
+    time::{self, Duration},
+};
+
 #[cfg(unix)]
 use nix::{
     libc::STDIN_FILENO,
@@ -14,13 +21,8 @@ use nix::{
 use ptyprocess::{set_raw, PtyProcess, WaitStatus};
 #[cfg(unix)]
 use std::os::unix::prelude::FromRawFd;
-use std::{
-    convert::TryInto,
-    io::{self, Write},
-    ops::{Deref, DerefMut},
-    process::Command,
-    time::{self, Duration},
-};
+#[cfg(unix)]
+use std::process::Command;
 
 #[cfg(feature = "async")]
 use futures_lite::AsyncWriteExt;
@@ -280,7 +282,7 @@ impl Session {
 
         // tcgetattr issues error if a provided fd is not a tty,
         // so we run set_raw only when it's a tty.
-        
+
         // todo: simplify.
         if isatty_in {
             let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO).map_err(nix_error_to_io)?;
@@ -599,7 +601,10 @@ impl Found {
 
     /// Matches returns a list of matches.
     pub fn matches(&self) -> Vec<&[u8]> {
-        self.matches.iter().map(|m| &self.buf[m.start()..m.end()]).collect()
+        self.matches
+            .iter()
+            .map(|m| &self.buf[m.start()..m.end()])
+            .collect()
     }
 
     /// before returns a bytes before match.
@@ -608,7 +613,11 @@ impl Found {
     }
 
     fn left_most_index(&self) -> usize {
-        self.matches.iter().map(|m| m.start()).min().unwrap_or_default()
+        self.matches
+            .iter()
+            .map(|m| m.start())
+            .min()
+            .unwrap_or_default()
     }
 
     fn right_most_index(matches: &[Match]) -> usize {
@@ -621,7 +630,11 @@ impl IntoIterator for Found {
     type IntoIter = std::vec::IntoIter<Vec<u8>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.matches().into_iter().map(|m| m.to_vec()).collect::<Vec<_>>().into_iter()
+        self.matches()
+            .into_iter()
+            .map(|m| m.to_vec())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 }
 
@@ -768,6 +781,14 @@ mod tests {
 
     #[test]
     fn test_iterator_on_found() {
-        assert_eq!(Found::new(b"You can use iterator".to_vec(), vec![Match::new(0, 3), Match::new(4, 7)]).into_iter().collect::<Vec<Vec<u8>>>(), vec![b"You".to_vec(), b"can".to_vec()]);
+        assert_eq!(
+            Found::new(
+                b"You can use iterator".to_vec(),
+                vec![Match::new(0, 3), Match::new(4, 7)]
+            )
+            .into_iter()
+            .collect::<Vec<Vec<u8>>>(),
+            vec![b"You".to_vec(), b"can".to_vec()]
+        );
     }
 }

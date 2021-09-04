@@ -1,5 +1,8 @@
 use expectrl::{ControlCode, Session};
-use std::{process::Command, thread, time::Duration};
+use std::{thread, time::Duration};
+
+#[cfg(unix)]
+use std::process::Command;
 
 #[cfg(unix)]
 use expectrl::WaitStatus;

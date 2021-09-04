@@ -1,11 +1,12 @@
-use std::{
-    ops::{Deref, DerefMut},
-    process::Command,
-};
-
-use conpty::ProcAttr;
+use std::ops::{Deref, DerefMut};
 
 use crate::{error::Error, session::Found, Session};
+
+#[cfg(unix)]
+use process::Command;
+
+#[cfg(windows)]
+use conpty::ProcAttr;
 
 /// Spawn a bash session.
 ///
@@ -86,11 +87,21 @@ pub fn spawn_python() -> Result<ReplSession, Error> {
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     // let mut powershell = ReplSession::spawn(ProcAttr::cmd("powershell -noprofile".to_string()), DEFAULT_PROMPT, Some("exit"))?;
-    let mut powershell = ReplSession::spawn(ProcAttr::default().commandline(r"C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -NonInteractive -NoLogo".to_string()), DEFAULT_PROMPT, Some("exit"))?;
+    let mut powershell = ReplSession::spawn(
+        ProcAttr::default().commandline(
+            r"C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -NonInteractive -NoLogo"
+                .to_string(),
+        ),
+        DEFAULT_PROMPT,
+        Some("exit"),
+    )?;
     powershell.is_echo_on = true;
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
-    powershell.send_line(format!(r#"function prompt {{ "{}"; return " " }}"#, DEFAULT_PROMPT))?;
+    powershell.send_line(format!(
+        r#"function prompt {{ "{}"; return " " }}"#,
+        DEFAULT_PROMPT
+    ))?;
 
     powershell.expect_prompt().unwrap();
 
@@ -187,7 +198,7 @@ impl ReplSession {
     /// Returning it's output.
     #[cfg(not(feature = "async"))]
     pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
-        self.send_line(cmd.clone())?;
+        self.send_line(cmd)?;
         let found = self._expect_prompt()?;
         Ok(found.before().to_vec())
     }
@@ -195,11 +206,7 @@ impl ReplSession {
     /// Send a command to a repl and verifies that it exited.
     #[cfg(feature = "async")]
     pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
-        self.send_line(cmd.clone()).await?;
-        if self.is_echo_on {
-            self.expect(cmd.as_ref()).await?;
-        }
-
+        self.send_line(cmd).await?;
         let found = self._expect_prompt().await?;
         Ok(found.before().to_vec())
     }

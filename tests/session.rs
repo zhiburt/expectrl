@@ -1,4 +1,6 @@
-use expectrl::{spawn, Eof, NBytes, Regex};
+use expectrl::spawn;
+
+#[cfg(unix)]
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
@@ -48,7 +50,7 @@ fn send() {
 #[test]
 fn send() {
     let mut session = spawn("powershell -C type").unwrap();
-    session.send("Hello World").unwrap();
+    session.write(b"Hello World").unwrap();
 
     let mut buf = vec![0; 1028];
     let _ = session.read(&mut buf).unwrap();

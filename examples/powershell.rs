@@ -13,7 +13,8 @@ fn main() {
     );
 
     // case 2: wait until done, only extract a few infos
-    p.send_line("type README.md | Measure-Object -line -word -character").unwrap();
+    p.send_line("type README.md | Measure-Object -line -word -character")
+        .unwrap();
     let lines = p.expect(Regex("[0-9]+")).unwrap();
     let words = p.expect(Regex("[0-9]+")).unwrap();
     let bytes = p.expect(Regex("[0-9]+")).unwrap();
@@ -39,7 +40,6 @@ fn main() {
     p.send_control(ControlCode::ETX).unwrap();
     p.expect_prompt().unwrap();
 }
-
 
 #[cfg(not(windows))]
 fn main() {
