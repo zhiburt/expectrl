@@ -1,8 +1,7 @@
-use expectrl::{repl::spawn_powershell, ControlCode, Regex};
-
 #[cfg(windows)]
-#[cfg(not(feature = "async"))]
 fn main() {
+    use expectrl::{repl::spawn_powershell, ControlCode, Regex};
+
     let mut p = spawn_powershell().unwrap();
 
     // case 1: execute
