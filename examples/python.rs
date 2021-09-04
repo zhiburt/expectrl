@@ -7,7 +7,6 @@ fn main() {
     p.execute("import platform").unwrap();
     p.send_line("platform.node()").unwrap();
 
-    // todo: add support for matches in 'Found' + iterator?
     let found = p.expect(Regex(r"'.*'")).unwrap();
 
     println!("Platform {}", String::from_utf8_lossy(found.first()));
@@ -21,7 +20,6 @@ fn main() {
         p.execute("import platform").await.unwrap();
         p.send_line("platform.node()").await.unwrap();
 
-        // todo: add support for matches in 'Found' + iterator?
         let found = p.expect(Regex(r"'.*'")).await.unwrap();
 
         println!("Platform {}", String::from_utf8_lossy(found.first()));

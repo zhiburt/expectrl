@@ -91,9 +91,11 @@ impl Session {
                 Err(err) => return Err(Error::IO(err)),
             };
 
-            if let Some(m) = expect.check(&buf, eof_reached)? {
-                let buf = buf.drain(..m.end()).collect();
-                return Ok(Found::new(buf, m));
+            let found = expect.check(&buf, eof_reached)?;
+            if !found.is_empty() {
+                let end_index = Found::right_most_index(&found);
+                let buf = buf.drain(..end_index).collect();
+                return Ok(Found::new(buf, found));
             }
 
             if eof_reached {
@@ -614,6 +616,24 @@ impl Found {
     }
 }
 
+impl IntoIterator for Found {
+    type Item = Vec<u8>;
+    type IntoIter = std::vec::IntoIter<Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches().into_iter().map(|m| m.to_vec()).collect::<Vec<_>>().into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Found {
+    type Item = &'a [u8];
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches().into_iter()
+    }
+}
+
 #[cfg(feature = "async")]
 impl Session {
     /// Try to read in a non-blocking mode.
@@ -742,6 +762,12 @@ fn nix_error_to_io(err: nix::Error) -> io::Error {
     }
 }
 
-fn most_right_index(matches: &[Match])-> usize {
-    matches.iter().map(|m| m.end()).max().unwrap_or_default()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_iterator_on_found() {
+        assert_eq!(Found::new(b"You can use iterator".to_vec(), vec![Match::new(0, 3), Match::new(4, 7)]).into_iter().collect::<Vec<Vec<u8>>>(), vec![b"You".to_vec(), b"can".to_vec()]);
+    }
 }
