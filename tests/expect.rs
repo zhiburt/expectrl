@@ -1,5 +1,5 @@
 use expectrl::{spawn, Eof, NBytes, Regex};
-use std::time::Duration;
+use std::{io::Read, time::Duration};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
@@ -165,8 +165,6 @@ fn read_after_expect_str() {
 #[cfg(windows)]
 #[test]
 fn read_after_expect_str() {
-    use std::io::Read;
-
     let mut session = spawn("echo 'Hello World'").unwrap();
     session.expect("Hello").unwrap();
 
