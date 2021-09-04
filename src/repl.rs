@@ -189,7 +189,7 @@ impl ReplSession {
     pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd.clone())?;
         let found = self._expect_prompt()?;
-        Ok(found.before_match().to_vec())
+        Ok(found.before().to_vec())
     }
 
     /// Send a command to a repl and verifies that it exited.
@@ -201,7 +201,7 @@ impl ReplSession {
         }
 
         let found = self._expect_prompt().await?;
-        Ok(found.before_match().to_vec())
+        Ok(found.before().to_vec())
     }
 
     /// Sends line to repl (and flush the output).

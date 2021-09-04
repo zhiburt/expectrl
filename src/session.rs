@@ -138,9 +138,11 @@ impl Session {
                 Err(err) => return Err(Error::IO(err)),
             };
 
-            if let Some(m) = expect.check(&buf, eof_reached)? {
-                let buf = buf.drain(..m.end()).collect();
-                return Ok(Found::new(buf, m));
+            let found = expect.check(&buf, eof_reached)?;
+            if !found.is_empty() {
+                let end_index = Found::right_most_index(&found);
+                let buf = buf.drain(..end_index).collect();
+                return Ok(Found::new(buf, found));
             }
 
             if eof_reached {
@@ -576,23 +578,39 @@ impl DerefMut for Session {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     buf: Vec<u8>,
-    m: Match,
+    matches: Vec<Match>,
 }
 
 impl Found {
     /// New returns an instance of Found.
-    pub fn new(buf: Vec<u8>, m: Match) -> Self {
-        Self { buf, m }
+    fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
+        assert!(!matches.is_empty());
+
+        Self { buf, matches }
     }
 
-    /// Found_match returns a matched bytes.
-    pub fn found_match(&self) -> &[u8] {
-        &self.buf[self.m.start()..self.m.end()]
+    /// First returns a first match.
+    pub fn first(&self) -> &[u8] {
+        let m = &self.matches[0];
+        &self.buf[m.start()..m.end()]
     }
 
-    /// Before_match returns a bytes before match.
-    pub fn before_match(&self) -> &[u8] {
-        &self.buf[..self.m.start()]
+    /// Matches returns a list of matches.
+    pub fn matches(&self) -> Vec<&[u8]> {
+        self.matches.iter().map(|m| &self.buf[m.start()..m.end()]).collect()
+    }
+
+    /// before returns a bytes before match.
+    pub fn before(&self) -> &[u8] {
+        &self.buf[..self.left_most_index()]
+    }
+
+    fn left_most_index(&self) -> usize {
+        self.matches.iter().map(|m| m.start()).min().unwrap_or_default()
+    }
+
+    fn right_most_index(matches: &[Match]) -> usize {
+        matches.iter().map(|m| m.end()).max().unwrap_or_default()
     }
 }
 
@@ -722,4 +740,8 @@ fn nix_error_to_io(err: nix::Error) -> io::Error {
             "Unexpected error type conversion from nix to io",
         ),
     }
+}
+
+fn most_right_index(matches: &[Match])-> usize {
+    matches.iter().map(|m| m.end()).max().unwrap_or_default()
 }

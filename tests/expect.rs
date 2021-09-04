@@ -36,8 +36,8 @@ fn expect_regex() {
     let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     let m = session.expect(Regex("lo.*")).unwrap();
-    assert_eq!(m.before_match(), b"Hel");
-    assert_eq!(m.found_match(), b"lo");
+    assert_eq!(m.before(), b"Hel");
+    assert_eq!(m.first(), b"lo");
 }
 
 #[cfg(unix)]
@@ -48,8 +48,8 @@ fn expect_regex() {
         let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         let m = session.expect(Regex("lo.*")).await.unwrap();
-        assert_eq!(m.before_match(), b"Hel");
-        assert_eq!(m.found_match(), b"lo");
+        assert_eq!(m.before(), b"Hel");
+        assert_eq!(m.first(), b"lo");
     })
 }
 
@@ -59,10 +59,10 @@ fn expect_regex() {
     let mut session = spawn("echo Hello World").unwrap();
     let m = session.expect(Regex("lo.*")).unwrap();
     assert_eq!(
-        m.before_match(),
+        m.before(),
         [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
     );
-    assert_eq!(m.found_match(), b"lo");
+    assert_eq!(m.first(), b"lo");
 }
 
 #[cfg(unix)]
@@ -72,8 +72,8 @@ fn expect_n_bytes() {
     let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
     let m = session.expect(NBytes(3)).unwrap();
-    assert_eq!(m.found_match(), b"Hel");
-    assert_eq!(m.before_match(), b"");
+    assert_eq!(m.first(), b"Hel");
+    assert_eq!(m.before(), b"");
 }
 
 #[cfg(unix)]
@@ -84,8 +84,8 @@ fn expect_n_bytes() {
         let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
         let m = session.expect(NBytes(3)).await.unwrap();
-        assert_eq!(m.found_match(), b"Hel");
-        assert_eq!(m.before_match(), b"");
+        assert_eq!(m.first(), b"Hel");
+        assert_eq!(m.before(), b"");
     })
 }
 
@@ -95,9 +95,9 @@ fn expect_n_bytes() {
     let mut session = spawn("echo 'Hello World'").unwrap();
     // ignore spawned command
     let m = session.expect(NBytes(14)).unwrap();
-    println!("{:?}", String::from_utf8_lossy(m.found_match()));
-    assert_eq!(m.found_match(), "\u{1b}[2J\u{1b}[m\u{1b}[H'Hel".as_bytes());
-    assert_eq!(m.before_match(), b"");
+    println!("{:?}", String::from_utf8_lossy(m.first()));
+    assert_eq!(m.first(), "\u{1b}[2J\u{1b}[m\u{1b}[H'Hel".as_bytes());
+    assert_eq!(m.before(), b"");
 }
 
 #[cfg(unix)]
@@ -107,8 +107,8 @@ fn expect_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
     session.set_expect_timeout(None);
     let m = session.expect(Eof).unwrap();
-    assert_eq!(m.found_match(), b"'Hello World'\r\n");
-    assert_eq!(m.before_match(), b"");
+    assert_eq!(m.first(), b"'Hello World'\r\n");
+    assert_eq!(m.before(), b"");
 }
 
 #[cfg(unix)]
@@ -119,8 +119,8 @@ fn expect_eof() {
         let mut session = spawn("echo 'Hello World'").unwrap();
         session.set_expect_timeout(None);
         let m = session.expect(Eof).await.unwrap();
-        assert_eq!(m.found_match(), b"'Hello World'\r\n");
-        assert_eq!(m.before_match(), b"");
+        assert_eq!(m.first(), b"'Hello World'\r\n");
+        assert_eq!(m.before(), b"");
     })
 }
 
@@ -130,8 +130,8 @@ fn expect_eof() {
 fn expect_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
     let m = session.expect(Eof).unwrap();
-    assert_eq!(m.found_match(), b"'Hello World'\r\n");
-    assert_eq!(m.before_match(), b"");
+    assert_eq!(m.first(), b"'Hello World'\r\n");
+    assert_eq!(m.before(), b"");
 }
 
 #[cfg(unix)]

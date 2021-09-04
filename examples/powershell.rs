@@ -21,9 +21,9 @@ fn main() {
     p.expect_prompt().unwrap();
     println!(
         "/etc/passwd has {} lines, {} words, {} chars",
-        String::from_utf8_lossy(lines.found_match()),
-        String::from_utf8_lossy(words.found_match()),
-        String::from_utf8_lossy(bytes.found_match()),
+        String::from_utf8_lossy(lines.first()),
+        String::from_utf8_lossy(words.first()),
+        String::from_utf8_lossy(bytes.first()),
     );
 
     // case 3: read while program is still executing
@@ -32,7 +32,7 @@ fn main() {
         let duration = p.expect(Regex("[0-9.]+ms")).unwrap();
         println!(
             "Roundtrip time: {}",
-            String::from_utf8_lossy(duration.found_match())
+            String::from_utf8_lossy(duration.first())
         );
     }
 
