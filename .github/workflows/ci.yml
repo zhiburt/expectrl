@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         rust: [nightly, stable]
-        platform: [ubuntu-latest, macos-latest]
+        platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
@@ -40,6 +40,16 @@ jobs:
         with:
           command: test
           args: --verbose ${{ matrix.feauture }}
+
+  test_windows:
+    name: Windows Test Suite
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
 
   fmt:
     name: Rustfmt
