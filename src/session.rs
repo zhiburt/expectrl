@@ -375,7 +375,7 @@ impl Session {
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", not(windows)))]
 impl Session {
     /// Send text to child's `STDIN`.
     ///
