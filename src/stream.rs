@@ -16,6 +16,7 @@ pub type Stream = win::Stream;
 mod unix {
     #[cfg(not(feature = "async"))]
     pub(super) mod sync_stream {
+        use super::super::ReaderWithBuffer;
         use nix::{
             fcntl::{fcntl, FcntlArg, OFlag},
             Result,
@@ -80,6 +81,10 @@ mod unix {
                     Err(err) => Err(err),
                 }
             }
+
+            pub fn keep_in_buffer(&mut self, v: &[u8]) {
+                self.reader.get_mut().keep_in_buffer(v);
+            }
         }
 
         impl Write for Stream {
@@ -141,6 +146,7 @@ mod unix {
 
     #[cfg(feature = "async")]
     pub(super) mod async_stream {
+        use super::super::ReaderWithBuffer;
         use async_io::Async;
         use futures_lite::{io::BufReader, AsyncBufRead, AsyncRead, AsyncWrite};
         use ptyprocess::stream::Stream;
@@ -155,7 +161,7 @@ mod unix {
         #[derive(Debug)]
         pub struct AsyncStream {
             inner: Async<Stream>,
-            reader: BufReader<Async<ReaderWithBuffer<Stream>>>,
+            reader: BufReader<ReaderWithBuffer<Async<Stream>>>,
         }
 
         impl AsyncStream {
@@ -163,8 +169,9 @@ mod unix {
             pub fn new(file: File) -> Self {
                 let cloned = file.try_clone().unwrap();
                 let file = Async::new(Stream::new(file)).unwrap();
-                let reader =
-                    BufReader::new(Async::new(ReaderWithBuffer::new(Stream::new(cloned))).unwrap());
+                let reader = BufReader::new(ReaderWithBuffer::new(
+                    Async::new(Stream::new(cloned)).unwrap(),
+                ));
 
                 Self {
                     inner: file,
@@ -204,6 +211,10 @@ mod unix {
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
                     Err(err) => Err(err),
                 }
+            }
+
+            pub fn keep_in_buffer(&mut self, v: &[u8]) {
+                self.reader.get_mut().keep_in_buffer(v);
             }
         }
 
@@ -363,6 +374,7 @@ impl<R: std::io::Read> ReaderWithBuffer<R> {
         self.buffer.extend(v);
     }
 
+    #[allow(dead_code)]
     fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -386,7 +398,7 @@ impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
             let n = buf.write(&self.buffer)?;
             self.buffer.drain(..n);
 
-            self.inner.read(&mut buf[n..]).or_else(|_| Ok(n))
+            self.inner.read(&mut buf[n..]).or(Ok(n))
         }
     }
 }
@@ -410,22 +422,23 @@ impl<R: futures_lite::AsyncRead> ReaderWithBuffer<R> {
 }
 
 #[cfg(feature = "async")]
-impl<R: futures_lite::AsyncRead> futures_lite::AsyncRead for ReaderWithBuffer<R> {
+impl<R: futures_lite::AsyncRead + std::marker::Unpin> futures_lite::AsyncRead
+    for ReaderWithBuffer<R>
+{
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+        mut buf: &mut [u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
         // see sync version
-
         if self.buffer.is_empty() {
-            Pin::new(&mut self.inner).poll_read(cx, buf)
+            std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
         } else {
-            use futures_lite::{ready, AsyncWrite};
-            let n = ready!(buf.write(&self.buffer).poll(ctx))?;
+            use std::io::Write;
+            let n = buf.write(&self.buffer)?;
             self.buffer.drain(..n);
 
-            std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
+            std::pin::Pin::new(&mut self.inner).poll_read(cx, &mut buf[n..])
         }
     }
 }

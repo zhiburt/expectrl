@@ -6,7 +6,7 @@ use std::{thread, time::Duration};
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(feature = "async"))]
-use std::io::{BufRead, Read, Write};
+use std::io::{Read, Write};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]

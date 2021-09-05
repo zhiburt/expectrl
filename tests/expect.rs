@@ -1,5 +1,8 @@
 use expectrl::{spawn, Eof, NBytes, Regex};
-use std::{io::Read, time::Duration};
+use std::time::Duration;
+
+#[cfg(not(feature = "async"))]
+use std::io::Read;
 
 #[cfg(feature = "async")]
 use futures_lite::io::AsyncReadExt;
