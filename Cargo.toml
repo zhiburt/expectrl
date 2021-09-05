@@ -13,9 +13,8 @@ keywords = ["pty", "automation", "testing", "expect", "rexpect"]
 readme = "README.md"
 
 [features]
+default = ["async"]
 log = []
-
-[target.'cfg(unix)'.features]
 async = ["futures-lite", "async-io"]
 
 [dependencies]
