@@ -42,7 +42,11 @@ pub struct Regex<Re: AsRef<str>>(pub Re);
 impl<Re: AsRef<str>> Needle for Regex<Re> {
     fn check(&self, buf: &[u8], _: bool) -> Result<Vec<Match>, Error> {
         let regex = regex::bytes::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
-        let matches = regex.find_iter(buf).map(|m| m.into()).collect();
+        let matches = regex
+            .captures_iter(buf)
+            .map(|c| c.iter().flatten().map(|m| m.into()).collect::<Vec<Match>>())
+            .flatten()
+            .collect();
         Ok(matches)
     }
 }
@@ -139,10 +143,21 @@ mod tests {
             ]
         );
         assert_eq!(
-            Regex(r"(\w+'*\w+)+")
+            Regex(r"((?:\w|')+)")
                 .check(b"What's Up Boys", false)
                 .unwrap(),
-            vec![Match::new(0, 6), Match::new(7, 9), Match::new(10, 14)]
+            vec![
+                Match::new(0, 6),
+                Match::new(0, 6),
+                Match::new(7, 9),
+                Match::new(7, 9),
+                Match::new(10, 14),
+                Match::new(10, 14)
+            ]
+        );
+        assert_eq!(
+            Regex(r"(\w+)=(\w+)").check(b"asd=123", false).unwrap(),
+            vec![Match::new(0, 7), Match::new(0, 3), Match::new(4, 7)]
         );
     }
 
