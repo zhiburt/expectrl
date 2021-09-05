@@ -8,6 +8,9 @@ use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(feature = "async"))]
 use std::io::{Read, Write};
 
+#[cfg(windows)]
+use std::io::BufRead;
+
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
