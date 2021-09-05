@@ -74,15 +74,10 @@ impl Session {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
+        let mut b = [0; 1];
         loop {
-            // We read by byte so there's no need for buffering.
-            // If it would read by block's we would be required to create an internal buffer
-            // and implement std::io::Read and async_io::AsyncRead to use it.
-            // But instead we just reuse it from `ptyprocess` via `Deref`.
-            //
-            // It's worth to use this approch if there's a performance issue.
-            let mut b = [0; 1];
-            match self.stream.try_read(&mut b).await {
+            let result = self.stream.try_read(&mut b).await;
+            match result {
                 Ok(0) => {
                     eof_reached = true;
                 }
@@ -90,22 +85,28 @@ impl Session {
                     buf.extend(&b[..n]);
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(Error::IO(err)),
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buf);
+                    return Err(Error::IO(err));
+                }
             };
 
             let found = expect.check(&buf, eof_reached)?;
             if !found.is_empty() {
                 let end_index = Found::right_most_index(&found);
-                let buf = buf.drain(..end_index).collect();
-                return Ok(Found::new(buf, found));
+                let involved_bytes = buf.drain(..end_index).collect();
+                self.stream.keep_in_buffer(&buf);
+                return Ok(Found::new(involved_bytes, found));
             }
 
             if eof_reached {
+                self.stream.keep_in_buffer(&buf);
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
+                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -120,18 +121,10 @@ impl Session {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
+        let mut b = [0; 1];
         loop {
-            // We read by byte so there's no need for buffering.
-            // If it would read by block's we would be required to create an internal buffer
-            // and implement std::io::Read and async_io::AsyncRead to use it.
-            // But instead we just reuse it from `ptyprocess` via `Deref`.
-            //
-            // It's worth to use this approch if there's a performance issue.
-            //
-            // fixme: in case of error/timeout we will lose all the readed data
-            // so we need to do buffering in way.
-            let mut b = [0; 1];
-            match self.stream.try_read(&mut b) {
+            let result = self.stream.try_read(&mut b);
+            match result {
                 Ok(0) => {
                     eof_reached = true;
                 }
@@ -139,22 +132,28 @@ impl Session {
                     buf.extend(&b[..n]);
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(Error::IO(err)),
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buf);
+                    return Err(Error::IO(err));
+                }
             };
 
             let found = expect.check(&buf, eof_reached)?;
             if !found.is_empty() {
                 let end_index = Found::right_most_index(&found);
-                let buf = buf.drain(..end_index).collect();
-                return Ok(Found::new(buf, found));
+                let involved_bytes = buf.drain(..end_index).collect();
+                self.stream.keep_in_buffer(&buf);
+                return Ok(Found::new(involved_bytes, found));
             }
 
             if eof_reached {
+                self.stream.keep_in_buffer(&buf);
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
+                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }

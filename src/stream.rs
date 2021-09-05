@@ -264,13 +264,14 @@ mod unix {
 
 #[cfg(windows)]
 mod win {
+    use super::ReaderWithBuffer;
     use std::io::{self, BufRead, BufReader, Read, Write};
 
     /// Stream represent a IO stream.
     #[derive(Debug)]
     pub struct Stream {
         input: conpty::io::PipeWriter,
-        output: BufReader<conpty::io::PipeReader>,
+        output: BufReader<ReaderWithBuffer<conpty::io::PipeReader>>,
     }
 
     impl Stream {
@@ -278,19 +279,19 @@ mod win {
         pub fn new(input: conpty::io::PipeWriter, output: conpty::io::PipeReader) -> Self {
             Self {
                 input,
-                output: BufReader::new(output),
+                output: BufReader::new(ReaderWithBuffer::new(output)),
             }
         }
 
         pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
-            self.output.get_mut().set_non_blocking_mode()?;
+            self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
             let result = match self.read(&mut buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
 
-            self.output.get_mut().set_blocking_mode()?;
+            self.output.get_mut().get_mut().set_blocking_mode()?;
 
             result
         }
@@ -302,6 +303,10 @@ mod win {
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
                 Err(err) => Err(err),
             }
+        }
+
+        pub fn keep_in_buffer(&mut self, v: &[u8]) {
+            self.output.get_mut().keep_in_buffer(v);
         }
     }
 
@@ -332,6 +337,51 @@ mod win {
 
         fn consume(&mut self, amt: usize) {
             self.output.consume(amt)
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ReaderWithBuffer<R> {
+    inner: R,
+    buffer: Vec<u8>,
+}
+
+impl<R: std::io::Read> ReaderWithBuffer<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            inner: reader,
+            buffer: Vec::new(),
+        }
+    }
+
+    fn keep_in_buffer(&mut self, v: &[u8]) {
+        self.buffer.extend(v);
+    }
+
+    fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
+    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+        // We intentinally try to read from inner buffer in any case
+        // because calling code might endlessly save into inner buffer something and actuall read won't be called at all,
+        //
+        // For example caller code waits before something appear in the buffer,
+        // And if its not the read data saved into our buffer.
+        // In such a situation we will return a buffer which will never be filled with expected data.
+        //
+        // As a down side we might lose a error which might be important to caller code.
+        if self.buffer.is_empty() {
+            self.inner.read(buf)
+        } else {
+            use std::io::Write;
+            let n = buf.write(&self.buffer)?;
+            self.buffer.drain(..n);
+
+            self.inner.read(&mut buf[n..]).or_else(|_| Ok(n))
         }
     }
 }
