@@ -30,7 +30,7 @@ mod unix {
         #[derive(Debug)]
         pub struct Stream {
             inner: ptyprocess::stream::Stream,
-            reader: BufReader<ptyprocess::stream::Stream>,
+            reader: BufReader<ReaderWithBuffer<ptyprocess::stream::Stream>>,
         }
 
         impl Stream {
@@ -39,7 +39,9 @@ mod unix {
                 let copy_file = file
                     .try_clone()
                     .expect("It's ok to clone fd as it will be just DUPed");
-                let reader = BufReader::new(ptyprocess::stream::Stream::new(copy_file));
+                let reader = BufReader::new(ReaderWithBuffer::new(
+                    ptyprocess::stream::Stream::new(copy_file),
+                ));
                 let file = ptyprocess::stream::Stream::new(file);
 
                 Self {
@@ -153,7 +155,7 @@ mod unix {
         #[derive(Debug)]
         pub struct AsyncStream {
             inner: Async<Stream>,
-            reader: BufReader<Async<Stream>>,
+            reader: BufReader<Async<ReaderWithBuffer<Stream>>>,
         }
 
         impl AsyncStream {
@@ -161,7 +163,8 @@ mod unix {
             pub fn new(file: File) -> Self {
                 let cloned = file.try_clone().unwrap();
                 let file = Async::new(Stream::new(file)).unwrap();
-                let reader = BufReader::new(Async::new(Stream::new(cloned)).unwrap());
+                let reader =
+                    BufReader::new(Async::new(ReaderWithBuffer::new(Stream::new(cloned))).unwrap());
 
                 Self {
                     inner: file,
@@ -188,7 +191,7 @@ mod unix {
                 // }
 
                 // A fd already in a non-blocking mode
-                match self.reader.get_mut().as_mut().read(&mut buf) {
+                match self.reader.get_mut().get_mut().as_mut().read(&mut buf) {
                     Ok(n) => Ok(n),
                     Err(err) => Err(err),
                 }
@@ -347,6 +350,7 @@ struct ReaderWithBuffer<R> {
     buffer: Vec<u8>,
 }
 
+#[cfg(not(feature = "async"))]
 impl<R: std::io::Read> ReaderWithBuffer<R> {
     fn new(reader: R) -> Self {
         Self {
@@ -364,6 +368,7 @@ impl<R: std::io::Read> ReaderWithBuffer<R> {
     }
 }
 
+#[cfg(not(feature = "async"))]
 impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
         // We intentinally try to read from inner buffer in any case
@@ -382,6 +387,45 @@ impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
             self.buffer.drain(..n);
 
             self.inner.read(&mut buf[n..]).or_else(|_| Ok(n))
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<R: futures_lite::AsyncRead> ReaderWithBuffer<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            inner: reader,
+            buffer: Vec::new(),
+        }
+    }
+
+    fn keep_in_buffer(&mut self, v: &[u8]) {
+        self.buffer.extend(v);
+    }
+
+    fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+}
+
+#[cfg(feature = "async")]
+impl<R: futures_lite::AsyncRead> futures_lite::AsyncRead for ReaderWithBuffer<R> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        // see sync version
+
+        if self.buffer.is_empty() {
+            Pin::new(&mut self.inner).poll_read(cx, buf)
+        } else {
+            use futures_lite::{ready, AsyncWrite};
+            let n = ready!(buf.write(&self.buffer).poll(ctx))?;
+            self.buffer.drain(..n);
+
+            std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
         }
     }
 }
