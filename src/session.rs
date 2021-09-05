@@ -121,6 +121,11 @@ impl Session {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
+        // We read by byte to make things as lazy as possible.
+        //
+        // It's chose is important in using Regex as a Needle.
+        // Imagine we have a `\d+` regex.
+        // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
         let mut b = [0; 1];
         loop {
             let result = self.stream.try_read(&mut b);
