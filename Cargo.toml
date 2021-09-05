@@ -13,7 +13,6 @@ keywords = ["pty", "automation", "testing", "expect", "rexpect"]
 readme = "README.md"
 
 [features]
-default = ["async"]
 log = []
 async = ["futures-lite", "async-io"]
 

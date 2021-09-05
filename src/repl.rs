@@ -98,12 +98,15 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
     powershell.is_echo_on = true;
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
-    powershell.send_line(format!(
+    powershell.execute(format!(
         r#"function prompt {{ "{}"; return " " }}"#,
         DEFAULT_PROMPT
     ))?;
 
-    powershell.expect_prompt().unwrap();
+    // https://stackoverflow.com/questions/69063656/is-it-possible-to-stop-powershell-wrapping-output-in-ansi-sequences/69063912#69063912
+    // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "dumb")"#)?;
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "NO_COLOR")"#)?;
 
     Ok(powershell)
 }
