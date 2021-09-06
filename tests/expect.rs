@@ -30,7 +30,7 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
-    let mut session = spawn("powershell -C type").unwrap();
+    let mut session = spawn("pwsh -C type").unwrap();
 
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
