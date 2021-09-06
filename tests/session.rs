@@ -1,6 +1,4 @@
 use expectrl::spawn;
-
-#[cfg(unix)]
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
@@ -55,6 +53,8 @@ fn send() {
     let mut session = spawn("powershell -C type").unwrap();
     session.write(b"Hello World").unwrap();
 
+    thread::sleep(Duration::from_millis(300));
+
     let mut buf = vec![0; 1028];
     let _ = session.read(&mut buf).unwrap();
     let n = session.read(&mut buf).unwrap();
@@ -107,6 +107,8 @@ fn send_multiline() {
 fn send_multiline() {
     let mut session = spawn("powershell -C type").unwrap();
     session.send("Hello World\r\n").unwrap();
+
+    thread::sleep(Duration::from_millis(300));
 
     let buf = session.lines().nth(2).unwrap().unwrap();
 
@@ -165,6 +167,8 @@ fn send_line() {
 fn send_line() {
     let mut session = spawn("powershell -C type").unwrap();
     session.send_line("Hello World").unwrap();
+
+    thread::sleep(Duration::from_millis(300));
 
     let buf = session.lines().nth(2).unwrap().unwrap();
 
