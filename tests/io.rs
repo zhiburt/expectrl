@@ -403,47 +403,6 @@ fn try_read_after_process_exit() {
 }
 
 #[test]
-fn try_read_to_end() {
-    #[cfg(unix)]
-    {
-        let mut cmd = Command::new("echo");
-        cmd.arg("Hello World");
-        let mut proc = Session::spawn(cmd).unwrap();
-
-        let mut buf = vec![0; 128];
-        loop {
-            match _p_try_read(&mut proc, &mut buf) {
-                Ok(_) => break,
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(err) => Err(err).unwrap(),
-            }
-        }
-
-        assert_eq!(&buf[..13], b"Hello World\r\n");
-    }
-    #[cfg(windows)]
-    {
-        let mut proc = Session::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
-
-        thread::sleep(Duration::from_millis(1000));
-
-        let mut v: Vec<u8> = Vec::new();
-        let mut b = [0; 1];
-        loop {
-            match _p_try_read(&mut proc, &mut b) {
-                Ok(n) => {
-                    v.extend(&b[..n]);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(err) => Err(err).unwrap(),
-            }
-        }
-
-        assert!(String::from_utf8_lossy(&v).contains("Hello World"));
-    }
-}
-
-#[test]
 #[cfg(unix)]
 fn try_read_to_end() {
     let mut cmd = Command::new("echo");
@@ -461,6 +420,29 @@ fn try_read_to_end() {
 
     assert_eq!(&buf[..13], b"Hello World\r\n");
 }
+
+#[test]
+#[cfg(windows)]
+fn try_read_to_end() {
+    let mut proc = Session::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+
+    thread::sleep(Duration::from_millis(1000));
+
+    let mut v: Vec<u8> = Vec::new();
+    let mut b = [0; 1];
+    loop {
+        match _p_try_read(&mut proc, &mut b) {
+            Ok(n) => {
+                v.extend(&b[..n]);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(err) => Err(err).unwrap(),
+        }
+    }
+
+    assert!(String::from_utf8_lossy(&v).contains("Hello World"));
+}
+
 #[test]
 #[cfg(windows)]
 fn continues_try_reads() {
