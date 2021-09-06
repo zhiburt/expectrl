@@ -86,12 +86,8 @@ pub fn spawn_python() -> Result<ReplSession, Error> {
 #[cfg(windows)]
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
-    // let mut powershell = ReplSession::spawn(ProcAttr::cmd("powershell -noprofile".to_string()), DEFAULT_PROMPT, Some("exit"))?;
     let mut powershell = ReplSession::spawn(
-        ProcAttr::default().commandline(
-            r"C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -NonInteractive -NoLogo"
-                .to_string(),
-        ),
+        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
         DEFAULT_PROMPT,
         Some("exit"),
     )?;
