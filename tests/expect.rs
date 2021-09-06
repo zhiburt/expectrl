@@ -108,10 +108,7 @@ fn expect_n_bytes() {
 fn expect_n_bytes() {
     use expectrl::{ProcAttr, Session};
 
-    let mut session = Session::spawn(
-        ProcAttr::cmd(r#"echo Hello World"#.to_string()),
-    )
-    .unwrap();
+    let mut session = Session::spawn(ProcAttr::cmd(r#"echo Hello World"#.to_string())).unwrap();
 
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
