@@ -69,7 +69,14 @@ fn send() {
     let mut buf = vec![0; 1024];
     let n = _p_read(&mut proc, &mut buf).unwrap();
 
-    assert!(String::from_utf8_lossy(&buf[..n]).contains("hello cat"));
+    let s = String::from_utf8_lossy(&buf[..n]);
+    if !s.contains("hello cat") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "hello cat", s
+        );
+    }
+
     proc.exit(0).unwrap();
 }
 
@@ -101,9 +108,13 @@ fn send_line() {
     let mut buf = vec![0; 1024];
     let n = _p_read(&mut proc, &mut buf).unwrap();
 
-    assert!(String::from_utf8_lossy(&buf[..n]).contains("hello cat"));
-
-    proc.exit(0).unwrap();
+    let s = String::from_utf8_lossy(&buf[..n]);
+    if !s.contains("hello cat") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "hello cat", s
+        );
+    }
 }
 
 #[test]
@@ -409,7 +420,7 @@ fn try_read_to_end() {
     cmd.arg("Hello World");
     let mut proc = Session::spawn(cmd).unwrap();
 
-    let mut buf = Vec::new();
+    let mut buf: Vec<u8> = Vec::new();
     loop {
         let mut b = [0; 128];
         match _p_try_read(&mut proc, &mut b) {
