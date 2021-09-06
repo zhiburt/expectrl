@@ -109,7 +109,7 @@ fn expect_n_bytes() {
     use expectrl::{ProcAttr, Session};
 
     let mut session = Session::spawn(
-        ProcAttr::default().commandline(r#"pwsh -C "echo 'Hello World'""#.to_string()),
+        ProcAttr::cmd(r#"echo Hello World"#.to_string()),
     )
     .unwrap();
 
@@ -118,8 +118,7 @@ fn expect_n_bytes() {
 
     // ignore spawned command
     let m = session.expect(NBytes(14)).unwrap();
-    println!("{:?}", String::from_utf8_lossy(m.first()));
-    assert_eq!(m.first(), "\u{1b}[2J\u{1b}[m\u{1b}[H'Hel".as_bytes());
+    assert_eq!(m.first(), "\u{1b}[2J\u{1b}[m\u{1b}[HHell".as_bytes());
     assert_eq!(m.before(), b"");
 }
 

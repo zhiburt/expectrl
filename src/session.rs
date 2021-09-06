@@ -34,7 +34,7 @@ pub struct Session {
     #[cfg(unix)]
     proc: PtyProcess,
     #[cfg(windows)]
-    proc: conpty::Proc,
+    proc: conpty::Process,
     stream: Stream,
     expect_timeout: Option<Duration>,
 }
@@ -568,7 +568,7 @@ impl DerefMut for Session {
 
 #[cfg(windows)]
 impl Deref for Session {
-    type Target = conpty::Proc;
+    type Target = conpty::Process;
 
     fn deref(&self) -> &Self::Target {
         &self.proc
