@@ -38,4 +38,4 @@ install:
 build: false
 
 test_script:
-  - cargo test --all --verbose
+  - cargo test --all --verbose --no-fail-fast

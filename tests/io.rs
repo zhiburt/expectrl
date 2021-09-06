@@ -68,7 +68,6 @@ fn send() {
 
     let mut buf = vec![0; 1024];
     let n = _p_read(&mut proc, &mut buf).unwrap();
-    let n = _p_read(&mut proc, &mut buf).unwrap();
 
     let s = String::from_utf8_lossy(&buf[..n]);
     if !s.contains("hello cat") {
