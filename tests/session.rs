@@ -59,7 +59,13 @@ fn send() {
     let _ = session.read(&mut buf).unwrap();
     let n = session.read(&mut buf).unwrap();
 
-    assert!(String::from_utf8_lossy(&buf[..n]).contains("Hello World"));
+    let s = String::from_utf8_lossy(&buf[..n]);
+    if !s.contains("Hello World") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "Hello World", s
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -112,8 +118,12 @@ fn send_multiline() {
 
     let buf = session.lines().nth(2).unwrap().unwrap();
 
-    println!("{}", buf);
-    assert!(buf.contains("Hello World"));
+    if !buf.contains("Hello World") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "Hello World", buf
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -172,6 +182,10 @@ fn send_line() {
 
     let buf = session.lines().nth(2).unwrap().unwrap();
 
-    println!("{}", buf);
-    assert!(buf.contains("Hello World"));
+    if !buf.contains("Hello World") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "Hello World", buf
+        );
+    }
 }

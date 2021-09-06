@@ -409,10 +409,12 @@ fn try_read_to_end() {
     cmd.arg("Hello World");
     let mut proc = Session::spawn(cmd).unwrap();
 
-    let mut buf = vec![0; 128];
+    let mut buf = Vec::new();
     loop {
-        match _p_try_read(&mut proc, &mut buf) {
-            Ok(_) => break,
+        let mut b = [0; 128];
+        match _p_try_read(&mut proc, &mut b) {
+            Ok(0) => break,
+            Ok(n) => buf.extend(&b[..n]),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(err) => Err(err).unwrap(),
         }
