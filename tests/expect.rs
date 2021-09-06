@@ -31,6 +31,10 @@ fn expect_str() {
 #[test]
 fn expect_str() {
     let mut session = spawn("powershell -C type").unwrap();
+
+    // give shell some time
+    std::thread::sleep(Duration::from_millis(300));
+
     session.send_line("Hello World").unwrap();
     session.expect("Hello World").unwrap();
 }
@@ -63,6 +67,10 @@ fn expect_regex() {
 #[test]
 fn expect_regex() {
     let mut session = spawn("echo Hello World").unwrap();
+
+    // give shell some time
+    std::thread::sleep(Duration::from_millis(300));
+
     let m = session.expect(Regex("lo.*")).unwrap();
     assert_eq!(
         m.before(),
@@ -99,6 +107,10 @@ fn expect_n_bytes() {
 #[test]
 fn expect_n_bytes() {
     let mut session = spawn("echo 'Hello World'").unwrap();
+
+    // give shell some time
+    std::thread::sleep(Duration::from_millis(300));
+
     // ignore spawned command
     let m = session.expect(NBytes(14)).unwrap();
     println!("{:?}", String::from_utf8_lossy(m.first()));
@@ -135,6 +147,10 @@ fn expect_eof() {
 #[ignore = "https://stackoverflow.com/questions/68985384/does-a-conpty-reading-pipe-get-notified-on-process-termination"]
 fn expect_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
+
+    // give shell some time
+    std::thread::sleep(Duration::from_millis(300));
+
     let m = session.expect(Eof).unwrap();
     assert_eq!(m.first(), b"'Hello World'\r\n");
     assert_eq!(m.before(), b"");
@@ -172,6 +188,10 @@ fn read_after_expect_str() {
 #[test]
 fn read_after_expect_str() {
     let mut session = spawn("echo 'Hello World'").unwrap();
+
+    // give shell some time
+    std::thread::sleep(Duration::from_millis(300));
+
     session.expect("Hello").unwrap();
 
     let mut buf = [0; 6];
