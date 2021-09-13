@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:        
+      - win             # Push events to win tag
+      - win.*           # Push events to win.0, win.1, and win.9 tags
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Windows Test Suite
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+      - uses: actions-rs/cargo@v1
+        timeout-minutes: 3
+        with:
+          command: test
+          args: --verbose --no-fail-fast

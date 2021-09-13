@@ -1,3 +1,11 @@
+for:
+-
+  branches:
+    only:
+      - master
+      - main
+      - /win\d+/
+
 environment:
   matrix:
     # Stable channel
