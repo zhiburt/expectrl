@@ -32,5 +32,12 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
-    panic!("An example doesn't supported on windows")
+    let mut pwsh = expectrl::spawn("cmd").expect("Error while spawning bash");
+
+    println!("Now you're in interacting mode");
+    println!("To return control back to main type CTRL-]");
+
+    pwsh.interact().expect("Failed to start interact");
+
+    println!("Quiting");
 }

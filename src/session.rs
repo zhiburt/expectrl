@@ -377,6 +377,65 @@ impl Session {
             }
         }
     }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    #[cfg(windows)]
+    pub fn interact(&mut self) -> io::Result<()> {
+        // flush buffers
+        self.flush()?;
+
+        let console = conpty::console::Console::current().unwrap();
+        console.set_raw().unwrap();
+
+        let r = self._interact(&console);
+
+        console.reset().unwrap();
+
+        r
+    }
+
+    #[cfg(windows)]
+    fn _interact(&mut self, console: &conpty::console::Console) -> io::Result<()> {
+        let mut buf = [0; 512];
+        loop {
+            if !self.is_alive() {
+                return Ok(());
+            }
+
+            match self.try_read(&mut buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        return Ok(());
+                    }
+
+                    std::io::stdout().write_all(&buf[..n])?;
+                    std::io::stdout().flush()?;
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
+            }
+
+            if console.is_stdin_not_empty()? {
+                use std::io::Read;
+                let n = io::stdin().read(&mut buf)?;
+                if n == 0 {
+                    return Ok(());
+                }
+
+                for i in 0..n {
+                    // Ctrl-]
+                    if buf[i] == ControlCode::GroupSeparator.into() {
+                        // it might be too much to call a `status()` here,
+                        // do it just in case.
+                        return Ok(());
+                    }
+
+                    self.write_all(&buf[i..i + 1])?;
+                }
+            }
+        }
+    }
 }
 
 #[cfg(all(feature = "async", not(windows)))]

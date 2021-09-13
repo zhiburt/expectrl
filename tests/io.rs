@@ -159,7 +159,7 @@ fn try_read_by_byte() {
         Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
     _p_send_line(
         &mut proc,
-        "while (1) { read-host | set r; echo $r; if (!$r) { break }}",
+        "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
     _p_read_until(&mut proc, b'}').unwrap();
