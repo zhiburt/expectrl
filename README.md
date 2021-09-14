@@ -5,21 +5,20 @@
 
 # expectrl
 
-A tool for automating terminal applications in Unix.
+A tool for automating terminal applications on Unix and on Windows.
 
 Using the library you can:
 
 - Spawn process
 - Control process
-- Expect/Verify responses
+- Interact with process's IO(input/output).
 
-It was inspired by [philippkeller/rexpect](https://github.com/philippkeller/rexpect) and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
-
-It supports `async` calls. To enable them you must turn on an `async` feature.
+`expectrl` like original `expect` may shine when you're working with interactive applications.
+If your application is not interactive you may not find the library the best choise.
 
 ## Usage
 
-### An example for interacting via ftp:
+An example for interacting via ftp.
 
 ```rust
 use expectrl::{spawn, Regex, Eof, WaitStatus};
@@ -41,73 +40,21 @@ fn main() {
 }
 ```
 
-### Example bash with `async` feature
+*The example inspired by the one in [philippkeller/rexpect].*
 
-```rust
-use expectrl::{repl::spawn_bash, Regex, Error, ControlCode};
-use futures_lite::io::AsyncBufReadExt;
+#### [For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
 
-#[tokio::main]
-fn main() -> Result<(), Error> {
-    let mut p = spawn_bash().await?;
+## Features
 
-    p.send_line("hostname").await?;
-    let mut hostname = String::new();
-    p.read_line(&mut hostname).await?;
-    p.expect_prompt().await?; // go sure `hostname` is really done
-    println!("Current hostname: {:?}", hostname);
-
-    Ok(())
-}
-```
-
-### Example with bash and job control
-
-One frequent bitfall with sending signals is that you need
-to somehow ensure that the program has fully loaded, otherwise they
-goes into nowhere. There are 2 handy function `execute` for this purpouse:
-
-- `execute` - does a command and ensures that the prompt is shown again.
-- `expect_prompt` - ensures that the prompt is shown.
-
-```rust
-use expectrl::{repl::spawn_bash, Error, ControlCode};
-
-fn main() -> Result<(), Error> {
-    let mut p = spawn_bash()?;
-    p.send_line("ping 8.8.8.8")?;
-    p.expect("bytes of data")?;
-    p.send_control(ControlCode::Substitute)?; // CTRL_Z
-    p.expect_prompt()?;
-    // bash writes 'ping 8.8.8.8' to stdout again to state which job was put into background
-    p.send_line("bg")?;
-    p.expect("ping 8.8.8.8")?;
-    p.expect_prompt()?;
-    p.send_line("sleep 0.5")?;
-    p.expect_prompt()?;
-    // bash writes 'ping 8.8.8.8' to stdout again to state which job was put into foreground
-    p.send_line("fg")?;
-    p.expect("ping 8.8.8.8")?;
-    p.send_control(ControlCode::EndOfText)?;
-    p.expect("packet loss")?;
-
-    Ok(())
-}
-```
-
-## Examples
-
-[For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
-
-## Comparison to [philippkeller/rexpect](https://github.com/philippkeller/rexpect)
-
-It will be fair to say that without it there would be no `expectrl`.
-
-- It has an `async` support.
-- It does a couple of inner things diferently.
-- It has a different interface.
+- It has an `async` support (To enable them you must turn on an `async` feature).
 - It supports logging.
 - It supports interact function.
-- ...
+- It has a Windows support.
+
+## Notes
+
+It was originally inspired by [philippkeller/rexpect] and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
 
 Licensed under [MIT License](LICENSE)
+
+[philippkeller/rexpect]: https://github.com/philippkeller/rexpect
