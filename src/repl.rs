@@ -1,9 +1,12 @@
-use std::{
-    ops::{Deref, DerefMut},
-    process::Command,
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{error::Error, session::Found, Session};
+
+#[cfg(unix)]
+use std::process::Command;
+
+#[cfg(windows)]
+use conpty::ProcAttr;
 
 /// Spawn a bash session.
 ///
@@ -11,6 +14,7 @@ use crate::{error::Error, session::Found, Session};
 ///
 /// If you wan't to use [Session::interact] method it is better to use just Session.
 /// Because we don't handle echoes here (currently). Ideally we need to.
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
@@ -39,6 +43,7 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
 /// Spawn a bash session.
 ///
 /// It uses a custom prompt to be able to controll shell better.
+#[cfg(unix)]
 #[cfg(feature = "async")]
 pub async fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
@@ -62,8 +67,44 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
 
 /// Spawn default python's IDLE.
 pub fn spawn_python() -> Result<ReplSession, Error> {
-    let idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
-    Ok(idle)
+    #[cfg(unix)]
+    {
+        let idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+        Ok(idle)
+    }
+    #[cfg(windows)]
+    {
+        // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
+        let idle = ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
+        Ok(idle)
+    }
+}
+
+/// Spawn a powershell session.
+///
+/// It uses a custom prompt to be able to controll the shell.
+#[cfg(windows)]
+pub fn spawn_powershell() -> Result<ReplSession, Error> {
+    const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
+    let mut powershell = ReplSession::spawn(
+        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
+        DEFAULT_PROMPT,
+        Some("exit"),
+    )?;
+    powershell.is_echo_on = true;
+
+    // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
+    powershell.execute(format!(
+        r#"function prompt {{ "{}"; return " " }}"#,
+        DEFAULT_PROMPT
+    ))?;
+
+    // https://stackoverflow.com/questions/69063656/is-it-possible-to-stop-powershell-wrapping-output-in-ansi-sequences/69063912#69063912
+    // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "dumb")"#)?;
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "NO_COLOR")"#)?;
+
+    Ok(powershell)
 }
 
 /// A repl session: e.g. bash or the python shell:
@@ -82,6 +123,7 @@ pub struct ReplSession {
 }
 
 impl ReplSession {
+    #[cfg(unix)]
     pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
         prompt: P,
@@ -97,6 +139,24 @@ impl ReplSession {
             session,
             quit_command,
             is_echo_on,
+        })
+    }
+
+    #[cfg(windows)]
+    pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
+        attr: crate::ProcAttr,
+        prompt: P,
+        quit_command: Option<Q>,
+    ) -> Result<Self, Error> {
+        let session = Session::spawn(attr)?;
+        let prompt = prompt.as_ref().to_owned();
+        let quit_command = quit_command.map(|q| q.as_ref().to_owned());
+
+        Ok(Self {
+            prompt,
+            session,
+            quit_command,
+            is_echo_on: false,
         })
     }
 
@@ -137,25 +197,17 @@ impl ReplSession {
     /// Returning it's output.
     #[cfg(not(feature = "async"))]
     pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
-        self.send_line(cmd.clone())?;
-        if self.is_echo_on {
-            self.expect(cmd.as_ref())?;
-        }
-
+        self.send_line(cmd)?;
         let found = self._expect_prompt()?;
-        Ok(found.before_match().to_vec())
+        Ok(found.before().to_vec())
     }
 
     /// Send a command to a repl and verifies that it exited.
     #[cfg(feature = "async")]
     pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
-        self.send_line(cmd.clone()).await?;
-        if self.is_echo_on {
-            self.expect(cmd.as_ref()).await?;
-        }
-
+        self.send_line(cmd).await?;
         let found = self._expect_prompt().await?;
-        Ok(found.before_match().to_vec())
+        Ok(found.before().to_vec())
     }
 
     /// Sends line to repl (and flush the output).

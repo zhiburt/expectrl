@@ -1,7 +1,9 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
+#[cfg(unix)]
 use expectrl::{repl::spawn_bash, ControlCode, Error};
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
     let mut p = spawn_bash()?;
@@ -24,6 +26,7 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() -> Result<(), Error> {
     futures_lite::future::block_on(async {
@@ -45,4 +48,9 @@ fn main() -> Result<(), Error> {
         p.expect("packet loss").await?;
         Ok(())
     })
+}
+
+#[cfg(windows)]
+fn main() {
+    panic!("An example doesn't supported on windows")
 }

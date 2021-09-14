@@ -1,7 +1,9 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
+#[cfg(unix)]
 use expectrl::{repl::spawn_bash, ControlCode, Regex};
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut p = spawn_bash().unwrap();
@@ -22,9 +24,9 @@ fn main() {
     p.expect_prompt().unwrap(); // go sure `wc` is really done
     println!(
         "/etc/passwd has {} lines, {} words, {} chars",
-        String::from_utf8_lossy(lines.found_match()),
-        String::from_utf8_lossy(words.found_match()),
-        String::from_utf8_lossy(bytes.found_match()),
+        String::from_utf8_lossy(lines.first()),
+        String::from_utf8_lossy(words.first()),
+        String::from_utf8_lossy(bytes.first()),
     );
 
     // case 3: read while program is still executing
@@ -34,13 +36,14 @@ fn main() {
         let duration = p.expect(Regex("[0-9. ]+ ms")).unwrap();
         println!(
             "Roundtrip time: {}",
-            String::from_utf8_lossy(duration.found_match())
+            String::from_utf8_lossy(duration.first())
         );
     }
 
     p.send_control(ControlCode::EOT).unwrap();
 }
 
+#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     use futures_lite::io::AsyncBufReadExt;
@@ -64,9 +67,9 @@ fn main() {
         p.expect_prompt().await.unwrap(); // go sure `wc` is really done
         println!(
             "/etc/passwd has {} lines, {} words, {} chars",
-            String::from_utf8_lossy(lines.found_match()),
-            String::from_utf8_lossy(words.found_match()),
-            String::from_utf8_lossy(bytes.found_match()),
+            String::from_utf8_lossy(lines.first()),
+            String::from_utf8_lossy(words.first()),
+            String::from_utf8_lossy(bytes.first()),
         );
 
         // case 3: read while program is still executing
@@ -76,10 +79,15 @@ fn main() {
             let duration = p.expect(Regex("[0-9. ]+ ms")).await.unwrap();
             println!(
                 "Roundtrip time: {}",
-                String::from_utf8_lossy(duration.found_match())
+                String::from_utf8_lossy(duration.first())
             );
         }
 
         p.send_control(ControlCode::EOT).await.unwrap();
     })
+}
+
+#[cfg(windows)]
+fn main() {
+    panic!("An example doesn't supported on windows")
 }

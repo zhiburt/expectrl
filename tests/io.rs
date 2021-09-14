@@ -1,5 +1,14 @@
-use expectrl::{ControlCode, Session, WaitStatus};
-use std::{process::Command, thread, time::Duration};
+use expectrl::{ControlCode, Session};
+use std::{thread, time::Duration};
+
+#[cfg(unix)]
+use std::process::Command;
+
+#[cfg(unix)]
+use expectrl::WaitStatus;
+
+#[cfg(windows)]
+use expectrl::ProcAttr;
 
 #[cfg(feature = "async")]
 use futures_lite::{
@@ -11,6 +20,7 @@ use futures_lite::{
 use std::io::{BufRead, Read, Write};
 
 #[test]
+#[cfg(unix)]
 fn send_controll() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send_control(&mut proc, ControlCode::EOT).unwrap();
@@ -18,9 +28,25 @@ fn send_controll() {
 }
 
 #[test]
+#[cfg(windows)]
+fn send_controll() {
+    let mut proc =
+        Session::spawn(ProcAttr::cmd("powershell -C ping localhost".to_string())).unwrap();
+
+    // give powershell a bit time
+    thread::sleep(Duration::from_millis(100));
+
+    _p_send_control(&mut proc, ControlCode::ETX).unwrap();
+    assert!({
+        let code = proc.wait(None).unwrap();
+        code == 0 || code == 3221225786
+    });
+}
+
+#[test]
+#[cfg(unix)]
 fn send() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
-
     _p_send(&mut proc, "hello cat\n").unwrap();
 
     // give cat a time to react on input
@@ -34,6 +60,33 @@ fn send() {
 }
 
 #[test]
+#[cfg(windows)]
+fn send() {
+    let mut proc =
+        Session::spawn(ProcAttr::default().commandline("powershell -C type".to_string())).unwrap();
+    thread::sleep(Duration::from_millis(1000));
+
+    _p_send(&mut proc, "hello cat\r\n").unwrap();
+
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(1000));
+
+    let mut buf = vec![0; 1024];
+    let n = _p_read(&mut proc, &mut buf).unwrap();
+
+    let s = String::from_utf8_lossy(&buf[..n]);
+    if !s.contains("hello cat") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "hello cat", s
+        );
+    }
+
+    proc.exit(0).unwrap();
+}
+
+#[test]
+#[cfg(unix)]
 fn send_line() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -50,6 +103,28 @@ fn send_line() {
 }
 
 #[test]
+#[cfg(windows)]
+fn send_line() {
+    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
+
+    thread::sleep(Duration::from_millis(1000));
+    _p_send_line(&mut proc, "hello cat").unwrap();
+    thread::sleep(Duration::from_millis(1000));
+
+    let mut buf = vec![0; 1024];
+    let n = _p_read(&mut proc, &mut buf).unwrap();
+
+    let s = String::from_utf8_lossy(&buf[..n]);
+    if !s.contains("hello cat") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "hello cat", s
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn try_read_by_byte() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -66,19 +141,14 @@ fn try_read_by_byte() {
     let mut buf = [0; 1];
     _p_try_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf, &[b'1']);
-
     _p_try_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf, &[b'2']);
-
     _p_try_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf, &[b'3']);
-
     _p_try_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf, &[b'\r']);
-
     _p_try_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf, &[b'\n']);
-
     assert_eq!(
         _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
@@ -86,6 +156,40 @@ fn try_read_by_byte() {
 }
 
 #[test]
+#[cfg(windows)]
+fn try_read_by_byte() {
+    // it shows that on windows ECHO is turned on.
+    // Mustn't it be turned down?
+
+    let mut proc =
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    _p_send_line(
+        &mut proc,
+        "while (1) { read-host | set r; if (!$r) { break }}",
+    )
+    .unwrap();
+    _p_read_until(&mut proc, b'}').unwrap();
+    _p_read_line(&mut proc).unwrap();
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    thread::sleep(Duration::from_millis(500));
+
+    _p_read_until(&mut proc, b'1').unwrap();
+
+    let mut buf = [0; 1];
+    _p_try_read(&mut proc, &mut buf).unwrap();
+    assert_eq!(&buf, &[b'2']);
+    _p_try_read(&mut proc, &mut buf).unwrap();
+    assert_eq!(&buf, &[b'3']);
+    _p_try_read(&mut proc, &mut buf).unwrap();
+    assert_eq!(&buf, &[b'\r']);
+    _p_try_read(&mut proc, &mut buf).unwrap();
+    assert_eq!(&buf, &[b'\n']);
+}
+
+#[test]
+#[cfg(unix)]
 fn blocking_read_after_non_blocking() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -115,6 +219,34 @@ fn blocking_read_after_non_blocking() {
 }
 
 #[test]
+#[cfg(windows)]
+fn blocking_read_after_non_blocking() {
+    let mut proc =
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    _p_send_line(
+        &mut proc,
+        "while (1) { read-host | set r; if (!$r) { break }}",
+    )
+    .unwrap();
+    thread::sleep(Duration::from_millis(1000));
+    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    thread::sleep(Duration::from_millis(1000));
+
+    let mut buf = [0; 1];
+    _p_try_read(&mut proc, &mut buf).unwrap();
+    println!("{:?}", String::from_utf8_lossy(&buf));
+    assert_eq!(&buf, &[b'1']);
+
+    let mut buf = [0; 64];
+    let n = _p_read(&mut proc, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"23\r\n");
+}
+
+#[test]
+#[cfg(unix)]
 fn try_read() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -138,6 +270,39 @@ fn try_read() {
 }
 
 #[test]
+#[cfg(windows)]
+fn try_read() {
+    let mut proc =
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    _p_send_line(
+        &mut proc,
+        "while (1) { read-host | set r; if (!$r) { break }}",
+    )
+    .unwrap();
+    thread::sleep(Duration::from_millis(1000));
+    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
+
+    assert_eq!(
+        _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(100));
+
+    let mut buf = vec![0; 128];
+    assert_eq!(_p_try_read(&mut proc, &mut buf).unwrap(), 5);
+    assert_eq!(&buf[..5], b"123\r\n");
+    assert_eq!(
+        _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+
+#[test]
+#[cfg(unix)]
 fn blocking_read_after_non_blocking_try_read() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -170,6 +335,33 @@ fn blocking_read_after_non_blocking_try_read() {
 }
 
 #[test]
+#[cfg(windows)]
+fn blocking_read_after_non_blocking_try_read() {
+    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
+
+    thread::sleep(Duration::from_millis(1000));
+    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(500));
+
+    let mut buf = vec![0; 1024];
+    _p_try_read(&mut proc, &mut buf).unwrap();
+
+    let buf = String::from_utf8_lossy(&buf);
+
+    if !buf.contains("123") {
+        panic!(
+            "Expected to get {:?} in the output, but got {:?}",
+            "123", buf
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn try_read_after_eof() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
@@ -188,6 +380,7 @@ fn try_read_after_eof() {
 }
 
 #[test]
+#[cfg(unix)]
 // #[cfg(not(target_os = "macos"))]
 fn try_read_after_process_exit() {
     let mut command = Command::new("echo");
@@ -212,15 +405,33 @@ fn try_read_after_process_exit() {
 }
 
 #[test]
+#[cfg(windows)]
+fn try_read_after_process_exit() {
+    let mut proc = Session::spawn(ProcAttr::cmd("echo hello cat".to_string())).unwrap();
+
+    assert_eq!(proc.wait(None).unwrap(), 0);
+
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 59);
+    assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
+    assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
+    assert!(_p_is_empty(&mut proc).unwrap());
+
+    assert_eq!(proc.wait(None).unwrap(), 0);
+}
+
+#[test]
+#[cfg(unix)]
 fn try_read_to_end() {
     let mut cmd = Command::new("echo");
     cmd.arg("Hello World");
     let mut proc = Session::spawn(cmd).unwrap();
 
-    let mut buf = vec![0; 128];
+    let mut buf: Vec<u8> = Vec::new();
     loop {
-        match _p_try_read(&mut proc, &mut buf) {
-            Ok(_) => break,
+        let mut b = [0; 128];
+        match _p_try_read(&mut proc, &mut b) {
+            Ok(0) => break,
+            Ok(n) => buf.extend(&b[..n]),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(err) => Err(err).unwrap(),
         }
@@ -230,16 +441,31 @@ fn try_read_to_end() {
 }
 
 #[test]
+#[cfg(windows)]
+fn try_read_to_end() {
+    let mut proc = Session::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+
+    thread::sleep(Duration::from_millis(1000));
+
+    let mut v: Vec<u8> = Vec::new();
+    let mut b = [0; 1];
+    loop {
+        match _p_try_read(&mut proc, &mut b) {
+            Ok(n) => {
+                v.extend(&b[..n]);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(err) => Err(err).unwrap(),
+        }
+    }
+
+    assert!(String::from_utf8_lossy(&v).contains("Hello World"));
+}
+
+#[test]
+#[cfg(windows)]
 fn continues_try_reads() {
-    let mut cmd = Command::new("python3");
-    cmd.args(vec![
-        "-c",
-        "import time;\
-        print('Start Sleep');\
-        time.sleep(0.1);\
-        print('End of Sleep');\
-        yn=input('input');",
-    ]);
+    let cmd = ProcAttr::default().commandline("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"".to_string());
 
     let mut proc = Session::spawn(cmd).unwrap();
 
@@ -259,6 +485,7 @@ fn continues_try_reads() {
 
 #[test]
 #[cfg(not(target_os = "macos"))]
+#[cfg(not(windows))]
 fn automatic_stop_of_interact() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
     let status = _p_interact(&mut p).unwrap();
@@ -281,6 +508,7 @@ fn automatic_stop_of_interact() {
 
 #[test]
 #[cfg(not(target_os = "macos"))]
+#[cfg(not(windows))]
 fn spawn_after_interact() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
     let _ = _p_interact(&mut p).unwrap();
@@ -431,6 +659,7 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     }
 }
 
+#[cfg(unix)]
 fn _p_interact(proc: &mut Session) -> std::io::Result<WaitStatus> {
     #[cfg(not(feature = "async"))]
     {

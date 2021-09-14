@@ -4,20 +4,25 @@ use crate::{
     expect::{Match, Needle},
     stream::Stream,
 };
+use std::{
+    convert::TryInto,
+    io::{self, Write},
+    ops::{Deref, DerefMut},
+    time::{self, Duration},
+};
+
+#[cfg(unix)]
 use nix::{
     libc::STDIN_FILENO,
     sys::termios,
     unistd::{dup, isatty},
 };
+#[cfg(unix)]
 use ptyprocess::{set_raw, PtyProcess, WaitStatus};
-use std::{
-    convert::TryInto,
-    io::{self, Write},
-    ops::{Deref, DerefMut},
-    os::unix::prelude::FromRawFd,
-    process::Command,
-    time::{self, Duration},
-};
+#[cfg(unix)]
+use std::os::unix::prelude::FromRawFd;
+#[cfg(unix)]
+use std::process::Command;
 
 #[cfg(feature = "async")]
 use futures_lite::AsyncWriteExt;
@@ -26,19 +31,36 @@ use futures_lite::AsyncWriteExt;
 /// It controlls process and communication with it.
 #[derive(Debug)]
 pub struct Session {
+    #[cfg(unix)]
     proc: PtyProcess,
+    #[cfg(windows)]
+    proc: conpty::Process,
     stream: Stream,
     expect_timeout: Option<Duration>,
 }
 
 impl Session {
     /// Spawn spawns a command
+    #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
         let stream = Stream::new(ptyproc.get_pty_handle()?);
 
         Ok(Self {
             proc: ptyproc,
+            stream,
+            expect_timeout: Some(Duration::from_millis(10000)),
+        })
+    }
+
+    /// Spawn spawns a command
+    #[cfg(windows)]
+    pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
+        let proc = attr.spawn()?;
+        let stream = Stream::new(proc.input()?, proc.output()?);
+
+        Ok(Self {
+            proc,
             stream,
             expect_timeout: Some(Duration::from_millis(10000)),
         })
@@ -52,15 +74,10 @@ impl Session {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
+        let mut b = [0; 1];
         loop {
-            // We read by byte so there's no need for buffering.
-            // If it would read by block's we would be required to create an internal buffer
-            // and implement std::io::Read and async_io::AsyncRead to use it.
-            // But instead we just reuse it from `ptyprocess` via `Deref`.
-            //
-            // It's worth to use this approch if there's a performance issue.
-            let mut b = [0; 1];
-            match self.stream.try_read(&mut b).await {
+            let result = self.stream.try_read(&mut b).await;
+            match result {
                 Ok(0) => {
                     eof_reached = true;
                 }
@@ -68,20 +85,28 @@ impl Session {
                     buf.extend(&b[..n]);
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(Error::IO(err)),
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buf);
+                    return Err(Error::IO(err));
+                }
             };
 
-            if let Some(m) = expect.check(&buf, eof_reached)? {
-                let buf = buf.drain(..m.end()).collect();
-                return Ok(Found::new(buf, m));
+            let found = expect.check(&buf, eof_reached)?;
+            if !found.is_empty() {
+                let end_index = Found::right_most_index(&found);
+                let involved_bytes = buf.drain(..end_index).collect();
+                self.stream.keep_in_buffer(&buf);
+                return Ok(Found::new(involved_bytes, found));
             }
 
             if eof_reached {
+                self.stream.keep_in_buffer(&buf);
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
+                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -96,15 +121,15 @@ impl Session {
         let start = time::Instant::now();
         let mut eof_reached = false;
         let mut buf = Vec::new();
+        // We read by byte to make things as lazy as possible.
+        //
+        // It's chose is important in using Regex as a Needle.
+        // Imagine we have a `\d+` regex.
+        // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
+        let mut b = [0; 1];
         loop {
-            // We read by byte so there's no need for buffering.
-            // If it would read by block's we would be required to create an internal buffer
-            // and implement std::io::Read and async_io::AsyncRead to use it.
-            // But instead we just reuse it from `ptyprocess` via `Deref`.
-            //
-            // It's worth to use this approch if there's a performance issue.
-            let mut b = [0; 1];
-            match self.stream.try_read(&mut b) {
+            let result = self.stream.try_read(&mut b);
+            match result {
                 Ok(0) => {
                     eof_reached = true;
                 }
@@ -112,20 +137,28 @@ impl Session {
                     buf.extend(&b[..n]);
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(Error::IO(err)),
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buf);
+                    return Err(Error::IO(err));
+                }
             };
 
-            if let Some(m) = expect.check(&buf, eof_reached)? {
-                let buf = buf.drain(..m.end()).collect();
-                return Ok(Found::new(buf, m));
+            let found = expect.check(&buf, eof_reached)?;
+            if !found.is_empty() {
+                let end_index = Found::right_most_index(&found);
+                let involved_bytes = buf.drain(..end_index).collect();
+                self.stream.keep_in_buffer(&buf);
+                return Ok(Found::new(involved_bytes, found));
             }
 
             if eof_reached {
+                self.stream.keep_in_buffer(&buf);
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
+                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -150,20 +183,36 @@ impl Session {
     /// Send a line to child's `STDIN`.
     pub fn send_line<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
         #[cfg(windows)]
-        const LINE_ENDING: &[u8] = b"\r\n";
+        {
+            // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
+            // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefilegather
+
+            const LINE_ENDING: &[u8] = b"\r\n";
+            let _ = self.write_all(s.as_ref().as_bytes())?;
+            let _ = self.write_all(LINE_ENDING)?;
+            self.flush()?;
+            Ok(())
+        }
         #[cfg(not(windows))]
-        const LINE_ENDING: &[u8] = b"\n";
+        {
+            const LINE_ENDING: &[u8] = b"\n";
 
-        let bufs = &mut [
-            std::io::IoSlice::new(s.as_ref().as_bytes()),
-            std::io::IoSlice::new(LINE_ENDING),
-            std::io::IoSlice::new(&[]), // we need to add a empty one as it may be not written.
-        ];
+            let bufs = &mut [
+                std::io::IoSlice::new(s.as_ref().as_bytes()),
+                std::io::IoSlice::new(LINE_ENDING),
+                std::io::IoSlice::new(&[]), // we need to add a empty one as it may be not written.
+            ];
 
-        let _ = self.write_vectored(bufs)?;
-        self.flush()?;
+            // As Write trait says it's not guaranteed that write_vectored will write_all data.
+            // But we are sure that write_vectored writes everyting or nothing because underthehood it uses a File.
+            // But we rely on this fact not explicitely.
+            //
+            // todo: check amount of written bytes ands write the rest if not everyting was written already.
+            let _ = self.write_vectored(bufs)?;
+            self.flush()?;
 
-        Ok(())
+            Ok(())
+        }
     }
 
     /// Send controll character to a child process.
@@ -176,7 +225,10 @@ impl Session {
     /// use expectrl::{Session, ControlCode};
     /// use std::process::Command;
     ///
+    /// #[cfg(unix)]
     /// let mut process = Session::spawn(Command::new("cat")).unwrap();
+    /// #[cfg(windows)]
+    /// let mut process = Session::spawn(expectrl::ProcAttr::cmd("cat".to_string())).unwrap();
     /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
     /// process.send_control('C'); // sends CTRL^C
     /// process.send_control("^C"); // sends CTRL^C
@@ -191,6 +243,7 @@ impl Session {
     /// Send `EOF` indicator to a child process.
     ///
     /// Often `eof` char handled as it would be a CTRL-C.
+    #[cfg(unix)]
     pub fn send_eof(&mut self) -> io::Result<()> {
         self.stream.write_all(&[self.proc.get_eof_char()])
     }
@@ -198,6 +251,7 @@ impl Session {
     /// Send `INTR` indicator to a child process.
     ///
     /// Often `intr` char handled as it would be a CTRL-D.
+    #[cfg(unix)]
     pub fn send_intr(&mut self) -> io::Result<()> {
         self.stream.write_all(&[self.proc.get_intr_char()])
     }
@@ -218,6 +272,7 @@ impl Session {
     ///
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
+    #[cfg(unix)]
     pub fn interact(&mut self) -> io::Result<WaitStatus> {
         // flush buffers
         self.flush()?;
@@ -231,7 +286,7 @@ impl Session {
 
         // tcgetattr issues error if a provided fd is not a tty,
         // so we run set_raw only when it's a tty.
-        //
+
         // todo: simplify.
         if isatty_in {
             let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO).map_err(nix_error_to_io)?;
@@ -258,6 +313,7 @@ impl Session {
         }
     }
 
+    #[cfg(unix)]
     fn _interact(&mut self) -> io::Result<WaitStatus> {
         // it's crusial to make a DUP call here.
         // If we don't actual stdin will be closed,
@@ -321,9 +377,68 @@ impl Session {
             }
         }
     }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    #[cfg(windows)]
+    pub fn interact(&mut self) -> io::Result<()> {
+        // flush buffers
+        self.flush()?;
+
+        let console = conpty::console::Console::current().unwrap();
+        console.set_raw().unwrap();
+
+        let r = self._interact(&console);
+
+        console.reset().unwrap();
+
+        r
+    }
+
+    #[cfg(windows)]
+    fn _interact(&mut self, console: &conpty::console::Console) -> io::Result<()> {
+        let mut buf = [0; 512];
+        loop {
+            if !self.is_alive() {
+                return Ok(());
+            }
+
+            match self.try_read(&mut buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        return Ok(());
+                    }
+
+                    std::io::stdout().write_all(&buf[..n])?;
+                    std::io::stdout().flush()?;
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
+            }
+
+            if console.is_stdin_not_empty()? {
+                use std::io::Read;
+                let n = io::stdin().read(&mut buf)?;
+                if n == 0 {
+                    return Ok(());
+                }
+
+                for i in 0..n {
+                    // Ctrl-]
+                    if buf[i] == ControlCode::GroupSeparator.into() {
+                        // it might be too much to call a `status()` here,
+                        // do it just in case.
+                        return Ok(());
+                    }
+
+                    self.write_all(&buf[i..i + 1])?;
+                }
+            }
+        }
+    }
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", not(windows)))]
 impl Session {
     /// Send text to child's `STDIN`.
     ///
@@ -494,6 +609,7 @@ impl Session {
     }
 }
 
+#[cfg(unix)]
 impl Deref for Session {
     type Target = PtyProcess;
 
@@ -502,6 +618,23 @@ impl Deref for Session {
     }
 }
 
+#[cfg(unix)]
+impl DerefMut for Session {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.proc
+    }
+}
+
+#[cfg(windows)]
+impl Deref for Session {
+    type Target = conpty::Process;
+
+    fn deref(&self) -> &Self::Target {
+        &self.proc
+    }
+}
+
+#[cfg(windows)]
 impl DerefMut for Session {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.proc
@@ -512,23 +645,68 @@ impl DerefMut for Session {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     buf: Vec<u8>,
-    m: Match,
+    matches: Vec<Match>,
 }
 
 impl Found {
     /// New returns an instance of Found.
-    pub fn new(buf: Vec<u8>, m: Match) -> Self {
-        Self { buf, m }
+    fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
+        assert!(!matches.is_empty());
+
+        Self { buf, matches }
     }
 
-    /// Found_match returns a matched bytes.
-    pub fn found_match(&self) -> &[u8] {
-        &self.buf[self.m.start()..self.m.end()]
+    /// First returns a first match.
+    pub fn first(&self) -> &[u8] {
+        let m = &self.matches[0];
+        &self.buf[m.start()..m.end()]
     }
 
-    /// Before_match returns a bytes before match.
-    pub fn before_match(&self) -> &[u8] {
-        &self.buf[..self.m.start()]
+    /// Matches returns a list of matches.
+    pub fn matches(&self) -> Vec<&[u8]> {
+        self.matches
+            .iter()
+            .map(|m| &self.buf[m.start()..m.end()])
+            .collect()
+    }
+
+    /// before returns a bytes before match.
+    pub fn before(&self) -> &[u8] {
+        &self.buf[..self.left_most_index()]
+    }
+
+    fn left_most_index(&self) -> usize {
+        self.matches
+            .iter()
+            .map(|m| m.start())
+            .min()
+            .unwrap_or_default()
+    }
+
+    fn right_most_index(matches: &[Match]) -> usize {
+        matches.iter().map(|m| m.end()).max().unwrap_or_default()
+    }
+}
+
+impl IntoIterator for Found {
+    type Item = Vec<u8>;
+    type IntoIter = std::vec::IntoIter<Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches()
+            .into_iter()
+            .map(|m| m.to_vec())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Found {
+    type Item = &'a [u8];
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches().into_iter()
     }
 }
 
@@ -649,6 +827,7 @@ impl futures_lite::io::AsyncBufRead for Session {
     }
 }
 
+#[cfg(unix)]
 fn nix_error_to_io(err: nix::Error) -> io::Error {
     match err.as_errno() {
         Some(code) => io::Error::from_raw_os_error(code as _),
@@ -656,5 +835,23 @@ fn nix_error_to_io(err: nix::Error) -> io::Error {
             io::ErrorKind::Other,
             "Unexpected error type conversion from nix to io",
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_iterator_on_found() {
+        assert_eq!(
+            Found::new(
+                b"You can use iterator".to_vec(),
+                vec![Match::new(0, 3), Match::new(4, 7)]
+            )
+            .into_iter()
+            .collect::<Vec<Vec<u8>>>(),
+            vec![b"You".to_vec(), b"can".to_vec()]
+        );
     }
 }

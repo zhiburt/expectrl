@@ -1,4 +1,3 @@
-#![cfg(feature = "log")]
 //! A wrapper of Session to log a read/write operations
 
 use crate::{error::Error, session::Session};

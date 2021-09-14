@@ -25,18 +25,22 @@
 mod control_code;
 mod error;
 mod expect;
+#[cfg(feature = "log")]
 mod log;
 pub mod repl;
 mod session;
 mod stream;
 
-use std::process::Command;
-
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
-pub use ptyprocess::{Signal, WaitStatus};
 pub use session::Found;
+
+#[cfg(windows)]
+pub use conpty::ProcAttr;
+
+#[cfg(unix)]
+pub use ptyprocess::{Signal, WaitStatus};
 
 #[cfg(not(feature = "log"))]
 pub type Session = session::Session;
@@ -70,15 +74,22 @@ pub type Session = log::SessionWithLog;
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
-    let args = tokenize_command(cmd.as_ref());
-    if args.is_empty() {
-        return Err(Error::CommandParsing);
+    #[cfg(unix)]
+    {
+        let args = tokenize_command(cmd.as_ref());
+        if args.is_empty() {
+            return Err(Error::CommandParsing);
+        }
+
+        let mut command = std::process::Command::new(&args[0]);
+        command.args(args.iter().skip(1));
+
+        Session::spawn(command)
     }
-
-    let mut command = Command::new(&args[0]);
-    command.args(args.iter().skip(1));
-
-    Session::spawn(command)
+    #[cfg(windows)]
+    {
+        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
+    }
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
@@ -86,6 +97,7 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
 ///
 /// It doesn't cover all edge cases.
 /// So it may not be compatible with real shell arguments parsing.
+#[cfg(unix)]
 fn tokenize_command(program: &str) -> Vec<String> {
     let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
     let mut res = vec![];
@@ -99,6 +111,7 @@ fn tokenize_command(program: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn test_tokenize_command() {
         let res = tokenize_command("prog arg1 arg2");
@@ -114,6 +127,7 @@ mod tests {
         assert_eq!(vec!["prog", r#""my text""#], res);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_spawn_no_command() {
         assert!(matches!(spawn(""), Err(Error::CommandParsing)));
