@@ -53,10 +53,7 @@ mod unix {
 
             /// Try to read in a non-blocking mode.
             ///
-            /// It returns:
-            ///     - Ok(None) if there's nothing to read.
-            ///     - Ok(Some(n)) an amount of bytes were read.
-            ///     - Err(err) an IO error which occured.
+            /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
             pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
                 let fd = self.inner.as_raw_fd();
                 make_non_blocking(fd).map_err(nix_error_to_io)?;
@@ -181,26 +178,12 @@ mod unix {
 
             /// Try to read in a non-blocking mode.
             ///
-            /// It returns:
-            ///     - Ok(None) if there's nothing to read.
-            ///     - Ok(Some(n)) an amount of bytes were read.
-            ///     - Err(err) an IO error which occured.
-            pub async fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
-                // future::poll_once was testing but it doesn't work why?
-                // let a = future::poll_once(self.reader.read(buf)).await;
-                // match a {
-                //     Some(a) => match a {
-                //         Ok(n) => Ok(Some(n)),
-                //         Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
-                //         Err(err) => Err(err),
-                //     },
-                //     None => Ok(None),
-                // }
-
-                // A fd already in a non-blocking mode
-                match self.reader.get_mut().get_mut().as_mut().read(&mut buf) {
-                    Ok(n) => Ok(n),
-                    Err(err) => Err(err),
+            /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
+            pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                use futures_lite::AsyncReadExt;
+                match futures_lite::future::poll_once(self.reader.read(buf)).await {
+                    Some(result) => result,
+                    None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
                 }
             }
 
