@@ -1,4 +1,4 @@
-//! A wrapper of Session to log a read/write operations
+//! A wrapper of [Session] to log a read/write operations
 
 use crate::{error::Error, session::Session};
 use std::{

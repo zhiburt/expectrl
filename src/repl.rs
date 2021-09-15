@@ -1,6 +1,7 @@
-use std::ops::{Deref, DerefMut};
+//! This module contains a list of special Sessions that can be spawned.
 
 use crate::{error::Error, session::Found, Session};
+use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
 use std::process::Command;

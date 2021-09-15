@@ -1,8 +1,17 @@
-//! Expectrl a library for running, controlling and communicating with a process.
+//! # A tool for automating terminal applications on Unix and on Windows.
 //!
-//! It supports `async/await`. To use it you should specify a `async` feature.
+//! Using the library you can:
 //!
-//! # Example
+//! - Spawn process
+//! - Control process
+//! - Interact with process's IO(input/output).
+//!
+//! `expectrl` like original `expect` may shine when you're working with interactive applications.
+//! If your application is not interactive you may not find the library the best choise.
+//!
+//! ## Example
+//!
+//! An example for interacting via ftp.
 //!
 //! ```no_run,ignore
 //! use expectrl::{spawn, Regex, Eof, WaitStatus};
@@ -21,6 +30,17 @@
 //! p.expect(Eof).unwrap();
 //! assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 //! ```
+//!
+//! *The example inspired by the one in [philippkeller/rexpect].*
+//!
+//! [For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
+//!
+//! ## Features
+//!
+//! - It has an `async` support (To enable them you must turn on an `async` feature).
+//! - It supports logging.
+//! - It supports interact function.
+//! - It has a Windows support.
 
 mod control_code;
 mod error;
@@ -28,7 +48,7 @@ mod expect;
 #[cfg(feature = "log")]
 mod log;
 pub mod repl;
-mod session;
+pub mod session;
 mod stream;
 
 pub use control_code::ControlCode;
@@ -43,10 +63,10 @@ pub use conpty::ProcAttr;
 pub use ptyprocess::{Signal, WaitStatus};
 
 #[cfg(not(feature = "log"))]
-pub type Session = session::Session;
+pub use session::Session;
 
 #[cfg(feature = "log")]
-pub type Session = log::SessionWithLog;
+pub use log::SessionWithLog as Session;
 
 /// Spawn spawnes a new session.
 ///
