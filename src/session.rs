@@ -68,7 +68,9 @@ impl Session {
 
     /// Expect waits until a pattern is matched.
     ///
-    /// It return error if expect_timeout is reached.
+    /// If call call return [Ok] it is guaranteed that at least 1 match found.
+    ///
+    /// It return an error if expect_timeout is reached.
     #[cfg(feature = "async")]
     pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let start = time::Instant::now();
@@ -114,6 +116,8 @@ impl Session {
     }
 
     /// Expect waits until a pattern is matched.
+    ///
+    /// If call call return [Ok] it is guaranteed that at least 1 match found.
     ///
     /// It return an error if expect_timeout is reached.
     #[cfg(not(feature = "async"))]
@@ -163,6 +167,90 @@ impl Session {
                 }
             }
         }
+    }
+
+    /// Check checks if a pattern is matched.
+    /// Returns empty found structure if nothing found.
+    ///
+    /// Is a non blocking version of [Session::expect].
+    #[cfg(not(feature = "async"))]
+    pub fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        // try read as much data as possible to buffer
+        let mut buffer = Vec::new();
+        let mut buf = [0; 248];
+        let mut eof = false;
+        loop {
+            match self.try_read(&mut buf) {
+                Ok(0) => {
+                    eof = true;
+                    break;
+                }
+                Ok(n) => buffer.extend_from_slice(&buf[..n]),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buffer);
+                    return Err(Error::IO(err));
+                }
+            }
+        }
+
+        let found = expect.check(&buffer, eof)?;
+        if !found.is_empty() {
+            let end_index = Found::right_most_index(&found);
+            let involved_bytes = buffer.drain(..end_index).collect();
+            // save the rest of the buffer for next reads
+            self.stream.keep_in_buffer(&buffer);
+            return Ok(Found::new(involved_bytes, found));
+        }
+
+        if eof {
+            self.stream.keep_in_buffer(&buffer);
+            return Err(Error::Eof);
+        }
+
+        Ok(Found::new(Vec::new(), Vec::new()))
+    }
+
+    /// Check checks if a pattern is matched.
+    /// Returns empty found structure if nothing found.
+    ///
+    /// Is a non blocking version of [Session::expect].
+    #[cfg(feature = "async")]
+    pub async fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        // try read as much data as possible to buffer
+        let mut buffer = Vec::new();
+        let mut buf = [0; 248];
+        let mut eof = false;
+        loop {
+            match self.try_read(&mut buf).await {
+                Ok(0) => {
+                    eof = true;
+                    break;
+                }
+                Ok(n) => buffer.extend_from_slice(&buf[..n]),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+                Err(err) => {
+                    self.stream.keep_in_buffer(&buffer);
+                    return Err(Error::IO(err));
+                }
+            }
+        }
+
+        let found = expect.check(&buffer, eof)?;
+        if !found.is_empty() {
+            let end_index = Found::right_most_index(&found);
+            let involved_bytes = buffer.drain(..end_index).collect();
+            // save the rest of the buffer for next reads
+            self.stream.keep_in_buffer(&buffer);
+            return Ok(Found::new(involved_bytes, found));
+        }
+
+        if eof {
+            self.stream.keep_in_buffer(&buffer);
+            return Err(Error::Eof);
+        }
+
+        Ok(Found::new(Vec::new(), Vec::new()))
     }
 
     /// Set the pty session's expect timeout.
@@ -642,6 +730,8 @@ impl DerefMut for Session {
 }
 
 /// Found is a represention of a matched pattern.
+///
+/// It might represent an empty match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     buf: Vec<u8>,
@@ -651,9 +741,12 @@ pub struct Found {
 impl Found {
     /// New returns an instance of Found.
     fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
-        assert!(!matches.is_empty());
-
         Self { buf, matches }
+    }
+
+    /// is_empty verifies if any matches were actually found.
+    pub fn is_empty(&self) -> bool {
+        self.matches.is_empty()
     }
 
     /// First returns a first match.

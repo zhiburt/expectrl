@@ -381,7 +381,13 @@ impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
             let n = buf.write(&self.buffer)?;
             self.buffer.drain(..n);
 
-            self.inner.read(&mut buf[n..]).or(Ok(n))
+            self.inner
+                .read(&mut buf[n..])
+                .map(|n1| {
+                    // is it possible that overflow happen?
+                    n + n1
+                })
+                .or(Ok(n))
         }
     }
 }
@@ -421,7 +427,12 @@ impl<R: futures_lite::AsyncRead + std::marker::Unpin> futures_lite::AsyncRead
             let n = buf.write(&self.buffer)?;
             self.buffer.drain(..n);
 
-            std::pin::Pin::new(&mut self.inner).poll_read(cx, &mut buf[n..])
+            let poll = std::pin::Pin::new(&mut self.inner).poll_read(cx, &mut buf[n..]);
+            match poll {
+                std::task::Poll::Ready(Ok(n1)) => std::task::Poll::Ready(Ok(n + n1)),
+                std::task::Poll::Ready(Err(..)) => std::task::Poll::Ready(Ok(n)),
+                std::task::Poll::Pending => std::task::Poll::Pending,
+            }
         }
     }
 }
