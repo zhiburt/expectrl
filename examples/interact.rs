@@ -7,10 +7,15 @@ use expectrl::repl::spawn_bash;
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
-    let mut bash = spawn_bash().expect("Error while spawning bash");
+    use expectrl::{Session, repl, spawn};
+    let mut bash = repl::spawn_powershell().expect("Error while spawning bash");
+
+    // let mut bash = spawn("pwsh").expect("Error while spawning bash");
 
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
+
+    println!("ECHO IS {}", bash.get_echo().unwrap());
 
     let status = bash.interact().expect("Failed to start interact");
 
