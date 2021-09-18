@@ -108,6 +108,49 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
     Ok(powershell)
 }
 
+/// Spawn a powershell session.
+#[cfg(unix)]
+pub fn spawn_powershell() -> Result<ReplSession, Error> {
+    const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
+
+    let mut cmd = Command::new("pwsh");
+    cmd.args(&["-NoProfile", "-NonInteractive", "-NoLogo"]);
+
+    let mut powershell = ReplSession::spawn(cmd, DEFAULT_PROMPT, Some("exit"))?;
+    // powershell.is_echo_on = true;
+
+    // some magic value after which powershell starts working
+    // use std::io::Write;
+    // powershell.write_all("\u{1b}[12;1R".as_bytes()).unwrap();
+
+    // // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
+    // powershell
+    //     .send(format!(
+    //         "function prompt {{ \"{}\"; return \" \" }}",
+    //         DEFAULT_PROMPT
+    //     ))
+    //     .unwrap();
+
+    // powershell.write_all(b"\r\r\r").unwrap();
+
+    // https://stackoverflow.com/questions/69063656/is-it-possible-to-stop-powershell-wrapping-output-in-ansi-sequences/69063912#69063912
+    // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
+    // powershell
+    // let hostname = p.write_all(b"\r").unwrap();
+    //     .send("[System.Environment]::SetEnvironmentVariable(\"TERM\", \"dumb\")")
+    //     .unwrap();
+    // powershell.send("\r").unwrap();
+
+    // powershell
+    //     .send("[System.Environment]::SetEnvironmentVariable(\"TERM\", \"NO_COLOR\")")
+    //     .unwrap();
+    // powershell.send("\r").unwrap();
+
+    // powershell.expect_prompt().unwrap();
+
+    Ok(powershell)
+}
+
 /// A repl session: e.g. bash or the python shell:
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
@@ -217,6 +260,15 @@ impl ReplSession {
     #[cfg(not(feature = "async"))]
     pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
+        if self.is_echo_on {
+            self.expect(line.as_ref())?;
+        }
+        Ok(())
+    }
+
+    #[cfg(not(feature = "async"))]
+    pub fn send<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+        self.session.send(line.as_ref())?;
         if self.is_echo_on {
             self.expect(line.as_ref())?;
         }

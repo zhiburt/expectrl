@@ -163,6 +163,7 @@ impl Session {
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
                     self.stream.keep_in_buffer(&buf);
+                    println!("INTERACT{:?}", String::from_utf8_lossy(&buf));
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -434,6 +435,8 @@ impl Session {
                         return self.status().map_err(nix_error_to_io);
                     }
 
+                    println!("OUTPUT {:?}", String::from_utf8_lossy(&buf[..n]));
+
                     std::io::stdout().write_all(&buf[..n])?;
                     std::io::stdout().flush()?;
                 }
@@ -448,6 +451,8 @@ impl Session {
                         // do it just in case.
                         return self.status().map_err(nix_error_to_io);
                     }
+
+                    println!("INPUT {:?}", String::from_utf8_lossy(&buf[..n]));
 
                     for i in 0..n {
                         // Ctrl-]
