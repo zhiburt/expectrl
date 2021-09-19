@@ -8,6 +8,7 @@ use crate::{
 };
 use std::{
     convert::TryInto,
+    fs::File,
     io::{self, Write},
     ops::{Deref, DerefMut},
     time::{self, Duration},
@@ -363,48 +364,20 @@ impl Session {
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
     #[cfg(unix)]
-    pub fn interact(&mut self) -> io::Result<WaitStatus> {
+    pub fn interact(&mut self) -> Result<WaitStatus, Error> {
         // flush buffers
         self.flush()?;
 
-        let origin_pty_echo = self.get_echo().map_err(nix_error_to_io)?;
-        self.set_echo(true).map_err(nix_error_to_io)?;
+        let origin_pty_echo = self.get_echo()?;
+        // tcgetattr issues error if a provided fd is not a tty,
+        // but we can work with such input as it may be redirected.
+        let origin_stdin_flags =
+            termios::tcgetattr(STDIN_FILENO).unwrap_or_else(|_| default_termios());
 
         // verify: possible controlling fd can be stdout and stderr as well?
         // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-        let isatty_in = isatty(STDIN_FILENO).map_err(nix_error_to_io)?;
+        let isatty_terminal = isatty(STDIN_FILENO)?;
 
-        // tcgetattr issues error if a provided fd is not a tty,
-        // so we run set_raw only when it's a tty.
-
-        // todo: simplify.
-        if isatty_in {
-            let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO).map_err(nix_error_to_io)?;
-            set_raw(STDIN_FILENO).map_err(nix_error_to_io)?;
-
-            let result = self._interact();
-
-            termios::tcsetattr(
-                STDIN_FILENO,
-                termios::SetArg::TCSAFLUSH,
-                &origin_stdin_flags,
-            )
-            .map_err(nix_error_to_io)?;
-
-            self.set_echo(origin_pty_echo).map_err(nix_error_to_io)?;
-
-            result
-        } else {
-            let result = self._interact();
-
-            self.set_echo(origin_pty_echo).map_err(nix_error_to_io)?;
-
-            result
-        }
-    }
-
-    #[cfg(unix)]
-    fn _interact(&mut self) -> io::Result<WaitStatus> {
         // it's crusial to make a DUP call here.
         // If we don't actual stdin will be closed,
         // And any interaction with it may cause errors.
@@ -413,15 +386,39 @@ impl Session {
         // Because for some reason it actually doesn't make the same things as DUP does,
         // eventhough a research showed that it should.
         // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-        let stdin_copy_fd = dup(STDIN_FILENO).map_err(nix_error_to_io)?;
+        let stdin_copy_fd = dup(STDIN_FILENO)?;
         let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
+
+        if isatty_terminal {
+            set_raw(STDIN_FILENO)?;
+        }
+
+        self.set_echo(true)?;
+
+        let result = self._interact(stdin);
+
+        if isatty_terminal {
+            termios::tcsetattr(
+                STDIN_FILENO,
+                termios::SetArg::TCSAFLUSH,
+                &origin_stdin_flags,
+            )?;
+        }
+
+        self.set_echo(origin_pty_echo)?;
+
+        result
+    }
+
+    #[cfg(unix)]
+    fn _interact(&mut self, stdin: File) -> Result<WaitStatus, Error> {
         let mut stdin_stream = Stream::new(stdin);
 
         let mut buf = [0; 512];
         loop {
-            let status = self.status();
-            if !matches!(status, Ok(WaitStatus::StillAlive)) {
-                return status.map_err(nix_error_to_io);
+            let status = self.status()?;
+            if !matches!(status, WaitStatus::StillAlive) {
+                return Ok(status);
             }
 
             // it prints STDIN input as well,
@@ -429,41 +426,32 @@ impl Session {
             //
             // the setting must be set before calling the function.
             match self.try_read(&mut buf) {
+                Ok(0) => return Ok(status),
                 Ok(n) => {
-                    if n == 0 {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return self.status().map_err(nix_error_to_io);
-                    }
-
                     std::io::stdout().write_all(&buf[..n])?;
                     std::io::stdout().flush()?;
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
+                Err(err) => return Err(err.into()),
             }
 
             match stdin_stream.try_read(&mut buf) {
+                Ok(0) => return Ok(status),
                 Ok(n) => {
-                    if n == 0 {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return self.status().map_err(nix_error_to_io);
-                    }
-
-                    for i in 0..n {
-                        // Ctrl-]
-                        if buf[i] == ControlCode::GroupSeparator.into() {
-                            // it might be too much to call a `status()` here,
-                            // do it just in case.
-                            return self.status().map_err(nix_error_to_io);
+                    const escape_character: u8 = ControlCode::GroupSeparator.into(); // Ctrl-]
+                    let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
+                    match escape_char_position {
+                        Some(pos) => {
+                            self.write_all(&buf[..pos])?;
+                            return Ok(status);
                         }
-
-                        self.write_all(&buf[i..i + 1])?;
+                        None => {
+                            self.write_all(&buf[..n])?;
+                        }
                     }
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
+                Err(err) => return Err(err.into()),
             }
         }
     }
@@ -922,15 +910,17 @@ impl futures_lite::io::AsyncBufRead for Session {
     }
 }
 
-#[cfg(unix)]
-fn nix_error_to_io(err: nix::Error) -> io::Error {
-    match err.as_errno() {
-        Some(code) => io::Error::from_raw_os_error(code as _),
-        None => io::Error::new(
-            io::ErrorKind::Other,
-            "Unexpected error type conversion from nix to io",
-        ),
-    }
+fn default_termios() -> nix::sys::termios::Termios {
+    nix::sys::termios::Termios::from(nix::libc::termios {
+        c_cc: [0; 32],
+        c_cflag: 0,
+        c_iflag: 0,
+        c_ispeed: 0,
+        c_lflag: 0,
+        c_line: 0,
+        c_oflag: 0,
+        c_ospeed: 0,
+    })
 }
 
 #[cfg(test)]
