@@ -183,3 +183,54 @@ fn check_eof_timeout() {
         }
     })
 }
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn check_macro() {
+    let mut session = spawn("cat").unwrap();
+    session.send_line("Hello World").unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+
+    expectrl::check!(
+        session,
+        world = "\r" => {
+            assert_eq!(world.first(), b"\r");
+        },
+        _ = "Hello World" => {
+            panic!("Unexpected result");
+        },
+        default => {
+            panic!("Unexpected result");
+        },
+    )
+    .unwrap();
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+#[test]
+fn check_macro() {
+    let mut session = spawn("cat").unwrap();
+    futures_lite::future::block_on(session.send_line("Hello World")).unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+
+    futures_lite::future::block_on(async {
+        expectrl::check!(
+            session,
+            world = "\r" => {
+                assert_eq!(world.first(), b"\r");
+            },
+            _ = "Hello World" => {
+                panic!("Unexpected result");
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .await
+        .unwrap();
+    });
+}
