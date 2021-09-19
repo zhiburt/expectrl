@@ -660,7 +660,7 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 }
 
 #[cfg(unix)]
-fn _p_interact(proc: &mut Session) -> std::io::Result<WaitStatus> {
+fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.interact()

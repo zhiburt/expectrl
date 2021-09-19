@@ -438,7 +438,7 @@ impl Session {
             match stdin_stream.try_read(&mut buf) {
                 Ok(0) => return Ok(status),
                 Ok(n) => {
-                    const escape_character: u8 = ControlCode::GroupSeparator.into(); // Ctrl-]
+                    let escape_character: u8 = ControlCode::GroupSeparator.into(); // Ctrl-]
                     let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
                     match escape_char_position {
                         Some(pos) => {
