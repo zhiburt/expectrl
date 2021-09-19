@@ -3,6 +3,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::io;
 
+/// An main error type used in [crate].
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),

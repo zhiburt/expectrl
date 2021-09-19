@@ -1,3 +1,5 @@
+//! Module contains a Session structure.
+
 use crate::{
     control_code::ControlCode,
     error::Error,

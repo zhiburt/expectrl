@@ -43,7 +43,7 @@
 //! - It has a Windows support.
 
 #[cfg(unix)]
-pub mod check_macros;
+mod check_macros;
 mod control_code;
 mod error;
 mod expect;

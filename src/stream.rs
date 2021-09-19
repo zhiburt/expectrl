@@ -1,3 +1,8 @@
+//! Module responsible for IO operations of [crate::Session].
+//! 
+//! Module contains [Stream] structure async and sync flow and different one for windows.
+//! It also contains a [ReaderWithBuffer] for controlling buffering.
+
 /// Stream represent a IO stream.
 #[cfg(not(feature = "async"))]
 #[cfg(unix)]
