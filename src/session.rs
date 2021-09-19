@@ -533,7 +533,7 @@ impl Found {
             .unwrap_or_default()
     }
 
-    fn right_most_index(matches: &[Match]) -> usize {
+    pub(crate) fn right_most_index(matches: &[Match]) -> usize {
         matches.iter().map(|m| m.end()).max().unwrap_or_default()
     }
 }

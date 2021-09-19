@@ -1,5 +1,6 @@
-use crate::{ControlCode, Error, Session};
+use crate::{ControlCode, Error, Found, Needle, Session};
 use std::{
+    collections::HashMap,
     fs::File,
     io::{self, Write},
 };
@@ -25,12 +26,21 @@ use std::io::Read;
 
 pub struct InteractOptions {
     escape_character: u8,
+    handlers: HashMap<Action, ActionFn>,
+}
+
+type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Action {
+    Input(String),
 }
 
 impl Default for InteractOptions {
     fn default() -> Self {
         Self {
             escape_character: ControlCode::GroupSeparator.into(), // Ctrl-]
+            handlers: HashMap::new(),
         }
     }
 }
@@ -41,24 +51,49 @@ impl InteractOptions {
         self
     }
 
+    pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
+    where
+        F: FnMut(&mut Session) -> Result<(), Error> + 'static,
+    {
+        self.handlers
+            .insert(Action::Input(input.into()), Box::new(f));
+        self
+    }
+
     #[cfg(all(unix, not(feature = "async")))]
     pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
-        interact(session, self.escape_character)
+        interact(session, self)
     }
 
     #[cfg(all(unix, feature = "async"))]
     pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
-        interact(session, self.escape_character).await
+        interact(session, self).await
     }
 
     #[cfg(windows)]
     pub fn interact(self, session: &mut Session) -> Result<(), Error> {
-        interact(session, self.escape_character)
+        interact(session, self)
+    }
+
+    fn check_input(&mut self, session: &mut Session, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        for (action, callback) in self.handlers.iter_mut() {
+            let Action::Input(pattern) = action;
+
+            // reuse Needle code
+            let m = Needle::check(&pattern, bytes, false)?;
+            if !m.is_empty() {
+                let last_index_which_involved = Found::right_most_index(&m);
+                bytes.drain(..last_index_which_involved);
+                return (callback)(session);
+            }
+        }
+
+        Ok(())
     }
 }
 
 #[cfg(all(unix, not(feature = "async")))]
-fn interact(session: &mut Session, escape_character: u8) -> Result<WaitStatus, Error> {
+fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatus, Error> {
     // flush buffers
     session.flush()?;
 
@@ -88,7 +123,7 @@ fn interact(session: &mut Session, escape_character: u8) -> Result<WaitStatus, E
 
     session.set_echo(true)?;
 
-    let result = _interact(session, stdin, escape_character);
+    let result = _interact(session, stdin, options);
 
     if isatty_terminal {
         // it's suppose to be always OK.
@@ -111,9 +146,16 @@ fn interact(session: &mut Session, escape_character: u8) -> Result<WaitStatus, E
 fn _interact(
     session: &mut Session,
     stdin: File,
-    escape_character: u8,
+    mut options: InteractOptions,
 ) -> Result<WaitStatus, Error> {
     let mut stdin_stream = Stream::new(stdin);
+
+    let options_has_input_checks = !options.handlers.is_empty();
+    let mut buffer_for_check = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
 
     let mut buf = [0; 512];
     loop {
@@ -139,7 +181,8 @@ fn _interact(
         match stdin_stream.try_read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
+                let escape_char_position =
+                    buf[..n].iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buf[..pos])?;
@@ -148,6 +191,15 @@ fn _interact(
                     None => {
                         session.write_all(&buf[..n])?;
                     }
+                }
+
+                // check callbacks
+                if options_has_input_checks {
+                    buffer_for_check
+                        .as_mut()
+                        .unwrap()
+                        .extend_from_slice(&buf[..n]);
+                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -158,7 +210,7 @@ fn _interact(
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact(session: &mut Session, escape_character: u8) -> Result<WaitStatus, Error> {
+async fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatus, Error> {
     // flush buffers
     session.flush().await?;
 
@@ -188,7 +240,7 @@ async fn interact(session: &mut Session, escape_character: u8) -> Result<WaitSta
 
     session.set_echo(true)?;
 
-    let result = _interact(session, stdin, escape_character).await;
+    let result = _interact(session, stdin, options).await;
 
     if isatty_terminal {
         // it's suppose to be always OK.
@@ -211,9 +263,16 @@ async fn interact(session: &mut Session, escape_character: u8) -> Result<WaitSta
 async fn _interact(
     session: &mut Session,
     stdin: File,
-    escape_character: u8,
+    mut options: InteractOptions,
 ) -> Result<WaitStatus, Error> {
     let mut stdin_stream = Stream::new(stdin);
+
+    let options_has_input_checks = !options.handlers.is_empty();
+    let mut buffer_for_check = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
 
     let mut buf = [0; 512];
     loop {
@@ -239,7 +298,8 @@ async fn _interact(
         match stdin_stream.try_read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
+                let escape_char_position =
+                    buf[..n].iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buf[..pos]).await?;
@@ -249,6 +309,15 @@ async fn _interact(
                         session.write_all(&buf[..n]).await?;
                     }
                 }
+
+                // check callbacks
+                if options_has_input_checks {
+                    buffer_for_check
+                        .as_mut()
+                        .unwrap()
+                        .extend_from_slice(&buf[..n]);
+                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
+                }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
@@ -257,14 +326,14 @@ async fn _interact(
 }
 
 #[cfg(windows)]
-fn interact(session: &mut Session, escape_character: u8) -> Result<(), Error> {
+fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error> {
     // flush buffers
     self.flush()?;
 
     let console = conpty::console::Console::current().unwrap();
     console.set_raw().unwrap();
 
-    let r = self._interact(&console, escape_character);
+    let r = self._interact(&console, options);
 
     console.reset().unwrap();
 
@@ -275,7 +344,7 @@ fn interact(session: &mut Session, escape_character: u8) -> Result<(), Error> {
 fn _interact(
     &mut self,
     console: &conpty::console::Console,
-    escape_character: u8,
+    options: InteractOptions,
 ) -> Result<(), Error> {
     let mut buf = [0; 512];
     loop {
@@ -302,7 +371,10 @@ fn _interact(
                 return Ok(());
             }
 
-            let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
+            // first check callbacks
+            options.check_input(session, &buf[..n])?;
+
+            let escape_char_position = buf[..n].iter().position(|c| *c == options.escape_character);
             match escape_char_position {
                 Some(pos) => {
                     session.write_all(&buf[..pos])?;
