@@ -47,6 +47,7 @@ mod check_macros;
 mod control_code;
 mod error;
 mod expect;
+pub mod interact;
 #[cfg(feature = "log")]
 mod log;
 pub mod repl;

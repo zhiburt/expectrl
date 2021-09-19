@@ -8,26 +8,20 @@ use crate::{
 };
 use std::{
     convert::TryInto,
-    fs::File,
-    io::{self, Write},
+    io,
     ops::{Deref, DerefMut},
     time::{self, Duration},
 };
 
 #[cfg(unix)]
-use nix::{
-    libc::STDIN_FILENO,
-    sys::termios,
-    unistd::{dup, isatty},
-};
-#[cfg(unix)]
-use ptyprocess::{set_raw, PtyProcess, WaitStatus};
-#[cfg(unix)]
-use std::os::unix::prelude::FromRawFd;
+use ptyprocess::{PtyProcess, WaitStatus};
 #[cfg(unix)]
 use std::process::Command;
 
-#[cfg(feature = "async")]
+#[cfg(all(unix, not(feature = "async")))]
+use io::Write;
+
+#[cfg(all(unix, feature = "async"))]
 use futures_lite::AsyncWriteExt;
 
 /// Session represents a process and its streams.
@@ -365,154 +359,14 @@ impl Session {
     /// it echos the real `stdin` to the child `stdin`.
     #[cfg(unix)]
     pub fn interact(&mut self) -> Result<WaitStatus, Error> {
-        // flush buffers
-        self.flush()?;
-
-        let origin_pty_echo = self.get_echo()?;
-        // tcgetattr issues error if a provided fd is not a tty,
-        // but we can work with such input as it may be redirected.
-        let origin_stdin_flags =
-            termios::tcgetattr(STDIN_FILENO).unwrap_or_else(|_| default_termios());
-
-        // verify: possible controlling fd can be stdout and stderr as well?
-        // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-        let isatty_terminal = isatty(STDIN_FILENO)?;
-
-        // it's crusial to make a DUP call here.
-        // If we don't actual stdin will be closed,
-        // And any interaction with it may cause errors.
-        //
-        // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
-        // Because for some reason it actually doesn't make the same things as DUP does,
-        // eventhough a research showed that it should.
-        // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-        let stdin_copy_fd = dup(STDIN_FILENO)?;
-        let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-
-        if isatty_terminal {
-            set_raw(STDIN_FILENO)?;
-        }
-
-        self.set_echo(true)?;
-
-        let result = self._interact(stdin);
-
-        if isatty_terminal {
-            termios::tcsetattr(
-                STDIN_FILENO,
-                termios::SetArg::TCSAFLUSH,
-                &origin_stdin_flags,
-            )?;
-        }
-
-        self.set_echo(origin_pty_echo)?;
-
-        result
-    }
-
-    #[cfg(unix)]
-    fn _interact(&mut self, stdin: File) -> Result<WaitStatus, Error> {
-        let mut stdin_stream = Stream::new(stdin);
-
-        let mut buf = [0; 512];
-        loop {
-            let status = self.status()?;
-            if !matches!(status, WaitStatus::StillAlive) {
-                return Ok(status);
-            }
-
-            // it prints STDIN input as well,
-            // by echoing it.
-            //
-            // the setting must be set before calling the function.
-            match self.try_read(&mut buf) {
-                Ok(0) => return Ok(status),
-                Ok(n) => {
-                    std::io::stdout().write_all(&buf[..n])?;
-                    std::io::stdout().flush()?;
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err.into()),
-            }
-
-            match stdin_stream.try_read(&mut buf) {
-                Ok(0) => return Ok(status),
-                Ok(n) => {
-                    let escape_character: u8 = ControlCode::GroupSeparator.into(); // Ctrl-]
-                    let escape_char_position = buf[..n].iter().position(|c| *c == escape_character);
-                    match escape_char_position {
-                        Some(pos) => {
-                            self.write_all(&buf[..pos])?;
-                            return Ok(status);
-                        }
-                        None => {
-                            self.write_all(&buf[..n])?;
-                        }
-                    }
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err.into()),
-            }
-        }
+        crate::interact::InteractOptions::default().interact(self)
     }
 
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
     #[cfg(windows)]
-    pub fn interact(&mut self) -> io::Result<()> {
-        // flush buffers
-        self.flush()?;
-
-        let console = conpty::console::Console::current().unwrap();
-        console.set_raw().unwrap();
-
-        let r = self._interact(&console);
-
-        console.reset().unwrap();
-
-        r
-    }
-
-    #[cfg(windows)]
-    fn _interact(&mut self, console: &conpty::console::Console) -> io::Result<()> {
-        let mut buf = [0; 512];
-        loop {
-            if !self.is_alive() {
-                return Ok(());
-            }
-
-            match self.try_read(&mut buf) {
-                Ok(n) => {
-                    if n == 0 {
-                        return Ok(());
-                    }
-
-                    std::io::stdout().write_all(&buf[..n])?;
-                    std::io::stdout().flush()?;
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
-            }
-
-            if console.is_stdin_not_empty()? {
-                use std::io::Read;
-                let n = io::stdin().read(&mut buf)?;
-                if n == 0 {
-                    return Ok(());
-                }
-
-                for i in 0..n {
-                    // Ctrl-]
-                    if buf[i] == ControlCode::GroupSeparator.into() {
-                        // it might be too much to call a `status()` here,
-                        // do it just in case.
-                        return Ok(());
-                    }
-
-                    self.write_all(&buf[i..i + 1])?;
-                }
-            }
-        }
+    pub fn interact(&mut self) -> Result<(), Error> {
+        crate::interact::InteractOptions::default().interact(self)
     }
 }
 
@@ -593,97 +447,10 @@ impl Session {
     ///
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
-    pub async fn interact(&mut self) -> io::Result<WaitStatus> {
-        // flush buffers
-        self.flush().await?;
-
-        let origin_pty_echo = self.get_echo().map_err(nix_error_to_io)?;
-        self.set_echo(true).map_err(nix_error_to_io)?;
-
-        // verify: possible controlling fd can be stdout and stderr as well?
-        // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-        let isatty_in = isatty(STDIN_FILENO).map_err(nix_error_to_io)?;
-
-        // tcgetattr issues error if a provided fd is not a tty,
-        // so we run set_raw only when it's a tty.
-        //
-        // todo: simplify.
-        if isatty_in {
-            let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO).map_err(nix_error_to_io)?;
-            set_raw(STDIN_FILENO).map_err(nix_error_to_io)?;
-
-            let result = self._interact().await;
-
-            termios::tcsetattr(
-                STDIN_FILENO,
-                termios::SetArg::TCSAFLUSH,
-                &origin_stdin_flags,
-            )
-            .map_err(nix_error_to_io)?;
-
-            self.set_echo(origin_pty_echo).map_err(nix_error_to_io)?;
-
-            result
-        } else {
-            let result = self._interact().await;
-
-            self.set_echo(origin_pty_echo).map_err(nix_error_to_io)?;
-
-            result
-        }
-    }
-
-    async fn _interact(&mut self) -> io::Result<WaitStatus> {
-        // it's crusial to make a DUP call here.
-        // If we don't actual stdin will be closed,
-        // And any interaction with it may cause errors.
-        //
-        // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
-        // Because for some reason it actually doesn't make the same things as DUP does,
-        // eventhough a research showed that it should.
-        // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-        let stdin_copy_fd = dup(0).map_err(nix_error_to_io)?;
-
-        let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-        let mut stdin_stream = Stream::new(stdin);
-
-        let mut buf = [0; 512];
-        loop {
-            let status = self.status();
-            if !matches!(status, Ok(WaitStatus::StillAlive)) {
-                return status.map_err(nix_error_to_io);
-            }
-
-            // it prints STDIN input as well,
-            // by echoing it.
-            //
-            // the setting must be set before calling the function.
-            match self.try_read(&mut buf).await {
-                Ok(n) => {
-                    std::io::stdout().write_all(&buf[..n])?;
-                    std::io::stdout().flush()?;
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
-            }
-
-            match stdin_stream.try_read(&mut buf).await {
-                Ok(n) => {
-                    for i in 0..n {
-                        // Ctrl-]
-                        if buf[i] == ControlCode::GroupSeparator.into() {
-                            // it might be too much to call a `status()` here,
-                            // do it just in case.
-                            return self.status().map_err(nix_error_to_io);
-                        }
-
-                        self.write_all(&buf[i..i + 1]).await?;
-                    }
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
-            }
-        }
+    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
+        crate::interact::InteractOptions::default()
+            .interact(self)
+            .await
     }
 }
 
@@ -908,19 +675,6 @@ impl futures_lite::io::AsyncBufRead for Session {
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
         std::pin::Pin::new(&mut self.stream).consume(amt);
     }
-}
-
-fn default_termios() -> nix::sys::termios::Termios {
-    nix::sys::termios::Termios::from(nix::libc::termios {
-        c_cc: [0; 32],
-        c_cflag: 0,
-        c_iflag: 0,
-        c_ispeed: 0,
-        c_lflag: 0,
-        c_line: 0,
-        c_oflag: 0,
-        c_ospeed: 0,
-    })
 }
 
 #[cfg(test)]

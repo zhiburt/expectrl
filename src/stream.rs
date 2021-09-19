@@ -154,7 +154,7 @@ mod unix {
         use ptyprocess::stream::Stream;
         use std::{
             fs::File,
-            io::{self, Read},
+            io,
             pin::Pin,
             task::{Context, Poll},
         };
@@ -349,15 +349,7 @@ struct ReaderWithBuffer<R> {
     buffer: Vec<u8>,
 }
 
-#[cfg(not(feature = "async"))]
-impl<R: std::io::Read> ReaderWithBuffer<R> {
-    fn new(reader: R) -> Self {
-        Self {
-            inner: reader,
-            buffer: Vec::new(),
-        }
-    }
-
+impl<R> ReaderWithBuffer<R> {
     fn keep_in_buffer(&mut self, v: &[u8]) {
         self.buffer.extend(v);
     }
@@ -365,6 +357,16 @@ impl<R: std::io::Read> ReaderWithBuffer<R> {
     #[allow(dead_code)]
     fn get_mut(&mut self) -> &mut R {
         &mut self.inner
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<R: std::io::Read> ReaderWithBuffer<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            inner: reader,
+            buffer: Vec::new(),
+        }
     }
 }
 
@@ -404,14 +406,6 @@ impl<R: futures_lite::AsyncRead> ReaderWithBuffer<R> {
             inner: reader,
             buffer: Vec::new(),
         }
-    }
-
-    fn keep_in_buffer(&mut self, v: &[u8]) {
-        self.buffer.extend(v);
-    }
-
-    fn get_mut(&mut self) -> &mut R {
-        &mut self.inner
     }
 }
 
