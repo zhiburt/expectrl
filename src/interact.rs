@@ -1,7 +1,6 @@
 use crate::{ControlCode, Error, Found, Needle, Session};
 use std::{
     collections::HashMap,
-    fs::File,
     io::{self, Write},
 };
 
@@ -15,6 +14,8 @@ use nix::{
 };
 #[cfg(unix)]
 use ptyprocess::set_raw;
+#[cfg(unix)]
+use std::fs::File;
 #[cfg(unix)]
 use std::os::unix::prelude::FromRawFd;
 
@@ -328,12 +329,12 @@ async fn _interact(
 #[cfg(windows)]
 fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error> {
     // flush buffers
-    self.flush()?;
+    session.flush()?;
 
     let console = conpty::console::Console::current().unwrap();
     console.set_raw().unwrap();
 
-    let r = self._interact(&console, options);
+    let r = session._interact(session, &console, options);
 
     console.reset().unwrap();
 
@@ -342,17 +343,17 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error
 
 #[cfg(windows)]
 fn _interact(
-    &mut self,
+    session: &mut Session,
     console: &conpty::console::Console,
     options: InteractOptions,
 ) -> Result<(), Error> {
     let mut buf = [0; 512];
     loop {
-        if !self.is_alive() {
+        if !session.is_alive() {
             return Ok(());
         }
 
-        match self.try_read(&mut buf) {
+        match session.try_read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
                 io::stdout().write_all(&buf[..n])?;
