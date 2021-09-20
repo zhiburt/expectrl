@@ -29,7 +29,11 @@ pub struct InteractOptions {
     handlers: HashMap<Action, ActionFn>,
 }
 
+#[cfg(not(feature = "async"))]
 type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
+
+#[cfg(feature = "async")]
+type ActionFn = Box<dyn FnMut(&mut Session) -> futures_lite::future::Boxed<Result<(), Error>>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Action {
@@ -51,12 +55,36 @@ impl InteractOptions {
         self
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
         F: FnMut(&mut Session) -> Result<(), Error> + 'static,
     {
         self.handlers
             .insert(Action::Input(input.into()), Box::new(f));
+        self
+    }
+
+    /// We can't use a &mut Session argument because of lifetimes.
+    /// We could provide a [std::sync::Arc]<[std::sync::Mutex]<&mut [Session]>> parameter but [std::sync::Mutex] isn't recomeneded to use with async.
+    /// We could use some library for Mutex like `parking_lot` but in such case the client would be piled down to the chose.
+    /// So there was decided to not provide any arguments to closure.
+    /// You can bypass this by wrapping [Session] on your own and use it in closure scope.
+    #[cfg(feature = "async")]
+    pub fn on_input<F, FF>(mut self, input: impl Into<String>, f: F) -> Self
+    where
+        F: FnMut() -> FF + Clone + Send + 'static,
+        FF: std::future::Future<Output = Result<(), Error>> + Send,
+    {
+        use futures_lite::FutureExt;
+
+        self.handlers.insert(
+            Action::Input(input.into()),
+            Box::new(move |_| {
+                let mut f = f.clone();
+                async move { f().await }.boxed()
+            }),
+        );
         self
     }
 
@@ -75,6 +103,7 @@ impl InteractOptions {
         interact(session, self)
     }
 
+    #[cfg(not(feature = "async"))]
     fn check_input(&mut self, session: &mut Session, bytes: &mut Vec<u8>) -> Result<(), Error> {
         for (action, callback) in self.handlers.iter_mut() {
             let Action::Input(pattern) = action;
@@ -85,6 +114,30 @@ impl InteractOptions {
                 let last_index_which_involved = Found::right_most_index(&m);
                 bytes.drain(..last_index_which_involved);
                 return (callback)(session);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    async fn check_input(
+        &mut self,
+        session: &mut Session,
+        bytes: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        for (action, callback) in self.handlers.iter_mut() {
+            let Action::Input(pattern) = action;
+
+            // reuse Needle code
+            let m = Needle::check(&pattern, bytes, false)?;
+            if !m.is_empty() {
+                let last_index_which_involved = Found::right_most_index(&m);
+                bytes.drain(..last_index_which_involved);
+
+                (callback)(session).await?;
+
+                return Ok(());
             }
         }
 
@@ -316,7 +369,9 @@ async fn _interact(
                         .as_mut()
                         .unwrap()
                         .extend_from_slice(&buf[..n]);
-                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
+                    options
+                        .check_input(session, buffer_for_check.as_mut().unwrap())
+                        .await?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}

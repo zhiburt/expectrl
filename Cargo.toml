@@ -13,6 +13,7 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
+default = ["async"]
 log = []
 async = ["futures-lite", "async-io"]
 
@@ -27,3 +28,6 @@ conpty = "0.2.1"
 [target.'cfg(unix)'.dependencies]
 ptyprocess = { git = "https://github.com/zhiburt/ptyprocess" }
 nix = "0.21.0"
+
+[dev-dependencies]
+async-lock = "2.4.0"
