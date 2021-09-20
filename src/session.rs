@@ -430,28 +430,6 @@ impl Session {
     pub async fn send_intr(&mut self) -> io::Result<()> {
         self.stream.write_all(&[self.proc.get_intr_char()]).await
     }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-        crate::interact::InteractOptions::default()
-            .interact(self)
-            .await
-    }
 }
 
 #[cfg(unix)]
