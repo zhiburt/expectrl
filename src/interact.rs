@@ -331,12 +331,12 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error
     // flush buffers
     session.flush()?;
 
-    let console = conpty::console::Console::current().unwrap();
-    console.set_raw().unwrap();
+    let console = conpty::console::Console::current()?;
+    console.set_raw()?;
 
-    let r = session._interact(session, &console, options);
+    let r = _interact(session, &console, options);
 
-    console.reset().unwrap();
+    console.reset()?;
 
     r
 }
@@ -360,7 +360,7 @@ fn _interact(
                 io::stdout().flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         }
 
         // we can't easily read in non-blocking manner,
