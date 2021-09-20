@@ -18,7 +18,7 @@ use ptyprocess::{PtyProcess, WaitStatus};
 #[cfg(unix)]
 use std::process::Command;
 
-#[cfg(all(unix, not(feature = "async")))]
+#[cfg(not(feature = "async"))]
 use io::Write;
 
 #[cfg(all(unix, feature = "async"))]
