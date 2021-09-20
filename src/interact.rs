@@ -1,4 +1,4 @@
-use crate::{ControlCode, Error, Found, Needle, Session};
+use crate::{session::Session, ControlCode, Error, Found, Needle};
 use std::{
     collections::HashMap,
     io::{self, Write},
