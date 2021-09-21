@@ -126,10 +126,22 @@ impl Needle for String {
     }
 }
 
+impl Needle for u8 {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        (&[*self][..]).check(buf, eof)
+    }
+}
+
+impl Needle for char {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        char::to_string(self).check(buf, eof)
+    }
+}
+
 /// Any matches first Needle which returns a match.
 ///
 /// ```no_run,ignore
-/// Any("we", "are", "here"])
+/// Any(["we", "are", "here"])
 /// ```
 ///
 /// To be able to use a different type of needles you can call [Any::boxed].
@@ -278,6 +290,25 @@ mod tests {
             (&[]).check(b"qwerty", false).unwrap(),
             vec![Match::new(0, 0)]
         );
+    }
+
+    #[test]
+    fn test_byte() {
+        assert_eq!(
+            (b'3').check(b"1234", false).unwrap(),
+            vec![Match::new(2, 3)]
+        );
+        assert_eq!((b'3').check(b"1234", true).unwrap(), vec![Match::new(2, 3)]);
+    }
+
+    #[test]
+    fn test_char() {
+        for eof in [false, true] {
+            assert_eq!(
+                ('😘').check("😁😄😅😓😠😘😌".as_bytes(), eof).unwrap(),
+                vec![Match::new(20, 24)]
+            );
+        }
     }
 
     #[test]
