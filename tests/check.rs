@@ -1,4 +1,4 @@
-use expectrl::{spawn, Eof, NBytes, Regex};
+use expectrl::{spawn, Any, Eof, NBytes, Regex};
 use std::thread;
 use std::time::Duration;
 
@@ -275,6 +275,149 @@ fn check_macro_eof() {
                 panic!("Unexpected result");
             },
         )
+        .await
         .unwrap();
+    });
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn check_macro_doest_consume_missmatch() {
+    let mut session = spawn("cat").unwrap();
+    session.send_line("Hello World").unwrap();
+    thread::sleep(Duration::from_millis(600));
+
+    expectrl::check!(
+        session,
+        _ = "Something which is not inside" => {
+            panic!("Unexpected result");
+        },
+    )
+    .unwrap();
+
+    session.send_line("345").unwrap();
+    thread::sleep(Duration::from_millis(600));
+
+    expectrl::check!(
+        session,
+        buffer = Eof => {
+            assert_eq!(buffer.first(), b"Hello World\r\n")
+        },
+    )
+    .unwrap();
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+#[test]
+fn check_macro_doest_consume_missmatch() {
+    let mut session = spawn("cat").unwrap();
+
+    futures_lite::future::block_on(async {
+        session.send_line("Hello World").await.unwrap();
+        thread::sleep(Duration::from_millis(600));
+
+        expectrl::check!(
+            session,
+            _ = "Something which is not inside" => {
+                panic!("Unexpected result");
+            },
+        )
+        .await
+        .unwrap();
+
+        session.send_line("345").await.unwrap();
+        thread::sleep(Duration::from_millis(600));
+
+        expectrl::check!(
+            session,
+            buffer = Eof => {
+                assert_eq!(buffer.first(), b"Hello World\r\n")
+            },
+        )
+        .await
+        .unwrap();
+    });
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn check_macro_with_different_needles() {
+    let check_input = |session: &mut expectrl::Session| {
+        expectrl::check!(
+            session,
+            number = Any(["123", "345"]) => {
+                assert_eq!(number.first(), b"345")
+            },
+            line = "\n" => {
+                assert_eq!(line.before(), b"Hello World\r")
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .unwrap();
+    };
+
+    let mut session = spawn("cat").unwrap();
+    session.send_line("Hello World").unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+    check_input(&mut session);
+
+    session.send_line("345").unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+    check_input(&mut session);
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+#[test]
+fn check_macro_with_different_needles() {
+    futures_lite::future::block_on(async {
+        let mut session = spawn("cat").unwrap();
+        session.send_line("Hello World").await.unwrap();
+
+        thread::sleep(Duration::from_millis(600));
+        async {
+            expectrl::check!(
+                session,
+                number = Any(["123", "345"]) => {
+                    assert_eq!(number.first(), b"345")
+                },
+                line = "\n" => {
+                    assert_eq!(line.before(), b"Hello World\r")
+                },
+                default => {
+                    panic!("Unexpected result");
+                },
+            )
+            .await
+            .unwrap();
+        };
+        
+
+        session.send_line("345").await.unwrap();
+
+        thread::sleep(Duration::from_millis(600));
+        async {
+            expectrl::check!(
+                session,
+                number = Any(["123", "345"]) => {
+                    assert_eq!(number.first(), b"345")
+                },
+                line = "\n" => {
+                    assert_eq!(line.before(), b"Hello World\r")
+                },
+                default => {
+                    panic!("Unexpected result");
+                },
+            )
+            .await
+            .unwrap();
+        };
     });
 }

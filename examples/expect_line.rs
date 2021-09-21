@@ -33,7 +33,11 @@ fn main() {
 
         loop {
             let m = session
-                .expect(Any(vec![Box::new("\r"), Box::new("\n"), Box::new(Eof)]))
+                .expect(Any::boxed(vec![
+                    Box::new("\r"),
+                    Box::new("\n"),
+                    Box::new(Eof),
+                ]))
                 .await
                 .expect("Expect failed");
 
