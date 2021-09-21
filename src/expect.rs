@@ -2,7 +2,7 @@ use crate::error::Error;
 
 /// Needle an interface for search of a match in a buffer.
 pub trait Needle {
-    // Function returns all matches that were occured.
+    /// Function returns all matches that were occured.
     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error>;
 }
 
@@ -173,19 +173,6 @@ where
         Ok(Vec::new())
     }
 }
-
-// impl Needle for Any<Vec<Box<dyn Needle>>> {
-//     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
-//         for needle in self.0.into_iter() {
-//             let found = needle.check(buf, eof)?;
-//             if !found.is_empty() {
-//                 return Ok(found);
-//             }
-//         }
-
-//         Ok(Vec::new())
-//     }
-// }
 
 impl<T: Needle> Needle for &T {
     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {

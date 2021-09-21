@@ -172,24 +172,14 @@ impl Session {
     /// Is a non blocking version of [Session::expect].
     #[cfg(not(feature = "async"))]
     pub fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
-        // try read as much data as possible to buffer
         let mut buffer = Vec::new();
-        let mut buf = [0; 248];
-        let mut eof = false;
-        loop {
-            match self.try_read(&mut buf) {
-                Ok(0) => {
-                    eof = true;
-                    break;
-                }
-                Ok(n) => buffer.extend_from_slice(&buf[..n]),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                Err(err) => {
-                    self.stream.keep_in_buffer(&buffer);
-                    return Err(Error::IO(err));
-                }
+        let eof = match read_available(self, &mut buffer) {
+            Ok(eof) => eof,
+            Err(err) => {
+                self.stream.keep_in_buffer(&buffer);
+                return Err(err);
             }
-        }
+        };
 
         let found = expect.check(&buffer, eof)?;
         if !found.is_empty() {
@@ -215,24 +205,13 @@ impl Session {
     /// Is a non blocking version of [Session::expect].
     #[cfg(feature = "async")]
     pub async fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
-        // try read as much data as possible to buffer
-        let mut buffer = Vec::new();
-        let mut buf = [0; 248];
-        let mut eof = false;
-        loop {
-            match self.try_read(&mut buf).await {
-                Ok(0) => {
-                    eof = true;
-                    break;
-                }
-                Ok(n) => buffer.extend_from_slice(&buf[..n]),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                Err(err) => {
-                    self.stream.keep_in_buffer(&buffer);
-                    return Err(Error::IO(err));
-                }
+        let eof = match read_available(self, &mut buffer).await {
+            Ok(eof) => eof,
+            Err(err) => {
+                self.stream.keep_in_buffer(&buffer);
+                return Err(err);
             }
-        }
+        };
 
         let found = expect.check(&buffer, eof)?;
         if !found.is_empty() {
@@ -487,80 +466,6 @@ impl DerefMut for Session {
     }
 }
 
-/// Found is a represention of a matched pattern.
-///
-/// It might represent an empty match.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Found {
-    buf: Vec<u8>,
-    matches: Vec<Match>,
-}
-
-impl Found {
-    /// New returns an instance of Found.
-    fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
-        Self { buf, matches }
-    }
-
-    /// is_empty verifies if any matches were actually found.
-    pub fn is_empty(&self) -> bool {
-        self.matches.is_empty()
-    }
-
-    /// First returns a first match.
-    pub fn first(&self) -> &[u8] {
-        let m = &self.matches[0];
-        &self.buf[m.start()..m.end()]
-    }
-
-    /// Matches returns a list of matches.
-    pub fn matches(&self) -> Vec<&[u8]> {
-        self.matches
-            .iter()
-            .map(|m| &self.buf[m.start()..m.end()])
-            .collect()
-    }
-
-    /// before returns a bytes before match.
-    pub fn before(&self) -> &[u8] {
-        &self.buf[..self.left_most_index()]
-    }
-
-    fn left_most_index(&self) -> usize {
-        self.matches
-            .iter()
-            .map(|m| m.start())
-            .min()
-            .unwrap_or_default()
-    }
-
-    pub(crate) fn right_most_index(matches: &[Match]) -> usize {
-        matches.iter().map(|m| m.end()).max().unwrap_or_default()
-    }
-}
-
-impl IntoIterator for Found {
-    type Item = Vec<u8>;
-    type IntoIter = std::vec::IntoIter<Vec<u8>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.matches()
-            .into_iter()
-            .map(|m| m.to_vec())
-            .collect::<Vec<_>>()
-            .into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a Found {
-    type Item = &'a [u8];
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.matches().into_iter()
-    }
-}
-
 #[cfg(feature = "async")]
 impl Session {
     /// Try to read in a non-blocking mode.
@@ -675,6 +580,110 @@ impl futures_lite::io::AsyncBufRead for Session {
 
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
         std::pin::Pin::new(&mut self.stream).consume(amt);
+    }
+}
+
+#[cfg(not(feature = "async"))]
+fn read_available(session: &mut Session, v: &mut Vec<u8>) -> Result<bool, Error> {
+    let mut buf = [0; 248];
+    loop {
+        match session.try_read(&mut buf) {
+            Ok(0) => break Ok(true),
+            Ok(n) => {
+                v.extend_from_slice(&buf[..n]);
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+            Err(err) => break Err(Error::IO(err)),
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+async fn read_available(session: &mut Session, v: &mut Vec<u8>) -> Result<bool, Error> {
+    let mut buf = [0; 248];
+    loop {
+        match session.try_read(&mut buf).await {
+            Ok(0) => break Ok(true),
+            Ok(n) => {
+                v.extend_from_slice(&buf[..n]);
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+            Err(err) => break Err(Error::IO(err)),
+        }
+    }
+}
+
+/// Found is a represention of a matched pattern.
+///
+/// It might represent an empty match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    buf: Vec<u8>,
+    matches: Vec<Match>,
+}
+
+impl Found {
+    /// New returns an instance of Found.
+    fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
+        Self { buf, matches }
+    }
+
+    /// is_empty verifies if any matches were actually found.
+    pub fn is_empty(&self) -> bool {
+        self.matches.is_empty()
+    }
+
+    /// First returns a first match.
+    pub fn first(&self) -> &[u8] {
+        let m = &self.matches[0];
+        &self.buf[m.start()..m.end()]
+    }
+
+    /// Matches returns a list of matches.
+    pub fn matches(&self) -> Vec<&[u8]> {
+        self.matches
+            .iter()
+            .map(|m| &self.buf[m.start()..m.end()])
+            .collect()
+    }
+
+    /// before returns a bytes before match.
+    pub fn before(&self) -> &[u8] {
+        &self.buf[..self.left_most_index()]
+    }
+
+    fn left_most_index(&self) -> usize {
+        self.matches
+            .iter()
+            .map(|m| m.start())
+            .min()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn right_most_index(matches: &[Match]) -> usize {
+        matches.iter().map(|m| m.end()).max().unwrap_or_default()
+    }
+}
+
+impl IntoIterator for Found {
+    type Item = Vec<u8>;
+    type IntoIter = std::vec::IntoIter<Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches()
+            .into_iter()
+            .map(|m| m.to_vec())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Found {
+    type Item = &'a [u8];
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.matches().into_iter()
     }
 }
 
