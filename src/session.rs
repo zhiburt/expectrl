@@ -205,6 +205,7 @@ impl Session {
     /// Is a non blocking version of [Session::expect].
     #[cfg(feature = "async")]
     pub async fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        let mut buffer = Vec::new();
         let eof = match read_available(self, &mut buffer).await {
             Ok(eof) => eof,
             Err(err) => {
