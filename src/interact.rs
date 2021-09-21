@@ -348,6 +348,14 @@ fn _interact(
     options: InteractOptions,
 ) -> Result<(), Error> {
     let mut buf = [0; 512];
+
+    let options_has_input_checks = !options.handlers.is_empty();
+    let mut buffer_for_check = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
+
     loop {
         if !session.is_alive() {
             return Ok(());
@@ -372,9 +380,6 @@ fn _interact(
                 return Ok(());
             }
 
-            // first check callbacks
-            options.check_input(session, &buf[..n])?;
-
             let escape_char_position = buf[..n].iter().position(|c| *c == options.escape_character);
             match escape_char_position {
                 Some(pos) => {
@@ -384,6 +389,13 @@ fn _interact(
                 None => {
                     session.write_all(&buf[..n])?;
                 }
+            }
+
+            // check callbacks
+            if options_has_input_checks {
+                let buffer_for_check = buffer_for_check.as_mut().unwrap();
+                buffer_for_check.extend_from_slice(&buf[..n]);
+                options.check_input(session, buffer_for_check)?;
             }
         }
     }

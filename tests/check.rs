@@ -398,7 +398,6 @@ fn check_macro_with_different_needles() {
             .await
             .unwrap();
         };
-        
 
         session.send_line("345").await.unwrap();
 
