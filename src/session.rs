@@ -205,6 +205,7 @@ impl Session {
             return Err(Error::Eof);
         }
 
+        self.stream.keep_in_buffer(&buffer);
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
