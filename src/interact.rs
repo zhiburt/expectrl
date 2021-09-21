@@ -345,7 +345,7 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error
 fn _interact(
     session: &mut Session,
     console: &conpty::console::Console,
-    options: InteractOptions,
+    mut options: InteractOptions,
 ) -> Result<(), Error> {
     let mut buf = [0; 512];
 
