@@ -6,7 +6,11 @@ fn main() {
 
     loop {
         let m = session
-            .expect(Any(vec![Box::new("\r"), Box::new("\n"), Box::new(Eof)]))
+            .expect(Any::boxed(vec![
+                Box::new("\r"),
+                Box::new("\n"),
+                Box::new(Eof),
+            ]))
             .expect("Expect failed");
 
         let is_eof = m.first().is_empty();

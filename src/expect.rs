@@ -81,20 +81,19 @@ impl Needle for NBytes {
     }
 }
 
-impl<B: AsRef<[u8]>> Needle for B {
+impl Needle for [u8] {
     fn check(&self, buf: &[u8], _: bool) -> Result<Vec<Match>, Error> {
-        let this = self.as_ref();
-        if buf.len() < this.len() {
+        if buf.len() < self.len() {
             return Ok(Vec::new());
         }
 
         for l_bound in 0..buf.len() {
-            let r_bound = l_bound + this.len();
+            let r_bound = l_bound + self.len();
             if r_bound > buf.len() {
                 return Ok(Vec::new());
             }
 
-            if this == &buf[l_bound..r_bound] {
+            if self == &buf[l_bound..r_bound] {
                 return Ok(vec![Match::new(l_bound, r_bound)]);
             }
         }
@@ -103,16 +102,56 @@ impl<B: AsRef<[u8]>> Needle for B {
     }
 }
 
+impl Needle for &[u8] {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        (*self).check(buf, eof)
+    }
+}
+
+impl Needle for str {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        self.as_bytes().check(buf, eof)
+    }
+}
+
+impl Needle for &str {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        self.as_bytes().check(buf, eof)
+    }
+}
+
+impl Needle for String {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        self.as_bytes().check(buf, eof)
+    }
+}
+
 /// Any matches first Needle which returns a match.
 ///
 /// ```no_run,ignore
-/// Any(vec![Box::new("we"), Box::new(NBytes(3))])
+/// Any("we", "are", "here"])
 /// ```
-pub struct Any(pub Vec<Box<dyn Needle>>);
+///
+/// To be able to use a different type of needles you can call [Any::boxed].
+///
+/// ```no_run,ignore
+/// Any::boxed(vec![Box::new("we"), Box::new(NBytes(3))])
+/// ```
+pub struct Any<I>(pub I);
 
-impl Needle for Any {
+impl Any<Vec<Box<dyn Needle>>> {
+    pub fn boxed(v: Vec<Box<dyn Needle>>) -> Self {
+        Self(v)
+    }
+}
+
+impl<I, T> Needle for Any<I>
+where
+    for<'a> &'a I: IntoIterator<Item = &'a T>,
+    T: Needle,
+{
     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
-        for needle in &self.0 {
+        for needle in (&self.0).into_iter() {
             let found = needle.check(buf, eof)?;
             if !found.is_empty() {
                 return Ok(found);
@@ -120,6 +159,31 @@ impl Needle for Any {
         }
 
         Ok(Vec::new())
+    }
+}
+
+// impl Needle for Any<Vec<Box<dyn Needle>>> {
+//     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+//         for needle in self.0.into_iter() {
+//             let found = needle.check(buf, eof)?;
+//             if !found.is_empty() {
+//                 return Ok(found);
+//             }
+//         }
+
+//         Ok(Vec::new())
+//     }
+// }
+
+impl<T: Needle> Needle for &T {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        T::check(self, buf, eof)
+    }
+}
+
+impl Needle for Box<dyn Needle> {
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        self.as_ref().check(buf, eof)
     }
 }
 
@@ -219,16 +283,20 @@ mod tests {
     #[test]
     fn test_any() {
         assert_eq!(
-            Any(vec![Box::new("we"), Box::new(NBytes(3))])
+            Any(vec![Box::new("we") as Box<dyn Needle>, Box::new(NBytes(3)),])
                 .check(b"qwerty", false)
                 .unwrap(),
             vec![Match::new(1, 3)]
         );
         assert_eq!(
-            Any(vec![Box::new("123"), Box::new(NBytes(100))])
+            Any::boxed(vec![Box::new("123"), Box::new(NBytes(100))])
                 .check(b"qwerty", false)
                 .unwrap(),
             vec![],
+        );
+        assert_eq!(
+            Any(["123", "234", "rty"]).check(b"qwerty", false).unwrap(),
+            vec![Match::new(3, 6)]
         );
     }
 }
