@@ -234,3 +234,47 @@ fn check_macro() {
         .unwrap();
     });
 }
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn check_macro_eof() {
+    let mut session = spawn("echo 'Hello World'").unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+
+    expectrl::check!(
+        session,
+        output = Eof => {
+            assert_eq!(output.first(), b"'Hello World'\r\n");
+            assert_eq!(output.before(), b"");
+        },
+        default => {
+            panic!("Unexpected result");
+        },
+    )
+    .unwrap();
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+#[test]
+fn check_macro_eof() {
+    let mut session = spawn("echo 'Hello World'").unwrap();
+
+    thread::sleep(Duration::from_millis(600));
+
+    futures_lite::future::block_on(async {
+        expectrl::check!(
+            session,
+            output = Eof => {
+                assert_eq!(output.first(), b"'Hello World'\r\n");
+                assert_eq!(output.before(), b"");
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .unwrap();
+    });
+}
