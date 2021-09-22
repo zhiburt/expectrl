@@ -359,6 +359,32 @@ mod win {
             }
         }
 
+        pub fn read_available(&mut self) -> std::io::Result<bool> {
+            let mut buffer = Vec::new();
+            let mut buf = [0; 248];
+            let result = loop {
+                match self.try_read(&mut buf) {
+                    Ok(0) => break Ok(true),
+                    Ok(n) => {
+                        buffer.extend_from_slice(&buf[..n]);
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+                    Err(err) => break Err(err),
+                }
+            };
+
+            self.keep_in_buffer(&buffer);
+            result
+        }
+
+        pub fn get_available(&mut self) -> &[u8] {
+            &self.reader.get_mut().buffer
+        }
+
+        pub fn consume_from_buffer(&mut self, n: usize) {
+            self.reader.get_mut().buffer.drain(..n);
+        }
+
         pub fn keep_in_buffer(&mut self, v: &[u8]) {
             self.output.get_mut().keep_in_buffer(v);
         }
