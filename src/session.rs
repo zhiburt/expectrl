@@ -171,31 +171,22 @@ impl Session {
     ///
     /// Is a non blocking version of [Session::expect].
     #[cfg(not(feature = "async"))]
-    pub fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
-        let mut buffer = Vec::new();
-        let eof = match read_available(self, &mut buffer) {
-            Ok(eof) => eof,
-            Err(err) => {
-                self.stream.keep_in_buffer(&buffer);
-                return Err(err);
-            }
-        };
+    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+        let eof = self.stream.read_available()?;
+        let buf = self.stream.get_available();
 
-        let found = expect.check(&buffer, eof)?;
+        let found = needle.check(buf, eof)?;
         if !found.is_empty() {
             let end_index = Found::right_most_index(&found);
-            let involved_bytes = buffer.drain(..end_index).collect();
-            // save the rest of the buffer for next reads
-            self.stream.keep_in_buffer(&buffer);
+            let involved_bytes = buf[..end_index].to_vec();
+            self.stream.consume_from_buffer(end_index);
             return Ok(Found::new(involved_bytes, found));
         }
 
         if eof {
-            self.stream.keep_in_buffer(&buffer);
             return Err(Error::Eof);
         }
 
-        self.stream.keep_in_buffer(&buffer);
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
@@ -204,27 +195,19 @@ impl Session {
     ///
     /// Is a non blocking version of [Session::expect].
     #[cfg(feature = "async")]
-    pub async fn check<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
-        let mut buffer = Vec::new();
-        let eof = match read_available(self, &mut buffer).await {
-            Ok(eof) => eof,
-            Err(err) => {
-                self.stream.keep_in_buffer(&buffer);
-                return Err(err);
-            }
-        };
+    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+        let eof = self.stream.read_available().await?;
+        let buf = self.stream.get_available();
 
-        let found = expect.check(&buffer, eof)?;
+        let found = needle.check(buf, eof)?;
         if !found.is_empty() {
             let end_index = Found::right_most_index(&found);
-            let involved_bytes = buffer.drain(..end_index).collect();
-            // save the rest of the buffer for next reads
-            self.stream.keep_in_buffer(&buffer);
+            let involved_bytes = buf[..end_index].to_vec();
+            self.stream.consume_from_buffer(end_index);
             return Ok(Found::new(involved_bytes, found));
         }
 
         if eof {
-            self.stream.keep_in_buffer(&buffer);
             return Err(Error::Eof);
         }
 
@@ -581,36 +564,6 @@ impl futures_lite::io::AsyncBufRead for Session {
 
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
         std::pin::Pin::new(&mut self.stream).consume(amt);
-    }
-}
-
-#[cfg(not(feature = "async"))]
-fn read_available(session: &mut Session, v: &mut Vec<u8>) -> Result<bool, Error> {
-    let mut buf = [0; 248];
-    loop {
-        match session.try_read(&mut buf) {
-            Ok(0) => break Ok(true),
-            Ok(n) => {
-                v.extend_from_slice(&buf[..n]);
-            }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
-            Err(err) => break Err(Error::IO(err)),
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-async fn read_available(session: &mut Session, v: &mut Vec<u8>) -> Result<bool, Error> {
-    let mut buf = [0; 248];
-    loop {
-        match session.try_read(&mut buf).await {
-            Ok(0) => break Ok(true),
-            Ok(n) => {
-                v.extend_from_slice(&buf[..n]);
-            }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
-            Err(err) => break Err(Error::IO(err)),
-        }
     }
 }
 
