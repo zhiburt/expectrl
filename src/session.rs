@@ -70,42 +70,52 @@ impl Session {
     /// It return an error if expect_timeout is reached.
     #[cfg(feature = "async")]
     pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        let mut checking_data_length = 0;
+        let mut eof = false;
         let start = time::Instant::now();
-        let mut eof_reached = false;
-        let mut buf = Vec::new();
-        let mut b = [0; 1];
         loop {
-            let result = self.stream.try_read(&mut b).await;
-            match result {
-                Ok(0) => {
-                    eof_reached = true;
-                }
-                Ok(n) => {
-                    buf.extend(&b[..n]);
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => {
-                    self.stream.keep_in_buffer(&buf);
-                    return Err(Error::IO(err));
-                }
-            };
+            let mut available = self.stream.get_available();
+            if checking_data_length == available.len() {
+                // We read by byte to make things as lazy as possible.
+                //
+                // It's chose is important in using Regex as a Needle.
+                // Imagine we have a `\d+` regex.
+                // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
+                //
+                // The second reason is
+                // if we wouldn't read by byte EOF indication could be lost.
+                // And next blocking std::io::Read operation could be blocked forever.
+                //
+                // We could read all data available via `read_available` to reduce IO operations,
+                // but in such case we would need to keep a EOF indicator internally in stream,
+                // which is OK if EOF happens onces, but I am not sure if this is a case.
+                eof = self.stream.read_available_once(&mut [0; 1]).await?;
+                available = self.stream.get_available();
+            }
 
-            let found = expect.check(&buf, eof_reached)?;
+            // We intentinally not increase the counter
+            // and run check one more time even though the data isn't changed.
+            // Because it may be important for custom implementations of Needle.
+            if checking_data_length < available.len() {
+                checking_data_length += 1;
+            }
+
+            let data = &available[..checking_data_length];
+
+            let found = expect.check(data, eof)?;
             if !found.is_empty() {
                 let end_index = Found::right_most_index(&found);
-                let involved_bytes = buf.drain(..end_index).collect();
-                self.stream.keep_in_buffer(&buf);
+                let involved_bytes = data[..end_index].to_vec();
+                self.stream.consume_from_buffer(end_index);
                 return Ok(Found::new(involved_bytes, found));
             }
 
-            if eof_reached {
-                self.stream.keep_in_buffer(&buf);
+            if eof {
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
-                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }
@@ -119,47 +129,52 @@ impl Session {
     /// It return an error if expect_timeout is reached.
     #[cfg(not(feature = "async"))]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        let mut checking_data_length = 0;
+        let mut eof = false;
         let start = time::Instant::now();
-        let mut eof_reached = false;
-        let mut buf = Vec::new();
-        // We read by byte to make things as lazy as possible.
-        //
-        // It's chose is important in using Regex as a Needle.
-        // Imagine we have a `\d+` regex.
-        // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
-        let mut b = [0; 1];
         loop {
-            let result = self.stream.try_read(&mut b);
-            match result {
-                Ok(0) => {
-                    eof_reached = true;
-                }
-                Ok(n) => {
-                    buf.extend(&b[..n]);
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => {
-                    self.stream.keep_in_buffer(&buf);
-                    return Err(Error::IO(err));
-                }
-            };
+            let mut available = self.stream.get_available();
+            if checking_data_length == available.len() {
+                // We read by byte to make things as lazy as possible.
+                //
+                // It's chose is important in using Regex as a Needle.
+                // Imagine we have a `\d+` regex.
+                // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
+                //
+                // The second reason is
+                // if we wouldn't read by byte EOF indication could be lost.
+                // And next blocking std::io::Read operation could be blocked forever.
+                //
+                // We could read all data available via `read_available` to reduce IO operations,
+                // but in such case we would need to keep a EOF indicator internally in stream,
+                // which is OK if EOF happens onces, but I am not sure if this is a case.
+                eof = self.stream.read_available_once(&mut [0; 1])?;
+                available = self.stream.get_available();
+            }
 
-            let found = expect.check(&buf, eof_reached)?;
+            // We intentinally not increase the counter
+            // and run check one more time even though the data isn't changed.
+            // Because it may be important for custom implementations of Needle.
+            if checking_data_length < available.len() {
+                checking_data_length += 1;
+            }
+
+            let data = &available[..checking_data_length];
+
+            let found = expect.check(data, eof)?;
             if !found.is_empty() {
                 let end_index = Found::right_most_index(&found);
-                let involved_bytes = buf.drain(..end_index).collect();
-                self.stream.keep_in_buffer(&buf);
+                let involved_bytes = data[..end_index].to_vec();
+                self.stream.consume_from_buffer(end_index);
                 return Ok(Found::new(involved_bytes, found));
             }
 
-            if eof_reached {
-                self.stream.keep_in_buffer(&buf);
+            if eof {
                 return Err(Error::Eof);
             }
 
             if let Some(timeout) = self.expect_timeout {
                 if start.elapsed() > timeout {
-                    self.stream.keep_in_buffer(&buf);
                     return Err(Error::ExpectTimeout);
                 }
             }

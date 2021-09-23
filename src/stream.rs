@@ -75,6 +75,23 @@ mod unix {
                 result
             }
 
+            // non-buffered && non-blocking read
+            fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+                let fd = self.inner.as_raw_fd();
+                make_non_blocking(fd).map_err(nix_error_to_io)?;
+
+                let result = match self.reader.get_mut().inner.read(&mut buf) {
+                    Ok(n) => Ok(n),
+                    Err(err) => Err(err),
+                };
+
+                // As file is DUPed changes in one descriptor affects all ones
+                // so we need to make blocking file after we finished.
+                make_blocking(fd).map_err(nix_error_to_io)?;
+
+                result
+            }
+
             pub fn is_empty(&mut self) -> io::Result<bool> {
                 match self.try_read(&mut []) {
                     Ok(0) => Ok(true),
@@ -85,21 +102,29 @@ mod unix {
             }
 
             pub fn read_available(&mut self) -> std::io::Result<bool> {
-                let mut buffer = Vec::new();
                 let mut buf = [0; 248];
-                let result = loop {
-                    match self.try_read(&mut buf) {
+                loop {
+                    match self.try_read_inner(&mut buf) {
                         Ok(0) => break Ok(true),
                         Ok(n) => {
-                            buffer.extend_from_slice(&buf[..n]);
+                            self.keep_in_buffer(&buf[..n]);
                         }
                         Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
                         Err(err) => break Err(err),
                     }
-                };
+                }
+            }
 
-                self.keep_in_buffer(&buffer);
-                result
+            pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<bool> {
+                match self.try_read_inner(buf) {
+                    Ok(0) => Ok(true),
+                    Ok(n) => {
+                        self.keep_in_buffer(&buf[..n]);
+                        Ok(false)
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(false),
+                    Err(err) => Err(err),
+                }
             }
 
             pub fn get_available(&mut self) -> &[u8] {
@@ -227,22 +252,39 @@ mod unix {
                 }
             }
 
+            // non-buffered && non-blocking read
+            async fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+                use futures_lite::AsyncReadExt;
+                match futures_lite::future::poll_once(self.reader.get_mut().inner.read(buf)).await {
+                    Some(result) => result,
+                    None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
+                }
+            }
+
             pub async fn read_available(&mut self) -> std::io::Result<bool> {
-                let mut buffer = Vec::new();
                 let mut buf = [0; 248];
-                let result = loop {
-                    match self.try_read(&mut buf).await {
+                loop {
+                    match self.try_read_inner(&mut buf).await {
                         Ok(0) => break Ok(true),
                         Ok(n) => {
-                            buffer.extend_from_slice(&buf[..n]);
+                            self.keep_in_buffer(&buf[..n]);
                         }
                         Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
                         Err(err) => break Err(err),
                     }
-                };
+                }
+            }
 
-                self.keep_in_buffer(&buffer);
-                result
+            pub async fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<bool> {
+                match self.try_read_inner(buf).await {
+                    Ok(0) => Ok(true),
+                    Ok(n) => {
+                        self.keep_in_buffer(&buf[..n]);
+                        Ok(false)
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(false),
+                    Err(err) => Err(err),
+                }
             }
 
             pub fn get_available(&mut self) -> &[u8] {
@@ -359,23 +401,45 @@ mod win {
             }
         }
 
-        pub fn read_available(&mut self) -> std::io::Result<bool> {
-            let mut buffer = Vec::new();
-            let mut buf = [0; 248];
-            let result = loop {
-                match self.try_read(&mut buf) {
-                    Ok(0) => break Ok(true),
-                    Ok(n) => {
-                        buffer.extend_from_slice(&buf[..n]);
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
-                    Err(err) => break Err(err),
-                }
-            };
+            // non-buffered && non-blocking read
+            fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+                self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
-            self.keep_in_buffer(&buffer);
-            result
-        }
+                let result = match self.output.get_mut().inner.read(&mut buf) {
+                    Ok(n) => Ok(n),
+                    Err(err) => Err(err),
+                };
+    
+                self.output.get_mut().get_mut().set_blocking_mode()?;
+    
+                result
+            }
+
+            pub fn read_available(&mut self) -> std::io::Result<bool> {
+                let mut buf = [0; 248];
+                loop {
+                    match self.try_read_inner(&mut buf) {
+                        Ok(0) => break Ok(true),
+                        Ok(n) => {
+                            self.keep_in_buffer(&buf[..n]);
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+                        Err(err) => break Err(err),
+                    }
+                }
+            }
+
+            pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<bool> {
+                match self.try_read_inner(buf) {
+                    Ok(0) => Ok(true),
+                    Ok(n) => {
+                        self.keep_in_buffer(&buf[..n]);
+                        Ok(false)
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(false),
+                    Err(err) => Err(err),
+                }
+            }
 
         pub fn get_available(&mut self) -> &[u8] {
             &self.reader.get_mut().buffer
