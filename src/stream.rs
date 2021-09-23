@@ -442,11 +442,11 @@ mod win {
             }
 
         pub fn get_available(&mut self) -> &[u8] {
-            &self.reader.get_mut().buffer
+            &self.output.get_mut().buffer
         }
 
         pub fn consume_from_buffer(&mut self, n: usize) {
-            self.reader.get_mut().buffer.drain(..n);
+            self.output.get_mut().buffer.drain(..n);
         }
 
         pub fn keep_in_buffer(&mut self, v: &[u8]) {
