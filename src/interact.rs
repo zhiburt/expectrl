@@ -1,3 +1,6 @@
+//! This module contains a [InteractOptions] which allows a castomization of
+//! [crate::Session::interact] flow.
+
 use crate::{session::Session, ControlCode, Error, Found, Needle};
 use std::{
     collections::HashMap,
@@ -25,6 +28,7 @@ use futures_lite::AsyncWriteExt;
 #[cfg(windows)]
 use std::io::Read;
 
+/// InteractOptions represents options of an interact session.
 pub struct InteractOptions {
     escape_character: u8,
     handlers: HashMap<Action, ActionFn>,
@@ -47,11 +51,14 @@ impl Default for InteractOptions {
 }
 
 impl InteractOptions {
+    /// Sets an escape character after seen which the interact interactions will be stopped
+    /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
         self.escape_character = c;
         self
     }
 
+    /// Puts a hanlder which will be called when input is seen in users input.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
         F: FnMut(&mut Session) -> Result<(), Error> + 'static,
@@ -61,11 +68,18 @@ impl InteractOptions {
         self
     }
 
+    /// Runs interact interactively.
+    /// See [Session::interact]
     #[cfg(all(unix, not(feature = "async")))]
     pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
         interact(session, self)
     }
 
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    ///
+    /// Be aware that currently async version doesn't take a Session as an argument.
+    /// See https://github.com/zhiburt/expectrl/issues/16.
     #[cfg(all(unix, feature = "async"))]
     pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
         interact(session, self).await
