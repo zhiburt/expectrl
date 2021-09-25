@@ -382,41 +382,37 @@ fn check_macro_with_different_needles() {
         session.send_line("Hello World").await.unwrap();
 
         thread::sleep(Duration::from_millis(600));
-        async {
-            expectrl::check!(
-                session,
-                number = Any(["123", "345"]) => {
-                    assert_eq!(number.first(), b"345")
-                },
-                line = "\n" => {
-                    assert_eq!(line.before(), b"Hello World\r")
-                },
-                default => {
-                    panic!("Unexpected result");
-                },
-            )
-            .await
-            .unwrap();
-        };
+        expectrl::check!(
+            session,
+            number = Any(["123", "345"]) => {
+                assert_eq!(number.first(), b"345")
+            },
+            line = "\n" => {
+                assert_eq!(line.before(), b"Hello World\r")
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .await
+        .unwrap();
 
         session.send_line("345").await.unwrap();
 
         thread::sleep(Duration::from_millis(600));
-        async {
-            expectrl::check!(
-                session,
-                number = Any(["123", "345"]) => {
-                    assert_eq!(number.first(), b"345")
-                },
-                line = "\n" => {
-                    assert_eq!(line.before(), b"Hello World\r")
-                },
-                default => {
-                    panic!("Unexpected result");
-                },
-            )
-            .await
-            .unwrap();
-        };
+        expectrl::check!(
+            session,
+            number = Any(["123", "345"]) => {
+                assert_eq!(number.first(), b"345")
+            },
+            line = "\n" => {
+                assert_eq!(line.before(), b"Hello World\r")
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .await
+        .unwrap();
     });
 }
