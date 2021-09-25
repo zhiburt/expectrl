@@ -253,7 +253,7 @@ mod unix {
             }
 
             // non-buffered && non-blocking read
-            async fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+            async fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 use futures_lite::AsyncReadExt;
                 match futures_lite::future::poll_once(self.reader.get_mut().inner.read(buf)).await {
                     Some(result) => result,

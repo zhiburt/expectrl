@@ -65,9 +65,26 @@ impl Session {
 
     /// Expect waits until a pattern is matched.
     ///
-    /// If call call return [Ok] it is guaranteed that at least 1 match found.
+    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
     ///
-    /// It return an error if expect_timeout is reached.
+    /// This make assertions in a lazy manner.
+    /// Starts from 1st byte then checks 2nd byte and goes further.
+    /// It is done intentinally to be presize.
+    /// It matters for example when you call this method with `crate::Regex("\\d+")` and output contains 123,
+    /// expect will return '1' as a match not '123'.
+    ///
+    /// ```
+    /// # futures_lite::future::block_on(async {
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
+    /// assert_eq!(m.first(), b"1");
+    /// # })
+    /// ```
+    ///
+    /// This behaviour is different from [Session::check].
+    ///
+    /// It return an error if timeout is reached.
+    /// You can specify a timeout value by [Session::set_expect_timeout] method.
     #[cfg(feature = "async")]
     pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
@@ -124,9 +141,24 @@ impl Session {
 
     /// Expect waits until a pattern is matched.
     ///
-    /// If call call return [Ok] it is guaranteed that at least 1 match found.
+    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
     ///
-    /// It return an error if expect_timeout is reached.
+    /// This make assertions in a lazy manner.
+    /// Starts from 1st byte then checks 2nd byte and goes further.
+    /// It is done intentinally to be presize.
+    /// It matters for example when you call this method with `crate::Regex("\\d+")` and output contains 123,
+    /// expect will return '1' as a match not '123'.
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m.first(), b"1");
+    /// ```
+    ///
+    /// This behaviour is different from [Session::check].
+    ///
+    /// It return an error if timeout is reached.
+    /// You can specify a timeout value by [Session::set_expect_timeout] method.
     #[cfg(not(feature = "async"))]
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
@@ -185,6 +217,16 @@ impl Session {
     /// Returns empty found structure if nothing found.
     ///
     /// Is a non blocking version of [Session::expect].
+    /// But its strategy of matching is different from it.
+    /// It makes search agains all bytes available.
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// // wait to guarantee that check will successed (most likely)
+    /// std::thread::sleep(std::time::Duration::from_secs(1));
+    /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m.first(), b"123");
+    /// ```
     #[cfg(not(feature = "async"))]
     pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         let eof = self.stream.read_available()?;
@@ -209,6 +251,18 @@ impl Session {
     /// Returns empty found structure if nothing found.
     ///
     /// Is a non blocking version of [Session::expect].
+    /// But its strategy of matching is different from it.
+    /// It makes search agains all bytes available.
+    ///
+    /// ```
+    /// # futures_lite::future::block_on(async {
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// // wait to guarantee that check will successed (most likely)
+    /// std::thread::sleep(std::time::Duration::from_secs(1));
+    /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
+    /// assert_eq!(m.first(), b"123");
+    /// # });
+    /// ```
     #[cfg(feature = "async")]
     pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         let eof = self.stream.read_available().await?;
