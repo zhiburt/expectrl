@@ -34,11 +34,19 @@
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! check {
-    // Entry point
-    ($session:expr, $($tokens:tt)*) => {
+    (@check ($($tokens:tt)*) ($session:expr)) => {
         $crate::check!(@case $session, ($($tokens)*), (), ())
     };
-    ($session:expr $(,)?) => {
+    (@check ($session:expr, $($tokens:tt)*) ()) => {
+        $crate::check!(@check ($($tokens)*) ($session))
+    };
+    (@check ($session:expr, $($tokens:tt)*) ($session2:expr)) => {
+        compile_error!("Wrong number of session arguments")
+    };
+    (@check ($($tokens:tt)*) ()) => {
+        compile_error!("Please provide a session as a first argument")
+    };
+    (@check () ($session:expr)) => {
         // there's no reason to run 0 checks so we issue a error.
         compile_error!("There's no reason in running check with no arguments. Please supply a check branches")
     };
@@ -121,6 +129,10 @@ macro_rules! check {
                 ") ",
         ))
     };
+    // Entry point
+    ($($tokens:tt)*) => {
+        $crate::check!(@check ($($tokens)*) ())
+    };
 }
 
 /// See sync version.
@@ -135,13 +147,19 @@ macro_rules! check {
 #[cfg(feature = "async")]
 #[macro_export]
 macro_rules! check {
-    // Entry point
-    ($session:expr, $($tokens:tt)*) => {
-        async {
-            $crate::check!(@case $session, ($($tokens)*), (), ())
-        }
+    (@check ($($tokens:tt)*) ($session:expr)) => {
+        $crate::check!(@case $session, ($($tokens)*), (), ())
     };
-    ($session:expr $(,)?) => {
+    (@check ($session:expr, $($tokens:tt)*) ()) => {
+        $crate::check!(@check ($($tokens)*) ($session))
+    };
+    (@check ($session:expr, $($tokens:tt)*) ($session2:expr)) => {
+        compile_error!("Wrong number of session arguments")
+    };
+    (@check ($($tokens:tt)*) ()) => {
+        compile_error!("Please provide a session as a first argument")
+    };
+    (@check () ($session:expr)) => {
         // there's no reason to run 0 checks so we issue a error.
         compile_error!("There's no reason in running check with no arguments. Please supply a check branches")
     };
@@ -224,6 +242,12 @@ macro_rules! check {
                 ") ",
         ))
     };
+    // Entry point
+    ($($tokens:tt)*) => {
+        async {
+            $crate::check!(@check ($($tokens)*) ())
+        }
+    };
 }
 
 #[cfg(test)]
@@ -244,6 +268,11 @@ mod tests {
             asbb = "zxc123" => {},
         };
         crate::check! { session, };
+
+        // crate::check! {
+        //     as11d = "zxc" => {},
+        //     asbb = "zxc123" => {},
+        // };
 
         // panic on unused session
         // crate::check! { session };
