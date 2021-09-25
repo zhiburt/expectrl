@@ -157,13 +157,12 @@ impl Any<Vec<Box<dyn Needle>>> {
     }
 }
 
-impl<I, T> Needle for Any<I>
+impl<T> Needle for Any<&[T]>
 where
-    for<'a> &'a I: IntoIterator<Item = &'a T>,
     T: Needle,
 {
     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
-        for needle in (&self.0).into_iter() {
+        for needle in self.0.iter() {
             let found = needle.check(buf, eof)?;
             if !found.is_empty() {
                 return Ok(found);
@@ -171,6 +170,33 @@ where
         }
 
         Ok(Vec::new())
+    }
+}
+
+impl<T> Needle for Any<Vec<T>>
+where
+    T: Needle,
+{
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        Any(self.0.as_slice()).check(buf, eof)
+    }
+}
+
+impl<T, const N: usize> Needle for Any<[T; N]>
+where
+    T: Needle,
+{
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        Any(&self.0[..]).check(buf, eof)
+    }
+}
+
+impl<'a, T, const N: usize> Needle for Any<&'a [T; N]>
+where
+    T: Needle,
+{
+    fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
+        Any(&self.0[..]).check(buf, eof)
     }
 }
 
@@ -314,6 +340,16 @@ mod tests {
         );
         assert_eq!(
             Any(["123", "234", "rty"]).check(b"qwerty", false).unwrap(),
+            vec![Match::new(3, 6)]
+        );
+        assert_eq!(
+            Any(&["123", "234", "rty"][..])
+                .check(b"qwerty", false)
+                .unwrap(),
+            vec![Match::new(3, 6)]
+        );
+        assert_eq!(
+            Any(&["123", "234", "rty"]).check(b"qwerty", false).unwrap(),
             vec![Match::new(3, 6)]
         );
     }
