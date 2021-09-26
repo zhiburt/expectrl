@@ -395,7 +395,14 @@ where
 }
 
 #[cfg(windows)]
-fn interact_in_terminal(session: &mut Session, options: InteractOptions) -> Result<(), Error> {
+fn interact_in_terminal<R, W>(
+    session: &mut Session,
+    options: InteractOptions<R, W>,
+) -> Result<(), Error>
+where
+    R: Read,
+    W: Write,
+{
     // flush buffers
     session.flush()?;
 
@@ -409,40 +416,12 @@ fn interact_in_terminal(session: &mut Session, options: InteractOptions) -> Resu
     r
 }
 
-#[cfg(windows)]
-pub struct NonBlockingStdin {
-    current_terminal: Console,
-}
-
-#[cfg(windows)]
-impl NonBlockingStdin {
-    fn new() -> Result<Self, Error> {
-        let console = conpty::console::Console::current()?;
-        Ok(Self {
-            current_terminal: console,
-        })
-    }
-}
-
-#[cfg(windows)]
-impl Read for NonBlockingStdin {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // we can't easily read in non-blocking manner,
-        // but we can check when there's something to read,
-        // which seems to be enough to not block.
-        if console.is_stdin_not_empty()? {
-            io::stdin().read(&mut buf)
-        } else {
-            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
-        }
-    }
-}
-
 #[cfg(unix)]
 pub struct NonBlockingStdin {
     stream: Stream,
 }
 
+#[cfg(unix)]
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
         // it's crusial to make a DUP call here.
@@ -479,5 +458,34 @@ impl futures_lite::AsyncRead for NonBlockingStdin {
     ) -> std::task::Poll<io::Result<usize>> {
         use futures_lite::FutureExt;
         Box::pin(self.stream.try_read(buf)).poll(cx)
+    }
+}
+
+#[cfg(windows)]
+pub struct NonBlockingStdin {
+    current_terminal: Console,
+}
+
+#[cfg(windows)]
+impl NonBlockingStdin {
+    fn new() -> Result<Self, Error> {
+        let console = conpty::console::Console::current()?;
+        Ok(Self {
+            current_terminal: console,
+        })
+    }
+}
+
+#[cfg(windows)]
+impl Read for NonBlockingStdin {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // we can't easily read in non-blocking manner,
+        // but we can check when there's something to read,
+        // which seems to be enough to not block.
+        if console.is_stdin_not_empty()? {
+            io::stdin().read(&mut buf)
+        } else {
+            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
+        }
     }
 }
