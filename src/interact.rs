@@ -18,20 +18,23 @@ use nix::{
 #[cfg(unix)]
 use ptyprocess::set_raw;
 #[cfg(unix)]
-use std::fs::File;
-#[cfg(unix)]
 use std::os::unix::prelude::FromRawFd;
 
-#[cfg(all(unix, feature = "async"))]
-use futures_lite::AsyncWriteExt;
-
-#[cfg(windows)]
+#[cfg(not(feature = "async"))]
 use std::io::Read;
 
 /// InteractOptions represents options of an interact session.
-pub struct InteractOptions {
+pub struct InteractOptions<R, W> {
+    input: R,
+    output: W,
+    input_from: InputFrom,
     escape_character: u8,
     handlers: HashMap<Action, ActionFn>,
+}
+
+enum InputFrom {
+    Terminal,
+    Other,
 }
 
 type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
@@ -41,16 +44,40 @@ enum Action {
     Input(String),
 }
 
-impl Default for InteractOptions {
-    fn default() -> Self {
-        Self {
-            escape_character: ControlCode::GroupSeparator.into(), // Ctrl-]
+impl InteractOptions<NonBlockingStdin, io::Stdout> {
+    /// Constructs a interact options to interact via STDIN.
+    ///
+    /// Usage [InteractOptions::streamed] directly with [std::io::stdin],
+    /// most likely will provide a correct interact processing.
+    /// It depends on terminal settings.
+    pub fn terminal() -> Result<Self, Error> {
+        let input = NonBlockingStdin::new()?;
+        Ok(Self {
+            input,
+            output: io::stdout(),
+            input_from: InputFrom::Terminal,
+            escape_character: Self::default_escape_char(),
             handlers: HashMap::new(),
-        }
+        })
     }
 }
 
-impl InteractOptions {
+impl<R, W> InteractOptions<R, W> {
+    /// Create interact options with custom input and output streams.
+    ///
+    /// To construct default terminal session see [InteractOptions::terminal]
+    pub fn streamed(input: R, output: W) -> Result<Self, Error> {
+        Ok(Self {
+            input,
+            output,
+            input_from: InputFrom::Other,
+            escape_character: Self::default_escape_char(),
+            handlers: HashMap::new(),
+        })
+    }
+}
+
+impl<R, W> InteractOptions<R, W> {
     /// Sets an escape character after seen which the interact interactions will be stopped
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
@@ -59,6 +86,9 @@ impl InteractOptions {
     }
 
     /// Puts a hanlder which will be called when input is seen in users input.
+    ///
+    /// Be aware that currently async version doesn't take a Session as an argument.
+    /// See https://github.com/zhiburt/expectrl/issues/16.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
         F: FnMut(&mut Session) -> Result<(), Error> + 'static,
@@ -68,26 +98,8 @@ impl InteractOptions {
         self
     }
 
-    /// Runs interact interactively.
-    /// See [Session::interact]
-    #[cfg(all(unix, not(feature = "async")))]
-    pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
-        interact(session, self)
-    }
-
-    /// Runs interact interactively.
-    /// See [Session::interact]
-    ///
-    /// Be aware that currently async version doesn't take a Session as an argument.
-    /// See https://github.com/zhiburt/expectrl/issues/16.
-    #[cfg(all(unix, feature = "async"))]
-    pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
-        interact(session, self).await
-    }
-
-    #[cfg(windows)]
-    pub fn interact(self, session: &mut Session) -> Result<(), Error> {
-        interact(session, self)
+    fn default_escape_char() -> u8 {
+        ControlCode::GroupSeparator.into() // Ctrl-]
     }
 
     fn check_input(&mut self, session: &mut Session, bytes: &mut Vec<u8>) -> Result<(), Error> {
@@ -107,8 +119,58 @@ impl InteractOptions {
     }
 }
 
-#[cfg(all(unix, not(feature = "async")))]
-fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatus, Error> {
+#[cfg(not(feature = "async"))]
+impl<R, W> InteractOptions<R, W>
+where
+    R: Read,
+    W: Write,
+{
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    #[cfg(all(unix, not(feature = "async")))]
+    pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
+        match self.input_from {
+            InputFrom::Terminal => interact_in_terminal(session, self),
+            InputFrom::Other => interact(session, self),
+        }
+    }
+
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    #[cfg(windows)]
+    pub fn interact(self, session: &mut Session) -> Result<(), Error> {
+        match self.input_from {
+            InputFrom::Terminal => interact_in_terminal(session, self),
+            InputFrom::Other => interact(session, self),
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<R, W> InteractOptions<R, W>
+where
+    R: futures_lite::AsyncRead + std::marker::Unpin,
+    W: Write,
+{
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
+        match self.input_from {
+            InputFrom::Terminal => interact_in_terminal(session, self).await,
+            InputFrom::Other => interact(session, self).await,
+        }
+    }
+}
+
+#[cfg(not(feature = "async"))]
+fn interact_in_terminal<R, W>(
+    session: &mut Session,
+    options: InteractOptions<R, W>,
+) -> Result<WaitStatus, Error>
+where
+    R: Read,
+    W: Write,
+{
     // flush buffers
     session.flush()?;
 
@@ -121,24 +183,13 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatu
     // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
     let isatty_terminal = isatty(STDIN_FILENO)?;
 
-    // it's crusial to make a DUP call here.
-    // If we don't actual stdin will be closed,
-    // And any interaction with it may cause errors.
-    //
-    // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
-    // Because for some reason it actually doesn't make the same things as DUP does,
-    // eventhough a research showed that it should.
-    // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-    let stdin_copy_fd = dup(STDIN_FILENO)?;
-    let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-
     if isatty_terminal {
         set_raw(STDIN_FILENO)?;
     }
 
     session.set_echo(true)?;
 
-    let result = _interact(session, stdin, options);
+    let result = interact(session, options);
 
     if isatty_terminal {
         // it's suppose to be always OK.
@@ -158,13 +209,14 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatu
 }
 
 #[cfg(all(unix, not(feature = "async")))]
-fn _interact(
+fn interact<R, W>(
     session: &mut Session,
-    stdin: File,
-    mut options: InteractOptions,
-) -> Result<WaitStatus, Error> {
-    let mut stdin_stream = Stream::new(stdin);
-
+    mut options: InteractOptions<R, W>,
+) -> Result<WaitStatus, Error>
+where
+    R: Read,
+    W: Write,
+{
     let options_has_input_checks = !options.handlers.is_empty();
     let mut buffer_for_check = if options_has_input_checks {
         Some(Vec::new())
@@ -186,14 +238,14 @@ fn _interact(
         match session.try_read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                io::stdout().write_all(&buf[..n])?;
-                io::stdout().flush()?;
+                options.output.write_all(&buf[..n])?;
+                options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
         }
 
-        match stdin_stream.try_read(&mut buf) {
+        match options.input.read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
                 let escape_char_position =
@@ -225,7 +277,16 @@ fn _interact(
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact(session: &mut Session, options: InteractOptions) -> Result<WaitStatus, Error> {
+async fn interact_in_terminal<R, W>(
+    session: &mut Session,
+    options: InteractOptions<R, W>,
+) -> Result<WaitStatus, Error>
+where
+    R: futures_lite::AsyncRead + std::marker::Unpin,
+    W: Write,
+{
+    use futures_lite::AsyncWriteExt;
+
     // flush buffers
     session.flush().await?;
 
@@ -238,24 +299,13 @@ async fn interact(session: &mut Session, options: InteractOptions) -> Result<Wai
     // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
     let isatty_terminal = isatty(STDIN_FILENO)?;
 
-    // it's crusial to make a DUP call here.
-    // If we don't actual stdin will be closed,
-    // And any interaction with it may cause errors.
-    //
-    // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
-    // Because for some reason it actually doesn't make the same things as DUP does,
-    // eventhough a research showed that it should.
-    // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-    let stdin_copy_fd = dup(STDIN_FILENO)?;
-    let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-
     if isatty_terminal {
         set_raw(STDIN_FILENO)?;
     }
 
     session.set_echo(true)?;
 
-    let result = _interact(session, stdin, options).await;
+    let result = interact(session, options).await;
 
     if isatty_terminal {
         // it's suppose to be always OK.
@@ -274,13 +324,17 @@ async fn interact(session: &mut Session, options: InteractOptions) -> Result<Wai
     result
 }
 
+// copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn _interact(
+async fn interact<R, W>(
     session: &mut Session,
-    stdin: File,
-    mut options: InteractOptions,
-) -> Result<WaitStatus, Error> {
-    let mut stdin_stream = Stream::new(stdin);
+    mut options: InteractOptions<R, W>,
+) -> Result<WaitStatus, Error>
+where
+    R: futures_lite::AsyncRead + std::marker::Unpin,
+    W: Write,
+{
+    use futures_lite::{AsyncReadExt, AsyncWriteExt};
 
     let options_has_input_checks = !options.handlers.is_empty();
     let mut buffer_for_check = if options_has_input_checks {
@@ -303,14 +357,14 @@ async fn _interact(
         match session.try_read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                io::stdout().write_all(&buf[..n])?;
-                io::stdout().flush()?;
+                options.output.write_all(&buf[..n])?;
+                options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
         }
 
-        match stdin_stream.try_read(&mut buf).await {
+        match options.input.read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
                 let escape_char_position =
@@ -341,7 +395,7 @@ async fn _interact(
 }
 
 #[cfg(windows)]
-fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error> {
+fn interact_in_terminal(session: &mut Session, options: InteractOptions) -> Result<(), Error> {
     // flush buffers
     session.flush()?;
 
@@ -356,61 +410,74 @@ fn interact(session: &mut Session, options: InteractOptions) -> Result<(), Error
 }
 
 #[cfg(windows)]
-fn _interact(
-    session: &mut Session,
-    console: &conpty::console::Console,
-    mut options: InteractOptions,
-) -> Result<(), Error> {
-    let mut buf = [0; 512];
+pub struct NonBlockingStdin {
+    current_terminal: Console,
+}
 
-    let options_has_input_checks = !options.handlers.is_empty();
-    let mut buffer_for_check = if options_has_input_checks {
-        Some(Vec::new())
-    } else {
-        None
-    };
+#[cfg(windows)]
+impl NonBlockingStdin {
+    fn new() -> Result<Self, Error> {
+        let console = conpty::console::Console::current()?;
+        Ok(Self {
+            current_terminal: console,
+        })
+    }
+}
 
-    loop {
-        if !session.is_alive() {
-            return Ok(());
-        }
-
-        match session.try_read(&mut buf) {
-            Ok(0) => return Ok(()),
-            Ok(n) => {
-                io::stdout().write_all(&buf[..n])?;
-                io::stdout().flush()?;
-            }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err.into()),
-        }
-
+#[cfg(windows)]
+impl Read for NonBlockingStdin {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // we can't easily read in non-blocking manner,
         // but we can check when there's something to read,
         // which seems to be enough to not block.
         if console.is_stdin_not_empty()? {
-            let n = io::stdin().read(&mut buf)?;
-            if n == 0 {
-                return Ok(());
-            }
-
-            let escape_char_position = buf[..n].iter().position(|c| *c == options.escape_character);
-            match escape_char_position {
-                Some(pos) => {
-                    session.write_all(&buf[..pos])?;
-                    return Ok(());
-                }
-                None => {
-                    session.write_all(&buf[..n])?;
-                }
-            }
-
-            // check callbacks
-            if options_has_input_checks {
-                let buffer_for_check = buffer_for_check.as_mut().unwrap();
-                buffer_for_check.extend_from_slice(&buf[..n]);
-                options.check_input(session, buffer_for_check)?;
-            }
+            io::stdin().read(&mut buf)
+        } else {
+            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
         }
+    }
+}
+
+#[cfg(unix)]
+pub struct NonBlockingStdin {
+    stream: Stream,
+}
+
+impl NonBlockingStdin {
+    fn new() -> Result<Self, Error> {
+        // it's crusial to make a DUP call here.
+        // If we don't actual stdin will be closed,
+        // And any interaction with it may cause errors.
+        //
+        // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
+        // Because for some reason it actually doesn't make the same things as DUP does,
+        // eventhough a research showed that it should.
+        // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
+        let stdin_copy_fd = dup(STDIN_FILENO)?;
+        let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
+        let stream = Stream::new(stdin);
+
+        Ok(Self { stream })
+    }
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+impl Read for NonBlockingStdin {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.stream.try_read(buf)
+    }
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+impl futures_lite::AsyncRead for NonBlockingStdin {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        use futures_lite::FutureExt;
+        Box::pin(self.stream.try_read(buf)).poll(cx)
     }
 }

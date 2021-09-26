@@ -392,14 +392,14 @@ impl Session {
     /// it echos the real `stdin` to the child `stdin`.
     #[cfg(unix)]
     pub fn interact(&mut self) -> Result<WaitStatus, Error> {
-        crate::interact::InteractOptions::default().interact(self)
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
 
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
     #[cfg(windows)]
     pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::default().interact(self)
+        crate::interact::InteractOptions::terminal().interact(self)
     }
 }
 
@@ -481,7 +481,7 @@ impl Session {
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
     pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-        crate::interact::InteractOptions::default()
+        crate::interact::InteractOptions::terminal()?
             .interact(self)
             .await
     }
