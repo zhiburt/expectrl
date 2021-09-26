@@ -542,7 +542,7 @@ impl Read for NonBlockingStdin {
         // but we can check when there's something to read,
         // which seems to be enough to not block.
         if self.current_terminal.is_stdin_not_empty()? {
-            io::stdin().read(&mut buf)
+            io::stdin().read(buf)
         } else {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
         }
