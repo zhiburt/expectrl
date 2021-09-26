@@ -127,7 +127,7 @@ where
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    #[cfg(all(unix, not(feature = "async")))]
+    #[cfg(unix)]
     pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
@@ -162,7 +162,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
+#[cfg(all(unix, not(feature = "async")))]
 fn interact_in_terminal<R, W>(
     session: &mut Session,
     options: InteractOptions<R, W>,
@@ -208,7 +208,7 @@ where
     result
 }
 
-#[cfg(all(unix, not(feature = "async")))]
+#[cfg(not(feature = "async"))]
 fn interact<R, W>(
     session: &mut Session,
     mut options: InteractOptions<R, W>,
@@ -409,7 +409,7 @@ where
     let console = conpty::console::Console::current()?;
     console.set_raw()?;
 
-    let r = _interact(session, &console, options);
+    let r = interact(session, options);
 
     console.reset()?;
 
@@ -482,7 +482,7 @@ impl Read for NonBlockingStdin {
         // we can't easily read in non-blocking manner,
         // but we can check when there's something to read,
         // which seems to be enough to not block.
-        if console.is_stdin_not_empty()? {
+        if self.current_terminal.is_stdin_not_empty()? {
             io::stdin().read(&mut buf)
         } else {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
