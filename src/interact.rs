@@ -453,7 +453,7 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buf[..pos])?;
-                        return Ok(status);
+                        return Ok(());
                     }
                     None => {
                         session.write_all(&buf[..n])?;
