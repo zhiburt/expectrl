@@ -23,6 +23,9 @@ use std::os::unix::prelude::FromRawFd;
 #[cfg(not(feature = "async"))]
 use std::io::Read;
 
+#[cfg(windows)]
+use conpty::console::Console;
+
 /// InteractOptions represents options of an interact session.
 pub struct InteractOptions<R, W> {
     input: R,
@@ -208,6 +211,7 @@ where
     result
 }
 
+#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn interact<R, W>(
     session: &mut Session,
@@ -414,6 +418,61 @@ where
     console.reset()?;
 
     r
+}
+
+#[cfg(windows)]
+fn interact<R, W>(session: &mut Session, mut options: InteractOptions<R, W>) -> Result<(), Error>
+where
+    R: Read,
+    W: Write,
+{
+    let options_has_input_checks = !options.handlers.is_empty();
+    let mut buffer_for_check = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
+
+    let mut buf = [0; 512];
+    loop {
+        match session.try_read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => {
+                options.output.write_all(&buf[..n])?;
+                options.output.flush()?;
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        match options.input.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => {
+                let escape_char_position =
+                    buf[..n].iter().position(|c| *c == options.escape_character);
+                match escape_char_position {
+                    Some(pos) => {
+                        session.write_all(&buf[..pos])?;
+                        return Ok(status);
+                    }
+                    None => {
+                        session.write_all(&buf[..n])?;
+                    }
+                }
+
+                // check callbacks
+                if options_has_input_checks {
+                    buffer_for_check
+                        .as_mut()
+                        .unwrap()
+                        .extend_from_slice(&buf[..n]);
+                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
 }
 
 #[cfg(unix)]

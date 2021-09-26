@@ -399,7 +399,7 @@ impl Session {
     /// human at the keyboard).
     #[cfg(windows)]
     pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::terminal().interact(self)
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
 }
 
