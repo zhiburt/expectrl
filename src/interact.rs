@@ -1,7 +1,7 @@
 //! This module contains a [InteractOptions] which allows a castomization of
 //! [crate::Session::interact] flow.
 
-use crate::{session::Session, ControlCode, Error, Found, Needle};
+use crate::{session::Session, ControlCode, Error};
 use std::{
     collections::HashMap,
     io::{self, Write},
@@ -90,6 +90,8 @@ impl<R, W> InteractOptions<R, W> {
 
     /// Puts a hanlder which will be called when input is seen in users input.
     ///
+    /// The matched bytes won't be send to process.
+    ///
     /// Be aware that currently async version doesn't take a Session as an argument.
     /// See https://github.com/zhiburt/expectrl/issues/16.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
@@ -105,20 +107,25 @@ impl<R, W> InteractOptions<R, W> {
         ControlCode::GroupSeparator.into() // Ctrl-]
     }
 
-    fn check_input(&mut self, session: &mut Session, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn check_input(&mut self, session: &mut Session, bytes: &[u8]) -> Result<Match, Error> {
         for (action, callback) in self.handlers.iter_mut() {
             let Action::Input(pattern) = action;
 
-            // reuse Needle code
-            let m = Needle::check(&pattern, bytes, false)?;
-            if !m.is_empty() {
-                let last_index_which_involved = Found::right_most_index(&m);
-                bytes.drain(..last_index_which_involved);
-                return (callback)(session);
+            if !pattern.is_empty() && !bytes.is_empty() {
+                match contains_in_bytes(bytes, pattern.as_bytes()) {
+                    Match::No => {}
+                    Match::MaybeLater => {
+                        return Ok(Match::MaybeLater);
+                    }
+                    Match::Yes(n) => {
+                        (callback)(session)?;
+                        return Ok(Match::Yes(n));
+                    }
+                }
             }
         }
 
-        Ok(())
+        Ok(Match::No)
     }
 }
 
@@ -222,7 +229,7 @@ where
     W: Write,
 {
     let options_has_input_checks = !options.handlers.is_empty();
-    let mut buffer_for_check = if options_has_input_checks {
+    let mut check_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
@@ -252,25 +259,38 @@ where
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
+                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&buf[..n]);
+                    loop {
+                        match options.check_input(session, check_buffer)? {
+                            Match::Yes(n) => {
+                                check_buffer.drain(..n);
+                                if check_buffer.is_empty() {
+                                    break vec![];
+                                }
+                            }
+                            Match::No => {
+                                let buffer = check_buffer.to_vec();
+                                check_buffer.clear();
+                                break buffer;
+                            }
+                            Match::MaybeLater => break vec![],
+                        }
+                    }
+                } else {
+                    buf[..n].to_vec()
+                };
+
                 let escape_char_position =
-                    buf[..n].iter().position(|c| *c == options.escape_character);
+                    buffer.iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
-                        session.write_all(&buf[..pos])?;
+                        session.write_all(&buffer[..pos])?;
                         return Ok(status);
                     }
                     None => {
-                        session.write_all(&buf[..n])?;
+                        session.write_all(&buffer[..])?;
                     }
-                }
-
-                // check callbacks
-                if options_has_input_checks {
-                    buffer_for_check
-                        .as_mut()
-                        .unwrap()
-                        .extend_from_slice(&buf[..n]);
-                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -371,25 +391,38 @@ where
         match options.input.read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
+                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&buf[..n]);
+                    loop {
+                        match options.check_input(session, check_buffer)? {
+                            Match::Yes(n) => {
+                                check_buffer.drain(..n);
+                                if check_buffer.is_empty() {
+                                    break vec![];
+                                }
+                            }
+                            Match::No => {
+                                let buffer = check_buffer.to_vec();
+                                check_buffer.clear();
+                                break buffer;
+                            }
+                            Match::MaybeLater => break vec![],
+                        }
+                    }
+                } else {
+                    buf[..n].to_vec()
+                };
+
                 let escape_char_position =
-                    buf[..n].iter().position(|c| *c == options.escape_character);
+                    buffer.iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
-                        session.write_all(&buf[..pos]).await?;
+                        session.write_all(&buffer[..pos])?;
                         return Ok(status);
                     }
                     None => {
-                        session.write_all(&buf[..n]).await?;
+                        session.write_all(&buffer[..n])?;
                     }
-                }
-
-                // check callbacks
-                if options_has_input_checks {
-                    buffer_for_check
-                        .as_mut()
-                        .unwrap()
-                        .extend_from_slice(&buf[..n]);
-                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -448,25 +481,38 @@ where
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
+                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&buf[..n]);
+                    loop {
+                        match options.check_input(session, check_buffer)? {
+                            Match::Yes(n) => {
+                                check_buffer.drain(..n);
+                                if check_buffer.is_empty() {
+                                    break vec![];
+                                }
+                            }
+                            Match::No => {
+                                let buffer = check_buffer.to_vec();
+                                check_buffer.clear();
+                                break buffer;
+                            }
+                            Match::MaybeLater => break vec![],
+                        }
+                    }
+                } else {
+                    buf[..n].to_vec()
+                };
+
                 let escape_char_position =
-                    buf[..n].iter().position(|c| *c == options.escape_character);
+                    buffer.iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
-                        session.write_all(&buf[..pos])?;
-                        return Ok(());
+                        session.write_all(&buffer[..pos])?;
+                        return Ok(status);
                     }
                     None => {
-                        session.write_all(&buf[..n])?;
+                        session.write_all(&buffer[..n])?;
                     }
-                }
-
-                // check callbacks
-                if options_has_input_checks {
-                    buffer_for_check
-                        .as_mut()
-                        .unwrap()
-                        .extend_from_slice(&buf[..n]);
-                    options.check_input(session, buffer_for_check.as_mut().unwrap())?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -546,5 +592,48 @@ impl Read for NonBlockingStdin {
         } else {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
         }
+    }
+}
+
+fn contains_in_bytes(haystack: &[u8], find: &[u8]) -> Match {
+    assert!(!find.is_empty() && !haystack.is_empty());
+
+    let len = haystack.len().min(find.len());
+    let mut i = 0;
+    while haystack[i..].len() >= len {
+        if haystack[i..i + len] == find[..len] {
+            return if len == find.len() {
+                Match::Yes(i + len)
+            } else {
+                Match::MaybeLater
+            };
+        }
+
+        i += 1;
+    }
+
+    Match::No
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Match {
+    Yes(usize),
+    No,
+    MaybeLater,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains_in_bytes_test() {
+        assert_eq!(contains_in_bytes(b"123", b"123"), Match::Yes(3));
+        assert_eq!(contains_in_bytes(b"12345", b"123"), Match::Yes(3));
+        assert_eq!(contains_in_bytes(b"1", b"123"), Match::MaybeLater);
+        assert_eq!(contains_in_bytes(b"12", b"123"), Match::MaybeLater);
+        assert_eq!(contains_in_bytes(b"4", b"123"), Match::No);
+        assert_eq!(contains_in_bytes(b"qwe", b"w"), Match::Yes(2));
+        assert_eq!(contains_in_bytes(b"qwe", b"j"), Match::No);
     }
 }

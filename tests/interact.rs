@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Cursor, Read},
+    io::{self, Cursor, Read, Write},
     time::{Duration, Instant},
 };
 
@@ -18,6 +18,39 @@ fn interact_callback() {
         });
 
     opts.interact(&mut session).unwrap();
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn interact_callbacks_with_stream_redirection() {
+    let commands = vec![
+        "NO_MATCHED\n".to_string(),
+        "QWE\n".to_string(),
+        "QW123\n".to_string(),
+        "NO_MATCHED_2\n".to_string(),
+    ];
+
+    let reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
+    let mut writer = io::Cursor::new(vec![0; 2048]);
+
+    let mut session = expectrl::spawn("cat").unwrap();
+    let opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
+        .unwrap()
+        .on_input("QWE", |session| {
+            session.send_line("Hello World")?;
+            Ok(())
+        });
+
+    opts.interact(&mut session).unwrap();
+
+    let buffer = String::from_utf8_lossy(writer.get_ref());
+    let buffer = buffer.trim_end_matches(char::from(0));
+
+    assert_eq!(
+        buffer,
+        "NO_MATCHED\r\nHello World\r\n\r\nQW123\r\nNO_MATCHED_2\r\n"
+    );
 }
 
 #[cfg(unix)]
@@ -60,6 +93,40 @@ fn interact_stream_redirection() {
 
         assert_eq!(buffer, "Hello World\r\nIt works :)\r\n");
     });
+}
+
+struct ListReaderWithDelayedEof {
+    lines: Vec<String>,
+    eof_timeout: Duration,
+    now: Option<Instant>,
+}
+
+impl ListReaderWithDelayedEof {
+    fn new(lines: Vec<String>, eof_timeout: Duration) -> Self {
+        Self {
+            lines,
+            eof_timeout,
+            now: None,
+        }
+    }
+}
+
+impl Read for ListReaderWithDelayedEof {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        if self.now.is_none() {
+            self.now = Some(Instant::now());
+        }
+
+        if !self.lines.is_empty() {
+            let line = self.lines.remove(0);
+            buf.write_all(line.as_bytes())?;
+            Ok(line.as_bytes().len())
+        } else if self.now.unwrap().elapsed() < self.eof_timeout {
+            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
+        } else {
+            Ok(0)
+        }
+    }
 }
 
 struct ReaderWithDelayEof<T> {
