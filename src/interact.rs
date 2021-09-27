@@ -361,7 +361,7 @@ where
     use futures_lite::{AsyncReadExt, AsyncWriteExt};
 
     let options_has_input_checks = !options.handlers.is_empty();
-    let mut buffer_for_check = if options_has_input_checks {
+    let mut check_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
@@ -417,11 +417,11 @@ where
                     buffer.iter().position(|c| *c == options.escape_character);
                 match escape_char_position {
                     Some(pos) => {
-                        session.write_all(&buffer[..pos])?;
+                        session.write_all(&buffer[..pos]).await?;
                         return Ok(status);
                     }
                     None => {
-                        session.write_all(&buffer[..n])?;
+                        session.write_all(&buffer[..n]).await?;
                     }
                 }
             }
@@ -460,7 +460,7 @@ where
     W: Write,
 {
     let options_has_input_checks = !options.handlers.is_empty();
-    let mut buffer_for_check = if options_has_input_checks {
+    let mut check_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
