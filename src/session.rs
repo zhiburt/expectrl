@@ -283,6 +283,72 @@ impl Session {
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
+    /// Is matched checks if a pattern is matched.
+    /// It doesn't consumes bytes from stream.
+    ///
+    /// Its strategy of matching is different from the one in [Session::expect].
+    /// It makes search agains all bytes available.
+    ///
+    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option,
+    /// Because it is not guaranteed that [Session::check] or [Session::expect]
+    /// with the same parameters:
+    ///  * will successed even right after [Session::is_matched] call.
+    ///  * will operate on the same bytes
+    ///
+    /// IMPORTANT:
+    /// 
+    /// If you call this method with Eof pattern be aware that 
+    /// eof indication MAY be lost on the next interactions.
+    /// It depends from a process you spawn.
+    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
+    /// 
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// // wait to guarantee that check will successed (most likely)
+    /// std::thread::sleep(std::time::Duration::from_secs(1));
+    /// let m = p.is_matched(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m, true);
+    /// ```
+    #[cfg(not(feature = "async"))]
+    pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+        let eof = self.stream.read_available()?;
+        let buf = self.stream.get_available();
+
+        let found = needle.check(buf, eof)?;
+        if !found.is_empty() {
+            return Ok(true)
+        }
+
+        if eof {
+            return Err(Error::Eof);
+        }
+
+
+        Ok(false)
+    }
+
+    /// Is matched checks if a pattern is matched.
+    /// It doesn't consumes bytes from stream.
+    ///
+    /// See sync version [Session::is_matched].
+    #[cfg(feature = "async")]
+    pub async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+        let eof = self.stream.read_available().await?;
+        let buf = self.stream.get_available();
+
+        let found = needle.check(buf, eof)?;
+        if !found.is_empty() {
+            return Ok(true)
+        }
+
+        if eof {
+            return Err(Error::Eof);
+        }
+
+
+        Ok(false)
+    }
+
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
