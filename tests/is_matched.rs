@@ -179,6 +179,7 @@ fn expect_after_is_matched_eof() {
     assert!(p.is_matched(Eof).unwrap());
     let m = p.expect(Eof).unwrap();
     assert_eq!(m.first(), b"AfterSleep\r\n");
+    assert!(matches!(p.expect("").unwrap_err(), expectrl::Error::Eof));
 }
 
 #[cfg(unix)]
@@ -191,5 +192,9 @@ fn expect_after_is_matched_eof() {
         assert!(p.is_matched(Eof).await.unwrap());
         let m = p.expect(Eof).await.unwrap();
         assert_eq!(m.first(), b"AfterSleep\r\n");
+        assert!(matches!(
+            p.expect("").await.unwrap_err(),
+            expectrl::Error::Eof
+        ));
     })
 }
