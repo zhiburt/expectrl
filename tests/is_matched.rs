@@ -7,7 +7,6 @@ use std::time::Duration;
 #[test]
 fn is_matched_str() {
     let mut session = spawn("cat").unwrap();
-    assert!(!session.is_matched("Hello World").unwrap());
     session.send_line("Hello World").unwrap();
     thread::sleep(Duration::from_millis(600));
     assert!(session.is_matched("Hello World").unwrap());
@@ -19,7 +18,6 @@ fn is_matched_str() {
 fn is_matched_str() {
     futures_lite::future::block_on(async {
         let mut session = spawn("cat").unwrap();
-        assert!(!session.is_matched("Hello World").await.unwrap());
         session.send_line("Hello World").await.unwrap();
         thread::sleep(Duration::from_millis(600));
         assert!(session.is_matched("Hello World").await.unwrap());
@@ -133,15 +131,15 @@ fn read_after_is_matched() {
     futures_lite::future::block_on(async {
         let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
-    
+
         thread::sleep(Duration::from_millis(600));
-    
+
         assert!(session.is_matched("Hello").await.unwrap());
-    
+
         // we stop process so read operation will end up with EOF.
         // other wise read call would block.
         session.exit(false).unwrap();
-    
+
         let mut buf = [0; 128];
         let n = session.read(&mut buf).await.unwrap();
         assert_eq!(&buf[..n], b"Hello World\r\n");

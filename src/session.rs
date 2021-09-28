@@ -296,12 +296,12 @@ impl Session {
     ///  * will operate on the same bytes
     ///
     /// IMPORTANT:
-    /// 
-    /// If you call this method with Eof pattern be aware that 
+    ///
+    /// If you call this method with Eof pattern be aware that
     /// eof indication MAY be lost on the next interactions.
     /// It depends from a process you spawn.
     /// So it might be better to use [Session::check] or [Session::expect] with Eof.
-    /// 
+    ///
     /// ```
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// // wait to guarantee that check will successed (most likely)
@@ -316,13 +316,12 @@ impl Session {
 
         let found = needle.check(buf, eof)?;
         if !found.is_empty() {
-            return Ok(true)
+            return Ok(true);
         }
 
         if eof {
             return Err(Error::Eof);
         }
-
 
         Ok(false)
     }
@@ -338,13 +337,12 @@ impl Session {
 
         let found = needle.check(buf, eof)?;
         if !found.is_empty() {
-            return Ok(true)
+            return Ok(true);
         }
 
         if eof {
             return Err(Error::Eof);
         }
-
 
         Ok(false)
     }
