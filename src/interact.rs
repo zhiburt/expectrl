@@ -32,7 +32,9 @@ pub struct InteractOptions<R, W> {
     output: W,
     input_from: InputFrom,
     escape_character: u8,
-    handlers: HashMap<Action, ActionFn>,
+    inpput_handlers: HashMap<String, ActionFn>,
+    output_handler: Option<OutputFn>,
+    idle_handler: Option<ActionFn>,
 }
 
 enum InputFrom {
@@ -42,10 +44,7 @@ enum InputFrom {
 
 type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Action {
-    Input(String),
-}
+type OutputFn = Box<dyn FnMut(&mut Session, &[u8]) -> Result<(), Error>>;
 
 impl InteractOptions<NonBlockingStdin, io::Stdout> {
     /// Constructs a interact options to interact via STDIN.
@@ -60,7 +59,9 @@ impl InteractOptions<NonBlockingStdin, io::Stdout> {
             output: io::stdout(),
             input_from: InputFrom::Terminal,
             escape_character: Self::default_escape_char(),
-            handlers: HashMap::new(),
+            inpput_handlers: HashMap::new(),
+            idle_handler: None,
+            output_handler: None,
         })
     }
 }
@@ -75,7 +76,9 @@ impl<R, W> InteractOptions<R, W> {
             output,
             input_from: InputFrom::Other,
             escape_character: Self::default_escape_char(),
-            handlers: HashMap::new(),
+            inpput_handlers: HashMap::new(),
+            idle_handler: None,
+            output_handler: None,
         })
     }
 }
@@ -98,8 +101,27 @@ impl<R, W> InteractOptions<R, W> {
     where
         F: FnMut(&mut Session) -> Result<(), Error> + 'static,
     {
-        self.handlers
-            .insert(Action::Input(input.into()), Box::new(f));
+        self.inpput_handlers.insert(input.into(), Box::new(f));
+        self
+    }
+
+    /// Puts a handler which will be called when process produced something in output.
+    #[cfg(not(feature = "async"))]
+    pub fn on_output<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&mut Session, &[u8]) -> Result<(), Error> + 'static,
+    {
+        self.output_handler = Some(Box::new(f));
+        self
+    }
+
+    /// Puts a handler which will be called on each interaction.
+    #[cfg(not(feature = "async"))]
+    pub fn on_idle<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&mut Session) -> Result<(), Error> + 'static,
+    {
+        self.idle_handler = Some(Box::new(f));
         self
     }
 
@@ -108,9 +130,7 @@ impl<R, W> InteractOptions<R, W> {
     }
 
     fn check_input(&mut self, session: &mut Session, bytes: &[u8]) -> Result<Match, Error> {
-        for (action, callback) in self.handlers.iter_mut() {
-            let Action::Input(pattern) = action;
-
+        for (pattern, callback) in self.inpput_handlers.iter_mut() {
             if !pattern.is_empty() && !bytes.is_empty() {
                 match contains_in_bytes(bytes, pattern.as_bytes()) {
                     Match::No => {}
@@ -228,8 +248,8 @@ where
     R: Read,
     W: Write,
 {
-    let options_has_input_checks = !options.handlers.is_empty();
-    let mut check_buffer = if options_has_input_checks {
+    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
@@ -242,13 +262,16 @@ where
             return Ok(status);
         }
 
-        // it prints STDIN input as well,
-        // by echoing it.
-        //
-        // the setting must be set before calling the function.
+        // In case of terminal
+        // it prints STDIN input by echoing it.
+        // The terminal must have been prepared before calling the function.
         match session.try_read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
+                if let Some(output_callback) = options.output_handler.as_mut() {
+                    (output_callback)(session, &buf[..n])?;
+                }
+
                 options.output.write_all(&buf[..n])?;
                 options.output.flush()?;
             }
@@ -259,7 +282,7 @@ where
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
+                let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
                     check_buffer.extend_from_slice(&buf[..n]);
                     loop {
                         match options.check_input(session, check_buffer)? {
@@ -295,6 +318,10 @@ where
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
+        }
+
+        if let Some(handler) = options.idle_handler.as_mut() {
+            (handler)(session)?;
         }
     }
 }

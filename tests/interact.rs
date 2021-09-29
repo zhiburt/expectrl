@@ -10,10 +10,22 @@ use std::{
 fn interact_callback() {
     let mut session = expectrl::spawn("cat").unwrap();
 
+    let mut output_buffer = Vec::new();
+
     let opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
         .on_input("123", |session| {
             session.send_line("Hello World")?;
+            Ok(())
+        })
+        .on_output(move |_, bytes| {
+            output_buffer.extend_from_slice(bytes);
+
+            while let Some(pos) = output_buffer.iter().position(|&b| b == b'\n') {
+                let line = output_buffer.drain(..=pos).collect::<Vec<u8>>();
+                println!("Line in output {:?}", String::from_utf8_lossy(&line));
+            }
+
             Ok(())
         });
 
