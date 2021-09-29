@@ -101,10 +101,7 @@ fn interact_filters() {
     let buffer = String::from_utf8_lossy(writer.get_ref());
     let buffer = buffer.trim_end_matches(char::from(0));
 
-    assert_eq!(
-        buffer,
-        "19\r\nYES\r\n"
-    );
+    assert_eq!(buffer, "19\r\nYES\r\n");
 }
 
 #[cfg(unix)]

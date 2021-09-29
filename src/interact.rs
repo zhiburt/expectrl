@@ -3,6 +3,7 @@
 
 use crate::{session::Session, ControlCode, Error};
 use std::{
+    borrow::Cow,
     collections::HashMap,
     io::{self, Write},
 };
@@ -48,7 +49,7 @@ type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
 
 type OutputFn = Box<dyn FnMut(&mut Session, &[u8]) -> Result<(), Error>>;
 
-type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Vec<u8>, Error>>;
+type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
 impl InteractOptions<NonBlockingStdin, io::Stdout> {
     /// Constructs a interact options to interact via STDIN.
@@ -106,7 +107,7 @@ impl<R, W> InteractOptions<R, W> {
     #[cfg(not(feature = "async"))]
     pub fn output_filter<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&[u8]) -> Result<Vec<u8>, Error> + 'static,
+        F: FnMut(&[u8]) -> Result<Cow<[u8]>, Error> + 'static,
     {
         self.output_filter = Some(Box::new(f));
         self
@@ -120,7 +121,7 @@ impl<R, W> InteractOptions<R, W> {
     #[cfg(not(feature = "async"))]
     pub fn input_filter<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&[u8]) -> Result<Vec<u8>, Error> + 'static,
+        F: FnMut(&[u8]) -> Result<Cow<[u8]>, Error> + 'static,
     {
         self.input_filter = Some(Box::new(f));
         self
@@ -304,22 +305,17 @@ where
             Ok(0) => return Ok(status),
             Ok(n) => {
                 let bytes = &buf[..n];
-                let filtered_buffer = if let Some(filter) = options.output_filter.as_mut() {
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
                     (filter)(bytes)?
                 } else {
-                    Vec::new()
-                };
-                let bytes = if options.output_filter.is_some() {
-                    &filtered_buffer
-                } else {
-                    bytes
+                    Cow::Borrowed(bytes)
                 };
 
                 if let Some(output_callback) = options.output_handler.as_mut() {
-                    (output_callback)(session, bytes)?;
+                    (output_callback)(session, &bytes)?;
                 }
 
-                options.output.write_all(bytes)?;
+                options.output.write_all(&bytes)?;
                 options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -330,19 +326,14 @@ where
             Ok(0) => return Ok(status),
             Ok(n) => {
                 let bytes = &buf[..n];
-                let filtered_buffer = if let Some(filter) = options.input_filter.as_mut() {
+                let bytes = if let Some(filter) = options.input_filter.as_mut() {
                     (filter)(bytes)?
                 } else {
-                    Vec::new()
-                };
-                let bytes = if options.input_filter.is_some() {
-                    &filtered_buffer
-                } else {
-                    bytes
+                    Cow::Borrowed(bytes)
                 };
 
                 let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
-                    check_buffer.extend_from_slice(bytes);
+                    check_buffer.extend_from_slice(&bytes);
                     loop {
                         match options.check_input(session, check_buffer)? {
                             Match::Yes(n) => {
