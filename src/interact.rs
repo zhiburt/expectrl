@@ -567,9 +567,8 @@ where
 
     let mut buf = [0; 512];
     loop {
-        let status = session.status()?;
-        if !matches!(status, WaitStatus::StillAlive) {
-            return Ok(status);
+        if !session.is_alive() {
+            return Ok(());
         }
 
         // In case of terminal
