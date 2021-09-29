@@ -437,8 +437,8 @@ where
 {
     use futures_lite::{AsyncReadExt, AsyncWriteExt};
 
-    let options_has_input_checks = !options.handlers.is_empty();
-    let mut check_buffer = if options_has_input_checks {
+    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
@@ -451,14 +451,24 @@ where
             return Ok(status);
         }
 
-        // it prints STDIN input as well,
-        // by echoing it.
-        //
-        // the setting must be set before calling the function.
+        // In case of terminal
+        // it prints STDIN input by echoing it.
+        // The terminal must have been prepared before calling the function.
         match session.try_read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                options.output.write_all(&buf[..n])?;
+                let bytes = &buf[..n];
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Cow::Borrowed(bytes)
+                };
+
+                if let Some(output_callback) = options.output_handler.as_mut() {
+                    (output_callback)(session, &bytes)?;
+                }
+
+                options.output.write_all(&bytes)?;
                 options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -468,8 +478,15 @@ where
         match options.input.read(&mut buf).await {
             Ok(0) => return Ok(status),
             Ok(n) => {
-                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
-                    check_buffer.extend_from_slice(&buf[..n]);
+                let bytes = &buf[..n];
+                let bytes = if let Some(filter) = options.input_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Cow::Borrowed(bytes)
+                };
+
+                let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&bytes);
                     loop {
                         match options.check_input(session, check_buffer)? {
                             Match::Yes(n) => {
@@ -487,7 +504,7 @@ where
                         }
                     }
                 } else {
-                    buf[..n].to_vec()
+                    bytes.to_vec()
                 };
 
                 let escape_char_position =
@@ -498,12 +515,16 @@ where
                         return Ok(status);
                     }
                     None => {
-                        session.write_all(&buffer[..n]).await?;
+                        session.write_all(&buffer[..]).await?;
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
+        }
+
+        if let Some(handler) = options.idle_handler.as_mut() {
+            (handler)(session)?;
         }
     }
 }
@@ -530,14 +551,15 @@ where
     r
 }
 
+// copy paste of unix version with changed return type
 #[cfg(windows)]
 fn interact<R, W>(session: &mut Session, mut options: InteractOptions<R, W>) -> Result<(), Error>
 where
     R: Read,
     W: Write,
 {
-    let options_has_input_checks = !options.handlers.is_empty();
-    let mut check_buffer = if options_has_input_checks {
+    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
@@ -545,10 +567,29 @@ where
 
     let mut buf = [0; 512];
     loop {
+        let status = session.status()?;
+        if !matches!(status, WaitStatus::StillAlive) {
+            return Ok(status);
+        }
+
+        // In case of terminal
+        // it prints STDIN input by echoing it.
+        // The terminal must have been prepared before calling the function.
         match session.try_read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
-                options.output.write_all(&buf[..n])?;
+                let bytes = &buf[..n];
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Cow::Borrowed(bytes)
+                };
+
+                if let Some(output_callback) = options.output_handler.as_mut() {
+                    (output_callback)(session, &bytes)?;
+                }
+
+                options.output.write_all(&bytes)?;
                 options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -558,8 +599,15 @@ where
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
-                let buffer = if let Some(check_buffer) = check_buffer.as_mut() {
-                    check_buffer.extend_from_slice(&buf[..n]);
+                let bytes = &buf[..n];
+                let bytes = if let Some(filter) = options.input_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Cow::Borrowed(bytes)
+                };
+
+                let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&bytes);
                     loop {
                         match options.check_input(session, check_buffer)? {
                             Match::Yes(n) => {
@@ -577,7 +625,7 @@ where
                         }
                     }
                 } else {
-                    buf[..n].to_vec()
+                    bytes.to_vec()
                 };
 
                 let escape_char_position =
@@ -585,15 +633,19 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buffer[..pos])?;
-                        return Ok(());
+                        return Ok(status);
                     }
                     None => {
-                        session.write_all(&buffer[..n])?;
+                        session.write_all(&buffer[..])?;
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
+        }
+
+        if let Some(handler) = options.idle_handler.as_mut() {
+            (handler)(session)?;
         }
     }
 }
