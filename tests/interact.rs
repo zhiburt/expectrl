@@ -68,6 +68,48 @@ fn interact_callbacks_with_stream_redirection() {
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
+fn interact_filters() {
+    let commands = "1009\nNO\n";
+
+    let reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
+    let mut writer = io::Cursor::new(vec![0; 2048]);
+
+    let mut session = expectrl::spawn("cat").unwrap();
+    let opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
+        .unwrap()
+        .input_filter(|buf| {
+            // ignore 0 chars
+            let v = buf.iter().filter(|&&b| b != b'0').copied().collect();
+            Ok(v)
+        })
+        .output_filter(|buf| {
+            // Make NO -> YES
+            let v = buf
+                .chunks(2)
+                .map(|s| match s {
+                    &[b'N', b'O'] => &[b'Y', b'E', b'S'],
+                    other => other,
+                })
+                .flatten()
+                .copied()
+                .collect();
+            Ok(v)
+        });
+
+    opts.interact(&mut session).unwrap();
+
+    let buffer = String::from_utf8_lossy(writer.get_ref());
+    let buffer = buffer.trim_end_matches(char::from(0));
+
+    assert_eq!(
+        buffer,
+        "19\r\nYES\r\n"
+    );
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
 fn interact_stream_redirection() {
     let commands = "Hello World\nIt works :)\n";
 

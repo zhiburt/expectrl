@@ -35,6 +35,8 @@ pub struct InteractOptions<R, W> {
     inpput_handlers: HashMap<String, ActionFn>,
     output_handler: Option<OutputFn>,
     idle_handler: Option<ActionFn>,
+    input_filter: Option<FilterFn>,
+    output_filter: Option<FilterFn>,
 }
 
 enum InputFrom {
@@ -45,6 +47,8 @@ enum InputFrom {
 type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
 
 type OutputFn = Box<dyn FnMut(&mut Session, &[u8]) -> Result<(), Error>>;
+
+type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Vec<u8>, Error>>;
 
 impl InteractOptions<NonBlockingStdin, io::Stdout> {
     /// Constructs a interact options to interact via STDIN.
@@ -62,6 +66,8 @@ impl InteractOptions<NonBlockingStdin, io::Stdout> {
             inpput_handlers: HashMap::new(),
             idle_handler: None,
             output_handler: None,
+            input_filter: None,
+            output_filter: None,
         })
     }
 }
@@ -79,6 +85,8 @@ impl<R, W> InteractOptions<R, W> {
             inpput_handlers: HashMap::new(),
             idle_handler: None,
             output_handler: None,
+            input_filter: None,
+            output_filter: None,
         })
     }
 }
@@ -88,6 +96,33 @@ impl<R, W> InteractOptions<R, W> {
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
         self.escape_character = c;
+        self
+    }
+
+    /// Sets the output filter.
+    /// The output_filter will be passed all the output from the child process.
+    ///
+    /// The filter is called BEFORE calling a on_output callback if it's set.
+    #[cfg(not(feature = "async"))]
+    pub fn output_filter<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&[u8]) -> Result<Vec<u8>, Error> + 'static,
+    {
+        self.output_filter = Some(Box::new(f));
+        self
+    }
+
+    /// Sets the input filter.
+    /// The input_filter will be passed all the keyboard input from the user.
+    ///
+    /// The input_filter is run BEFORE the check for the escape_character.
+    /// The filter is called BEFORE calling a on_input callback if it's set.
+    #[cfg(not(feature = "async"))]
+    pub fn input_filter<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&[u8]) -> Result<Vec<u8>, Error> + 'static,
+    {
+        self.input_filter = Some(Box::new(f));
         self
     }
 
@@ -268,11 +303,23 @@ where
         match session.try_read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
+                let bytes = &buf[..n];
+                let filtered_buffer = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Vec::new()
+                };
+                let bytes = if options.output_filter.is_some() {
+                    &filtered_buffer
+                } else {
+                    bytes
+                };
+
                 if let Some(output_callback) = options.output_handler.as_mut() {
-                    (output_callback)(session, &buf[..n])?;
+                    (output_callback)(session, bytes)?;
                 }
 
-                options.output.write_all(&buf[..n])?;
+                options.output.write_all(bytes)?;
                 options.output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -282,8 +329,20 @@ where
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(status),
             Ok(n) => {
+                let bytes = &buf[..n];
+                let filtered_buffer = if let Some(filter) = options.input_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Vec::new()
+                };
+                let bytes = if options.input_filter.is_some() {
+                    &filtered_buffer
+                } else {
+                    bytes
+                };
+
                 let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
-                    check_buffer.extend_from_slice(&buf[..n]);
+                    check_buffer.extend_from_slice(bytes);
                     loop {
                         match options.check_input(session, check_buffer)? {
                             Match::Yes(n) => {
@@ -301,7 +360,7 @@ where
                         }
                     }
                 } else {
-                    buf[..n].to_vec()
+                    bytes.to_vec()
                 };
 
                 let escape_char_position =
