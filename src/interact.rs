@@ -609,34 +609,40 @@ where
 
     let mut buf = [0; 512];
     loop {
-        if !session.is_alive() {
-            return Ok(());
-        }
-
-        // In case of terminal
-        // it prints STDIN input by echoing it.
-        // The terminal must have been prepared before calling the function.
-        match session.try_read(&mut buf) {
-            Ok(0) => return Ok(()),
-            Ok(n) => {
-                let bytes = &buf[..n];
-                let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                    (filter)(bytes)?
-                } else {
-                    Cow::Borrowed(bytes)
-                };
-
-                if let Some(output_callback) = options.output_handler.as_mut() {
-                    (output_callback)(session, &bytes)?;
-                }
-
-                options.output.write_all(&bytes)?;
-                options.output.flush()?;
+        if let Some(n) = session.read_available_once(&mut buf)? {
+            let eof = n == 0;
+            if eof {
+                return Ok(());
             }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err.into()),
+
+            if let Some(output_callback) = options.output_handler.as_mut() {
+                (output_callback)(session, options.context.as_mut(), n)?;
+            }
+
+            // We need to call a get get_available one more time because in output_callback user could use
+            // read methods and would change the state of the buffer.
+            //
+            // Yes, we will not print anything which would be read in the callback.
+            // todo: decide if this is the right behaiviour.
+            let bytes = session.get_available();
+            let bytes_len = bytes.len();
+
+            let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                (filter)(bytes)?
+            } else {
+                Cow::Borrowed(bytes)
+            };
+
+            options.output.write_all(&bytes)?;
+            options.output.flush()?;
+
+            session.consume_from_buffer(bytes_len);
         }
 
+        // We dont't print user input back to the screen.
+        // In terminal mode it will be ECHOed back automatically.
+        // This way we preserve terminal seetings for example when user inputs password.
+        // The terminal must have been prepared before.
         match options.input.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
@@ -686,7 +692,7 @@ where
         }
 
         if let Some(handler) = options.idle_handler.as_mut() {
-            (handler)(session)?;
+            (handler)(session, options.context.as_mut())?;
         }
     }
 }
