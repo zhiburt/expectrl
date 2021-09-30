@@ -96,6 +96,12 @@ impl<R, W> InteractOptions<R, W> {
 }
 
 impl<R, W, C> InteractOptions<R, W, C> {
+    /// Context sets a context variable which will be available in callback calls.
+    ///
+    /// Please beware that it cleans already set list of callbacks.
+    /// So you need to call this method BEFORE you specify callbacks.
+    ///
+    /// Default context type is a `()`.
     pub fn context<C1>(self, context: C1) -> InteractOptions<R, W, C1> {
         InteractOptions {
             context: Some(context),
@@ -111,10 +117,12 @@ impl<R, W, C> InteractOptions<R, W, C> {
         }
     }
 
+    /// Get a mut reference on context 
     pub fn get_context_mut(&mut self) -> Option<&mut C> {
         self.context.as_mut()
     }
 
+    /// Get a reference on context 
     pub fn get_context(&self) -> Option<&C> {
         self.context.as_ref()
     }
@@ -131,7 +139,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// Sets the output filter.
     /// The output_filter will be passed all the output from the child process.
     ///
-    /// The filter is called BEFORE calling a on_output callback if it's set.
+    /// The filter isn't applied to user's `read` calls in the [`Session::on_output`] callback.
     #[cfg(not(feature = "async"))]
     pub fn output_filter<F>(mut self, f: F) -> Self
     where
