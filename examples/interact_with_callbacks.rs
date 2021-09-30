@@ -3,9 +3,9 @@ fn main() {
     let mut session =
         expectrl::spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 
-    let opts = expectrl::interact::InteractOptions::terminal()
+    let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("HelloWorld!", |_| {
+        .on_input("HelloWorld!", |_, _| {
             print!("You typed a magic word...\r\n");
             Ok(())
         });

@@ -28,14 +28,15 @@ use std::io::Read;
 use conpty::console::Console;
 
 /// InteractOptions represents options of an interact session.
-pub struct InteractOptions<R, W> {
+pub struct InteractOptions<R, W, C = ()> {
     input: R,
     output: W,
     input_from: InputFrom,
     escape_character: u8,
-    inpput_handlers: HashMap<String, ActionFn>,
-    output_handler: Option<OutputFn>,
-    idle_handler: Option<ActionFn>,
+    inpput_handlers: HashMap<String, ActionFn<C>>,
+    output_handler: Option<OutputFn<C>>,
+    idle_handler: Option<ActionFn<C>>,
+    context: Option<C>,
     input_filter: Option<FilterFn>,
     output_filter: Option<FilterFn>,
 }
@@ -45,9 +46,9 @@ enum InputFrom {
     Other,
 }
 
-type ActionFn = Box<dyn FnMut(&mut Session) -> Result<(), Error>>;
+type ActionFn<C> = Box<dyn FnMut(&mut Session, Option<&mut C>) -> Result<(), Error>>;
 
-type OutputFn = Box<dyn FnMut(&mut Session, &[u8]) -> Result<(), Error>>;
+type OutputFn<C> = Box<dyn FnMut(&mut Session, &[u8], Option<&mut C>) -> Result<(), Error>>;
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
@@ -67,6 +68,7 @@ impl InteractOptions<NonBlockingStdin, io::Stdout> {
             inpput_handlers: HashMap::new(),
             idle_handler: None,
             output_handler: None,
+            context: None,
             input_filter: None,
             output_filter: None,
         })
@@ -86,13 +88,39 @@ impl<R, W> InteractOptions<R, W> {
             inpput_handlers: HashMap::new(),
             idle_handler: None,
             output_handler: None,
+            context: None,
             input_filter: None,
             output_filter: None,
         })
     }
 }
 
-impl<R, W> InteractOptions<R, W> {
+impl<R, W, C> InteractOptions<R, W, C> {
+    pub fn context<C1>(self, context: C1) -> InteractOptions<R, W, C1> {
+        InteractOptions {
+            context: Some(context),
+            escape_character: self.escape_character,
+            idle_handler: None,
+            inpput_handlers: HashMap::new(),
+            input: self.input,
+            input_filter: self.input_filter,
+            input_from: self.input_from,
+            output: self.output,
+            output_filter: self.output_filter,
+            output_handler: None,
+        }
+    }
+
+    pub fn get_context_mut(&mut self) -> Option<&mut C> {
+        self.context.as_mut()
+    }
+
+    pub fn get_context(&self) -> Option<&C> {
+        self.context.as_ref()
+    }
+}
+
+impl<R, W, C> InteractOptions<R, W, C> {
     /// Sets an escape character after seen which the interact interactions will be stopped
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
@@ -135,7 +163,7 @@ impl<R, W> InteractOptions<R, W> {
     /// See https://github.com/zhiburt/expectrl/issues/16.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
-        F: FnMut(&mut Session) -> Result<(), Error> + 'static,
+        F: FnMut(&mut Session, Option<&mut C>) -> Result<(), Error> + 'static,
     {
         self.inpput_handlers.insert(input.into(), Box::new(f));
         self
@@ -145,7 +173,7 @@ impl<R, W> InteractOptions<R, W> {
     #[cfg(not(feature = "async"))]
     pub fn on_output<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&mut Session, &[u8]) -> Result<(), Error> + 'static,
+        F: FnMut(&mut Session, &[u8], Option<&mut C>) -> Result<(), Error> + 'static,
     {
         self.output_handler = Some(Box::new(f));
         self
@@ -155,7 +183,7 @@ impl<R, W> InteractOptions<R, W> {
     #[cfg(not(feature = "async"))]
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&mut Session) -> Result<(), Error> + 'static,
+        F: FnMut(&mut Session, Option<&mut C>) -> Result<(), Error> + 'static,
     {
         self.idle_handler = Some(Box::new(f));
         self
@@ -174,7 +202,7 @@ impl<R, W> InteractOptions<R, W> {
                         return Ok(Match::MaybeLater);
                     }
                     Match::Yes(n) => {
-                        (callback)(session)?;
+                        (callback)(session, self.context.as_mut())?;
                         return Ok(Match::Yes(n));
                     }
                 }
@@ -186,7 +214,7 @@ impl<R, W> InteractOptions<R, W> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<R, W> InteractOptions<R, W>
+impl<R, W, C> InteractOptions<R, W, C>
 where
     R: Read,
     W: Write,
@@ -194,7 +222,7 @@ where
     /// Runs interact interactively.
     /// See [Session::interact]
     #[cfg(unix)]
-    pub fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
+    pub fn interact(&mut self, session: &mut Session) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
             InputFrom::Other => interact(session, self),
@@ -229,9 +257,9 @@ where
 }
 
 #[cfg(all(unix, not(feature = "async")))]
-fn interact_in_terminal<R, W>(
+fn interact_in_terminal<R, W, C>(
     session: &mut Session,
-    options: InteractOptions<R, W>,
+    options: &mut InteractOptions<R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: Read,
@@ -276,9 +304,9 @@ where
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
-fn interact<R, W>(
+fn interact<R, W, C>(
     session: &mut Session,
-    mut options: InteractOptions<R, W>,
+    options: &mut InteractOptions<R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: Read,
@@ -312,7 +340,7 @@ where
                 };
 
                 if let Some(output_callback) = options.output_handler.as_mut() {
-                    (output_callback)(session, &bytes)?;
+                    (output_callback)(session, &bytes, options.context.as_mut())?;
                 }
 
                 options.output.write_all(&bytes)?;
@@ -371,7 +399,7 @@ where
         }
 
         if let Some(handler) = options.idle_handler.as_mut() {
-            (handler)(session)?;
+            (handler)(session, options.context.as_mut())?;
         }
     }
 }
