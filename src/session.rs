@@ -180,7 +180,7 @@ impl Session {
                 // We could read all data available via `read_available` to reduce IO operations,
                 // but in such case we would need to keep a EOF indicator internally in stream,
                 // which is OK if EOF happens onces, but I am not sure if this is a case.
-                eof = self.stream.read_available_once(&mut [0; 1])?;
+                eof = self.stream.read_available_once(&mut [0; 1])? == Some(0);
                 available = self.stream.get_available();
             }
 
@@ -464,6 +464,20 @@ impl Session {
     #[cfg(windows)]
     pub fn interact(&mut self) -> Result<(), Error> {
         crate::interact::InteractOptions::terminal()?.interact(self)
+    }
+
+    pub(crate) fn read_available_once(&mut self, buf: &mut [u8]) -> Result<Option<usize>, Error> {
+        self.stream
+            .read_available_once(buf)
+            .map_err(|err| err.into())
+    }
+
+    pub(crate) fn get_available(&mut self) -> &[u8] {
+        self.stream.get_available()
+    }
+
+    pub(crate) fn consume_from_buffer(&mut self, n: usize) {
+        self.stream.consume_from_buffer(n);
     }
 }
 

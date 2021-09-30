@@ -10,23 +10,20 @@ use std::{
 fn interact_callback() {
     let mut session = expectrl::spawn("cat").unwrap();
 
-    let mut output_buffer = Vec::new();
-
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
         .on_input("123", |session, _| {
             session.send_line("Hello World")?;
             Ok(())
         })
-        .on_output(move |_, bytes, _| {
-            output_buffer.extend_from_slice(bytes);
-
-            while let Some(pos) = output_buffer.iter().position(|&b| b == b'\n') {
-                let line = output_buffer.drain(..=pos).collect::<Vec<u8>>();
-                println!("Line in output {:?}", String::from_utf8_lossy(&line));
-            }
-
-            Ok(())
+        .on_output(|session, _, _| {
+            // Check will consume buffer and these bytes wont appear in the output.
+            session.check(b'\n').map(|f| {
+                if !f.is_empty() {
+                    let line = f.before();
+                    println!("Line in output {:?}", String::from_utf8_lossy(line));
+                }
+            })
         });
 
     opts.interact(&mut session).unwrap();
@@ -127,7 +124,7 @@ fn interact_context() {
             session.send_line("123")?;
             Ok(())
         })
-        .on_output(|_, _, ctx| {
+        .on_output(|_, ctx, _| {
             let ctx = ctx.unwrap();
             ctx.1 += 1;
             Ok(())
