@@ -582,9 +582,9 @@ where
 }
 
 #[cfg(windows)]
-fn interact_in_terminal<R, W>(
+fn interact_in_terminal<R, W, C>(
     session: &mut Session,
-    options: InteractOptions<R, W>,
+    options: InteractOptions<R, W, C>,
 ) -> Result<(), Error>
 where
     R: Read,
@@ -605,7 +605,10 @@ where
 
 // copy paste of unix version with changed return type
 #[cfg(windows)]
-fn interact<R, W>(session: &mut Session, mut options: InteractOptions<R, W>) -> Result<(), Error>
+fn interact<R, W, C>(
+    session: &mut Session,
+    mut options: InteractOptions<R, W, C>,
+) -> Result<(), Error>
 where
     R: Read,
     W: Write,
