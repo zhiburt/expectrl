@@ -278,14 +278,17 @@ mod unix {
                 }
             }
 
-            pub async fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<bool> {
+            pub async fn read_available_once(
+                &mut self,
+                buf: &mut [u8],
+            ) -> std::io::Result<Option<usize>> {
                 match self.try_read_inner(buf).await {
-                    Ok(0) => Ok(true),
+                    Ok(0) => Ok(Some(0)),
                     Ok(n) => {
                         self.keep_in_buffer(&buf[..n]);
-                        Ok(false)
+                        Ok(Some(n))
                     }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(false),
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
                     Err(err) => Err(err),
                 }
             }
