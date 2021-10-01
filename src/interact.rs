@@ -535,12 +535,14 @@ where
 {
     use futures_lite::{AsyncReadExt, AsyncWriteExt};
 
-    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let options_has_input_checks = !options.input_handlers.is_empty();
     let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
     };
+
+    let mut output_buffer = Vec::new();
 
     let mut buf = [0; 512];
     loop {
@@ -549,34 +551,28 @@ where
             return Ok(status);
         }
 
-        if let Some(n) = session.read_available_once(&mut buf).await? {
-            let eof = n == 0;
-            if eof {
-                return Ok(status);
+        match session.try_read(&mut buf).await {
+            Ok(n) => {
+                let eof = n == 0;
+
+                output_buffer.extend_from_slice(&buf[..n]);
+                options.check_output(session, &mut output_buffer, eof)?;
+
+                if n == 0 {
+                    return Ok(status);
+                }
+
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(&buf[..n])?
+                } else {
+                    Cow::Borrowed(&buf[..n])
+                };
+
+                options.output.write_all(&bytes)?;
+                options.output.flush()?;
             }
-
-            if let Some(output_callback) = options.output_handler.as_mut() {
-                (output_callback)(session, options.context.as_mut(), n)?;
-            }
-
-            // We need to call a get get_available one more time because in output_callback user could use
-            // read methods and would change the state of the buffer.
-            //
-            // Yes, we will not print anything which would be read in the callback.
-            // todo: decide if this is the right behaiviour.
-            let bytes = session.get_available();
-            let bytes_len = bytes.len();
-
-            let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                (filter)(bytes)?
-            } else {
-                Cow::Borrowed(bytes)
-            };
-
-            options.output.write_all(&bytes)?;
-            options.output.flush()?;
-
-            session.consume_from_buffer(bytes_len);
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
         }
 
         // We dont't print user input back to the screen.
@@ -584,7 +580,9 @@ where
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
         match options.input.read(&mut buf).await {
-            Ok(0) => return Ok(status),
+            Ok(0) => {
+                return Ok(status);
+            }
             Ok(n) => {
                 let bytes = &buf[..n];
                 let bytes = if let Some(filter) = options.input_filter.as_mut() {
@@ -631,9 +629,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        if let Some(handler) = options.idle_handler.as_mut() {
-            (handler)(session, options.context.as_mut())?;
-        }
+        options.call_idle_handler(session)?;
     }
 }
 
@@ -669,43 +665,44 @@ where
     R: Read,
     W: Write,
 {
-    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let options_has_input_checks = !options.input_handlers.is_empty();
     let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
     };
 
+    let mut output_buffer = Vec::new();
+
     let mut buf = [0; 512];
     loop {
-        if let Some(n) = session.read_available_once(&mut buf)? {
-            let eof = n == 0;
-            if eof {
-                return Ok(());
+        let status = session.status()?;
+        if !matches!(status, WaitStatus::StillAlive) {
+            return Ok(());
+        }
+
+        match session.try_read(&mut buf) {
+            Ok(n) => {
+                let eof = n == 0;
+
+                output_buffer.extend_from_slice(&buf[..n]);
+                options.check_output(session, &mut output_buffer, eof)?;
+
+                if n == 0 {
+                    return Ok(());
+                }
+
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(&buf[..n])?
+                } else {
+                    Cow::Borrowed(&buf[..n])
+                };
+
+                options.output.write_all(&bytes)?;
+                options.output.flush()?;
             }
-
-            if let Some(output_callback) = options.output_handler.as_mut() {
-                (output_callback)(session, options.context.as_mut(), n)?;
-            }
-
-            // We need to call a get get_available one more time because in output_callback user could use
-            // read methods and would change the state of the buffer.
-            //
-            // Yes, we will not print anything which would be read in the callback.
-            // todo: decide if this is the right behaiviour.
-            let bytes = session.get_available();
-            let bytes_len = bytes.len();
-
-            let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                (filter)(bytes)?
-            } else {
-                Cow::Borrowed(bytes)
-            };
-
-            options.output.write_all(&bytes)?;
-            options.output.flush()?;
-
-            session.consume_from_buffer(bytes_len);
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
         }
 
         // We dont't print user input back to the screen.
@@ -713,7 +710,9 @@ where
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
         match options.input.read(&mut buf) {
-            Ok(0) => return Ok(()),
+            Ok(0) => {
+                return Ok(());
+            }
             Ok(n) => {
                 let bytes = &buf[..n];
                 let bytes = if let Some(filter) = options.input_filter.as_mut() {
@@ -760,9 +759,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        if let Some(handler) = options.idle_handler.as_mut() {
-            (handler)(session, options.context.as_mut())?;
-        }
+        options.call_idle_handler(session)?;
     }
 }
 
