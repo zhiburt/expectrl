@@ -676,11 +676,6 @@ where
 
     let mut buf = [0; 512];
     loop {
-        let status = session.status()?;
-        if !matches!(status, WaitStatus::StillAlive) {
-            return Ok(());
-        }
-
         match session.try_read(&mut buf) {
             Ok(n) => {
                 let eof = n == 0;
