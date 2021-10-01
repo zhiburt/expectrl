@@ -12,18 +12,15 @@ fn interact_callback() {
 
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("123", |session, _| {
+        .on_input("123", |session, _, _, _| {
             session.send_line("Hello World")?;
             Ok(())
         })
-        .on_output(|session, _, _| {
+        .on_output(b'\n', |_, _, _, _, f| {
             // Check will consume buffer and these bytes wont appear in the output.
-            session.check(b'\n').map(|f| {
-                if !f.is_empty() {
-                    let line = f.before();
-                    println!("Line in output {:?}", String::from_utf8_lossy(line));
-                }
-            })
+            let line = f.before();
+            println!("Line in output {:?}", String::from_utf8_lossy(line));
+            Ok(())
         });
 
     opts.interact(&mut session).unwrap();
@@ -46,12 +43,14 @@ fn interact_callbacks_with_stream_redirection() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .on_input("QWE", |session, _| {
+        .on_input("QWE", |session, _, _, _| {
             session.send_line("Hello World")?;
             Ok(())
         });
 
     opts.interact(&mut session).unwrap();
+
+    drop(opts);
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
     let buffer = buffer.trim_end_matches(char::from(0));
@@ -95,6 +94,8 @@ fn interact_filters() {
 
     opts.interact(&mut session).unwrap();
 
+    drop(opts);
+
     let buffer = String::from_utf8_lossy(writer.get_ref());
     let buffer = buffer.trim_end_matches(char::from(0));
 
@@ -118,13 +119,13 @@ fn interact_context() {
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
         .context((0, 0))
-        .on_input("QWE\n", |session, ctx| {
+        .on_input("QWE\n", |session, _, _, ctx| {
             let ctx = ctx.unwrap();
             ctx.0 += 1;
             session.send_line("123")?;
             Ok(())
         })
-        .on_output(|_, ctx, _| {
+        .on_output(expectrl::NBytes(1), |_, _, _, ctx, _| {
             let ctx = ctx.unwrap();
             ctx.1 += 1;
             Ok(())
@@ -133,13 +134,69 @@ fn interact_context() {
     opts.interact(&mut session).unwrap();
 
     assert_eq!(opts.get_context().map(|(a, _)| a), Some(&3));
-    assert!(opts.get_context().map(|(_, b)| *b).unwrap() > 0);
+    assert_eq!(opts.get_context().map(|(_, b)| b), Some(&15));
 
     drop(opts);
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
     let buffer = buffer.trim_end_matches(char::from(0));
     assert_eq!(buffer, "123\r\n123\r\n123\r\n");
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn interact_on_output_not_matched() {
+    // Stops interact mode after 123 being read.
+    // Which may cause it to stay buffered in session.
+    // Verify this buffer was cleaned and 123 won't be accessed then.
+
+    let commands = vec![
+        "QWE\n".to_string(),
+        "123\n".to_string(),
+        String::from_utf8_lossy(&[29]).to_string(),
+        "WWW\n".to_string(),
+    ];
+
+    let reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
+    let mut writer = io::Cursor::new(vec![0; 2048]);
+
+    let mut session = expectrl::spawn("cat").unwrap();
+    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
+        .unwrap()
+        .context((0, 0))
+        .on_input("WWW\n", |_, _, _, ctx| {
+            let ctx = ctx.unwrap();
+            ctx.1 += 1;
+            Ok(())
+        })
+        .on_input("QWE\n", |_, _, _, ctx| {
+            let ctx = ctx.unwrap();
+            ctx.0 += 1;
+            Ok(())
+        })
+        .on_output("NOT_FOUND_IN_THE_OUTPUT", |_, _, _, _, _| Ok(()))
+        .on_idle(|_, _, _, _| {
+            std::thread::sleep(Duration::from_millis(1000));
+            Ok(())
+        });
+
+    opts.interact(&mut session).unwrap();
+
+    assert_eq!(opts.get_context().map(|(a, _)| a), Some(&1));
+    assert_eq!(opts.get_context().map(|(_, b)| b), Some(&0));
+
+    drop(opts);
+
+    let buffer = String::from_utf8_lossy(writer.get_ref());
+    let buffer = buffer.trim_end_matches(char::from(0));
+    assert_eq!(buffer, "123\r\n");
+
+    session.send_line("WWW").unwrap();
+
+    let m = session.expect("WWW\r\n").unwrap();
+    assert_ne!(m.before(), b"123\r\n");
+    assert_eq!(m.before(), b"");
 }
 
 #[cfg(unix)]
@@ -155,6 +212,8 @@ fn interact_stream_redirection() {
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer).unwrap();
 
     opts.interact(&mut session).unwrap();
+
+    drop(opts);
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
     let buffer = buffer.trim_end_matches(char::from(0));

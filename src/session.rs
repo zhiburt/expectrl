@@ -465,20 +465,6 @@ impl Session {
     pub fn interact(&mut self) -> Result<(), Error> {
         crate::interact::InteractOptions::terminal()?.interact(self)
     }
-
-    pub(crate) fn read_available_once(&mut self, buf: &mut [u8]) -> Result<Option<usize>, Error> {
-        self.stream
-            .read_available_once(buf)
-            .map_err(|err| err.into())
-    }
-
-    pub(crate) fn get_available(&mut self) -> &[u8] {
-        self.stream.get_available()
-    }
-
-    pub(crate) fn consume_from_buffer(&mut self, n: usize) {
-        self.stream.consume_from_buffer(n);
-    }
 }
 
 #[cfg(all(feature = "async", not(windows)))]
@@ -743,7 +729,7 @@ pub struct Found {
 
 impl Found {
     /// New returns an instance of Found.
-    fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
+    pub(crate) fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
         Self { buf, matches }
     }
 

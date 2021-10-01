@@ -33,9 +33,10 @@ pub struct InteractOptions<R, W, C = ()> {
     output: W,
     input_from: InputFrom,
     escape_character: u8,
-    inpput_handlers: HashMap<String, ActionFn<C>>,
-    output_handler: Option<OutputFn<C>>,
-    idle_handler: Option<ActionFn<C>>,
+    input_handlers: HashMap<String, ActionFn<C, R, W>>,
+    #[allow(clippy::type_complexity)]
+    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<C, R, W>)>,
+    idle_handler: Option<ActionFn<C, R, W>>,
     context: Option<C>,
     input_filter: Option<FilterFn>,
     output_filter: Option<FilterFn>,
@@ -46,9 +47,11 @@ enum InputFrom {
     Other,
 }
 
-type ActionFn<C> = Box<dyn FnMut(&mut Session, Option<&mut C>) -> Result<(), Error>>;
+type ActionFn<C, R, W> =
+    Box<dyn FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error>>;
 
-type OutputFn<C> = Box<dyn FnMut(&mut Session, Option<&mut C>, usize) -> Result<(), Error>>;
+type OutputFn<C, R, W> =
+    Box<dyn FnMut(&mut Session, &mut R, &mut W, Option<&mut C>, crate::Found) -> Result<(), Error>>;
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
@@ -65,12 +68,12 @@ impl InteractOptions<NonBlockingStdin, io::Stdout> {
             output: io::stdout(),
             input_from: InputFrom::Terminal,
             escape_character: Self::default_escape_char(),
-            inpput_handlers: HashMap::new(),
-            idle_handler: None,
-            output_handler: None,
-            context: None,
             input_filter: None,
             output_filter: None,
+            idle_handler: None,
+            input_handlers: HashMap::new(),
+            output_handlers: Vec::new(),
+            context: None,
         })
     }
 }
@@ -85,9 +88,9 @@ impl<R, W> InteractOptions<R, W> {
             output,
             input_from: InputFrom::Other,
             escape_character: Self::default_escape_char(),
-            inpput_handlers: HashMap::new(),
             idle_handler: None,
-            output_handler: None,
+            input_handlers: HashMap::new(),
+            output_handlers: Vec::new(),
             context: None,
             input_filter: None,
             output_filter: None,
@@ -106,23 +109,23 @@ impl<R, W, C> InteractOptions<R, W, C> {
         InteractOptions {
             context: Some(context),
             escape_character: self.escape_character,
-            idle_handler: None,
-            inpput_handlers: HashMap::new(),
             input: self.input,
             input_filter: self.input_filter,
             input_from: self.input_from,
             output: self.output,
             output_filter: self.output_filter,
-            output_handler: None,
+            idle_handler: None,
+            input_handlers: HashMap::new(),
+            output_handlers: Vec::new(),
         }
     }
 
-    /// Get a mut reference on context 
+    /// Get a mut reference on context
     pub fn get_context_mut(&mut self) -> Option<&mut C> {
         self.context.as_mut()
     }
 
-    /// Get a reference on context 
+    /// Get a reference on context
     pub fn get_context(&self) -> Option<&C> {
         self.context.as_ref()
     }
@@ -171,9 +174,9 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// See https://github.com/zhiburt/expectrl/issues/16.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
-        F: FnMut(&mut Session, Option<&mut C>) -> Result<(), Error> + 'static,
+        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error> + 'static,
     {
-        self.inpput_handlers.insert(input.into(), Box::new(f));
+        self.input_handlers.insert(input.into(), Box::new(f));
         self
     }
 
@@ -183,11 +186,13 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// Please be aware that your use of [Session::expect], [Session::check] and any `read` operation on session
     /// will cause the read bytes not to apeard in the output stream!
     #[cfg(not(feature = "async"))]
-    pub fn on_output<F>(mut self, f: F) -> Self
+    pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
-        F: FnMut(&mut Session, Option<&mut C>, usize) -> Result<(), Error> + 'static,
+        N: crate::Needle + 'static,
+        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>, crate::Found) -> Result<(), Error>
+            + 'static,
     {
-        self.output_handler = Some(Box::new(f));
+        self.output_handlers.push((Box::new(needle), Box::new(f)));
         self
     }
 
@@ -195,7 +200,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     #[cfg(not(feature = "async"))]
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&mut Session, Option<&mut C>) -> Result<(), Error> + 'static,
+        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error> + 'static,
     {
         self.idle_handler = Some(Box::new(f));
         self
@@ -206,7 +211,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     }
 
     fn check_input(&mut self, session: &mut Session, bytes: &[u8]) -> Result<Match, Error> {
-        for (pattern, callback) in self.inpput_handlers.iter_mut() {
+        for (pattern, callback) in self.input_handlers.iter_mut() {
             if !pattern.is_empty() && !bytes.is_empty() {
                 match contains_in_bytes(bytes, pattern.as_bytes()) {
                     Match::No => {}
@@ -214,7 +219,12 @@ impl<R, W, C> InteractOptions<R, W, C> {
                         return Ok(Match::MaybeLater);
                     }
                     Match::Yes(n) => {
-                        (callback)(session, self.context.as_mut())?;
+                        (callback)(
+                            session,
+                            &mut self.input,
+                            &mut self.output,
+                            self.context.as_mut(),
+                        )?;
                         return Ok(Match::Yes(n));
                     }
                 }
@@ -222,6 +232,48 @@ impl<R, W, C> InteractOptions<R, W, C> {
         }
 
         Ok(Match::No)
+    }
+
+    fn check_output(
+        &mut self,
+        session: &mut Session,
+        buf: &mut Vec<u8>,
+        eof: bool,
+    ) -> Result<(), Error> {
+        'checks: loop {
+            for (search, callback) in self.output_handlers.iter_mut() {
+                let found = search.check(buf, eof)?;
+                if !found.is_empty() {
+                    let end_index = crate::Found::right_most_index(&found);
+                    let involved_bytes = buf[..end_index].to_vec();
+                    let found = crate::Found::new(involved_bytes, found);
+                    buf.drain(..end_index);
+                    (callback)(
+                        session,
+                        &mut self.input,
+                        &mut self.output,
+                        self.context.as_mut(),
+                        found,
+                    )?;
+                    continue 'checks;
+                }
+            }
+
+            return Ok(());
+        }
+    }
+
+    fn call_idle_handler(&mut self, session: &mut Session) -> Result<(), Error> {
+        if let Some(callback) = self.idle_handler.as_mut() {
+            (callback)(
+                session,
+                &mut self.input,
+                &mut self.output,
+                self.context.as_mut(),
+            )?;
+        }
+
+        Ok(())
     }
 }
 
@@ -324,12 +376,14 @@ where
     R: Read,
     W: Write,
 {
-    let options_has_input_checks = !options.inpput_handlers.is_empty();
+    let options_has_input_checks = !options.input_handlers.is_empty();
     let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
     };
+
+    let mut output_buffer = Vec::new();
 
     let mut buf = [0; 512];
     loop {
@@ -338,34 +392,28 @@ where
             return Ok(status);
         }
 
-        if let Some(n) = session.read_available_once(&mut buf)? {
-            let eof = n == 0;
-            if eof {
-                return Ok(status);
+        match session.try_read(&mut buf) {
+            Ok(n) => {
+                let eof = n == 0;
+
+                output_buffer.extend_from_slice(&buf[..n]);
+                options.check_output(session, &mut output_buffer, eof)?;
+
+                if n == 0 {
+                    return Ok(status);
+                }
+
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(&buf[..n])?
+                } else {
+                    Cow::Borrowed(&buf[..n])
+                };
+
+                options.output.write_all(&bytes)?;
+                options.output.flush()?;
             }
-
-            if let Some(output_callback) = options.output_handler.as_mut() {
-                (output_callback)(session, options.context.as_mut(), n)?;
-            }
-
-            // We need to call a get get_available one more time because in output_callback user could use
-            // read methods and would change the state of the buffer.
-            //
-            // Yes, we will not print anything which would be read in the callback.
-            // todo: decide if this is the right behaiviour.
-            let bytes = session.get_available();
-            let bytes_len = bytes.len();
-
-            let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                (filter)(bytes)?
-            } else {
-                Cow::Borrowed(bytes)
-            };
-
-            options.output.write_all(&bytes)?;
-            options.output.flush()?;
-
-            session.consume_from_buffer(bytes_len);
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
         }
 
         // We dont't print user input back to the screen.
@@ -373,7 +421,9 @@ where
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
         match options.input.read(&mut buf) {
-            Ok(0) => return Ok(status),
+            Ok(0) => {
+                return Ok(status);
+            }
             Ok(n) => {
                 let bytes = &buf[..n];
                 let bytes = if let Some(filter) = options.input_filter.as_mut() {
@@ -420,9 +470,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        if let Some(handler) = options.idle_handler.as_mut() {
-            (handler)(session, options.context.as_mut())?;
-        }
+        options.call_idle_handler(session)?;
     }
 }
 
