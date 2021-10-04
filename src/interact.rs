@@ -33,13 +33,13 @@ pub struct InteractOptions<R, W, C = ()> {
     output: W,
     input_from: InputFrom,
     escape_character: u8,
-    input_handlers: HashMap<String, ActionFn<C, R, W>>,
-    #[allow(clippy::type_complexity)]
-    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<C, R, W>)>,
-    idle_handler: Option<ActionFn<C, R, W>>,
-    context: Option<C>,
     input_filter: Option<FilterFn>,
     output_filter: Option<FilterFn>,
+    input_handlers: HashMap<String, ActionFn<R, W, C>>,
+    #[allow(clippy::type_complexity)]
+    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<R, W, C>)>,
+    idle_handler: Option<ActionFn<R, W, C>>,
+    state: C,
 }
 
 enum InputFrom {
@@ -47,13 +47,40 @@ enum InputFrom {
     Other,
 }
 
-type ActionFn<C, R, W> =
-    Box<dyn FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error>>;
+type ActionFn<R, W, C> = Box<dyn FnMut(Context<'_, R, W, C>) -> Result<(), Error>>;
 
-type OutputFn<C, R, W> =
-    Box<dyn FnMut(&mut Session, &mut R, &mut W, Option<&mut C>, crate::Found) -> Result<(), Error>>;
+type OutputFn<R, W, C> = Box<dyn FnMut(Context<'_, R, W, C>, crate::Found) -> Result<(), Error>>;
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
+
+pub struct Context<'a, R, W, C> {
+    session: &'a mut Session,
+    input: &'a mut R,
+    output: &'a mut W,
+    state: &'a mut C,
+}
+
+impl<'a, R, W, C> Context<'a, R, W, C> {
+    /// Get a reference to the context's session.
+    pub fn session(&mut self) -> &mut Session {
+        self.session
+    }
+
+    /// Get a reference to the context's input.
+    pub fn input(&mut self) -> &mut R {
+        self.input
+    }
+
+    /// Get a reference to the context's output.
+    pub fn output(&mut self) -> &mut W {
+        self.output
+    }
+
+    /// Get a reference to the context's state.
+    pub fn state(&mut self) -> &mut C {
+        self.state
+    }
+}
 
 impl InteractOptions<NonBlockingStdin, io::Stdout> {
     /// Constructs a interact options to interact via STDIN.
@@ -73,7 +100,7 @@ impl InteractOptions<NonBlockingStdin, io::Stdout> {
             idle_handler: None,
             input_handlers: HashMap::new(),
             output_handlers: Vec::new(),
-            context: None,
+            state: (),
         })
     }
 }
@@ -91,9 +118,9 @@ impl<R, W> InteractOptions<R, W> {
             idle_handler: None,
             input_handlers: HashMap::new(),
             output_handlers: Vec::new(),
-            context: None,
             input_filter: None,
             output_filter: None,
+            state: (),
         })
     }
 }
@@ -105,9 +132,9 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// So you need to call this method BEFORE you specify callbacks.
     ///
     /// Default context type is a `()`.
-    pub fn context<C1>(self, context: C1) -> InteractOptions<R, W, C1> {
+    pub fn state<C1>(self, state: C1) -> InteractOptions<R, W, C1> {
         InteractOptions {
-            context: Some(context),
+            state,
             escape_character: self.escape_character,
             input: self.input,
             input_filter: self.input_filter,
@@ -121,13 +148,13 @@ impl<R, W, C> InteractOptions<R, W, C> {
     }
 
     /// Get a mut reference on context
-    pub fn get_context_mut(&mut self) -> Option<&mut C> {
-        self.context.as_mut()
+    pub fn get_state_mut(&mut self) -> &mut C {
+        &mut self.state
     }
 
     /// Get a reference on context
-    pub fn get_context(&self) -> Option<&C> {
-        self.context.as_ref()
+    pub fn get_state(&self) -> &C {
+        &self.state
     }
 }
 
@@ -174,7 +201,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// See https://github.com/zhiburt/expectrl/issues/16.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
-        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.input_handlers.insert(input.into(), Box::new(f));
         self
@@ -189,8 +216,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
         N: crate::Needle + 'static,
-        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>, crate::Found) -> Result<(), Error>
-            + 'static,
+        F: FnMut(Context<'_, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
     {
         self.output_handlers.push((Box::new(needle), Box::new(f)));
         self
@@ -200,7 +226,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     #[cfg(not(feature = "async"))]
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&mut Session, &mut R, &mut W, Option<&mut C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.idle_handler = Some(Box::new(f));
         self
@@ -219,12 +245,13 @@ impl<R, W, C> InteractOptions<R, W, C> {
                         return Ok(Match::MaybeLater);
                     }
                     Match::Yes(n) => {
-                        (callback)(
+                        let context = Context {
+                            input: &mut self.input,
+                            output: &mut self.output,
+                            state: &mut self.state,
                             session,
-                            &mut self.input,
-                            &mut self.output,
-                            self.context.as_mut(),
-                        )?;
+                        };
+                        (callback)(context)?;
                         return Ok(Match::Yes(n));
                     }
                 }
@@ -248,13 +275,15 @@ impl<R, W, C> InteractOptions<R, W, C> {
                     let involved_bytes = buf[..end_index].to_vec();
                     let found = crate::Found::new(involved_bytes, found);
                     buf.drain(..end_index);
-                    (callback)(
+
+                    let context = Context {
+                        input: &mut self.input,
+                        output: &mut self.output,
+                        state: &mut self.state,
                         session,
-                        &mut self.input,
-                        &mut self.output,
-                        self.context.as_mut(),
-                        found,
-                    )?;
+                    };
+                    (callback)(context, found)?;
+
                     continue 'checks;
                 }
             }
@@ -264,13 +293,14 @@ impl<R, W, C> InteractOptions<R, W, C> {
     }
 
     fn call_idle_handler(&mut self, session: &mut Session) -> Result<(), Error> {
+        let context = Context {
+            input: &mut self.input,
+            output: &mut self.output,
+            state: &mut self.state,
+            session,
+        };
         if let Some(callback) = self.idle_handler.as_mut() {
-            (callback)(
-                session,
-                &mut self.input,
-                &mut self.output,
-                self.context.as_mut(),
-            )?;
+            (callback)(context)?;
         }
 
         Ok(())

@@ -5,7 +5,7 @@ fn main() {
 
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("HelloWorld!", |_, _, _, _| {
+        .on_input("HelloWorld!", |_| {
             print!("You typed a magic word...\r\n");
             Ok(())
         });
@@ -20,7 +20,7 @@ fn main() {
 
     let opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("HelloWorld!", |_, _, _, _| {
+        .on_input("HelloWorld!", |_| {
             print!("You typed a magic word...\r\n");
             Ok(())
         });

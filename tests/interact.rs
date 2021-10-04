@@ -12,12 +12,11 @@ fn interact_callback() {
 
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("123", |session, _, _, _| {
-            session.send_line("Hello World")?;
+        .on_input("123", |mut ctx| {
+            ctx.session().send_line("Hello World")?;
             Ok(())
         })
-        .on_output(b'\n', |_, _, _, _, f| {
-            // Check will consume buffer and these bytes wont appear in the output.
+        .on_output(b'\n', |_, f| {
             let line = f.before();
             println!("Line in output {:?}", String::from_utf8_lossy(line));
             Ok(())
@@ -43,8 +42,8 @@ fn interact_callbacks_with_stream_redirection() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .on_input("QWE", |session, _, _, _| {
-            session.send_line("Hello World")?;
+        .on_input("QWE", |mut ctx| {
+            ctx.session().send_line("Hello World")?;
             Ok(())
         });
 
@@ -118,23 +117,23 @@ fn interact_context() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .context((0, 0))
-        .on_input("QWE\n", |session, _, _, ctx| {
-            let ctx = ctx.unwrap();
-            ctx.0 += 1;
-            session.send_line("123")?;
+        .state((0, 0))
+        .on_input("QWE\n", |mut ctx| {
+            let state = ctx.state();
+            state.0 += 1;
+            ctx.session().send_line("123")?;
             Ok(())
         })
-        .on_output(expectrl::NBytes(1), |_, _, _, ctx, _| {
-            let ctx = ctx.unwrap();
-            ctx.1 += 1;
+        .on_output(expectrl::NBytes(1), |mut ctx, _| {
+            let state = ctx.state();
+            state.1 += 1;
             Ok(())
         });
 
     opts.interact(&mut session).unwrap();
 
-    assert_eq!(opts.get_context().map(|(a, _)| a), Some(&3));
-    assert_eq!(opts.get_context().map(|(_, b)| b), Some(&15));
+    assert_eq!(opts.get_state().0, 3);
+    assert_eq!(opts.get_state().1, 15);
 
     drop(opts);
 
@@ -164,27 +163,25 @@ fn interact_on_output_not_matched() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .context((0, 0))
-        .on_input("WWW\n", |_, _, _, ctx| {
-            let ctx = ctx.unwrap();
-            ctx.1 += 1;
+        .state((0, 0))
+        .on_input("WWW\n", |mut ctx| {
+            ctx.state().1 += 1;
             Ok(())
         })
-        .on_input("QWE\n", |_, _, _, ctx| {
-            let ctx = ctx.unwrap();
-            ctx.0 += 1;
+        .on_input("QWE\n", |mut ctx| {
+            ctx.state().0 += 1;
             Ok(())
         })
-        .on_output("NOT_FOUND_IN_THE_OUTPUT", |_, _, _, _, _| Ok(()))
-        .on_idle(|_, _, _, _| {
+        .on_output("NOT_FOUND_IN_THE_OUTPUT", |_, _| Ok(()))
+        .on_idle(|_| {
             std::thread::sleep(Duration::from_millis(1000));
             Ok(())
         });
 
     opts.interact(&mut session).unwrap();
 
-    assert_eq!(opts.get_context().map(|(a, _)| a), Some(&1));
-    assert_eq!(opts.get_context().map(|(_, b)| b), Some(&0));
+    assert_eq!(opts.get_state().0, 1);
+    assert_eq!(opts.get_state().1, 0);
 
     drop(opts);
 
