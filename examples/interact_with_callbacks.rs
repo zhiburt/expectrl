@@ -1,31 +1,69 @@
-#[cfg(not(feature = "async"))]
-fn main() {
-    let mut session =
-        expectrl::spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
+use expectrl::{interact::InteractOptions, spawn, Regex};
 
-    let mut opts = expectrl::interact::InteractOptions::terminal()
-        .unwrap()
-        .on_input("HelloWorld!", |_| {
-            print!("You typed a magic word...\r\n");
-            Ok(())
-        });
-
-    opts.interact(&mut session).unwrap();
+#[derive(Debug, Default)]
+struct State {
+    stutus_verification_counter: Option<usize>,
+    wait_for_continue: Option<bool>,
+    pressed_yes_on_continue: Option<bool>,
 }
 
-#[cfg(feature = "async")]
 fn main() {
-    let mut session =
-        expectrl::spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
+    let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 
-    let opts = expectrl::interact::InteractOptions::terminal()
+    let mut opts = InteractOptions::terminal()
         .unwrap()
-        .on_input("HelloWorld!", |_| {
-            print!("You typed a magic word...\r\n");
+        .state(State::default())
+        .on_output("Continue [y/n]:", |mut ctx, _| {
+            ctx.state().wait_for_continue = Some(true);
+            Ok(())
+        })
+        .on_input("y", |mut ctx| {
+            ctx.session().send("y")?;
+
+            if let Some(_a @ true) = ctx.state().wait_for_continue {
+                ctx.state().pressed_yes_on_continue = Some(true);
+            }
+
+            Ok(())
+        })
+        .on_input("n", |mut ctx| {
+            ctx.session().send("n")?;
+
+            if let Some(_a @ true) = ctx.state().wait_for_continue {
+                ctx.state().pressed_yes_on_continue = Some(false);
+            }
+
+            Ok(())
+        })
+        .on_output(Regex("status:\\s*.*\\w+.*\\r\\n"), |mut ctx, _| {
+            match ctx.state().stutus_verification_counter.as_mut() {
+                Some(c) => *c += 1,
+                None => {
+                    ctx.state().stutus_verification_counter = Some(1);
+                }
+            }
+
             Ok(())
         });
 
-    futures_lite::future::block_on(async {
-        opts.interact(&mut session).await.unwrap();
-    });
+    #[cfg(not(feature = "async"))]
+    {
+        opts.interact(&mut session).unwrap();
+    }
+    #[cfg(feature = "async")]
+    {
+        futures_lite::future::block_on(opts.interact(&mut session)).unwrap();
+    }
+
+    println!("RESULTS________");
+    println!(
+        "Was pressed yes = {}",
+        opts.get_state().pressed_yes_on_continue.unwrap_or_default()
+    );
+    println!(
+        "Status counter = {}",
+        opts.get_state()
+            .stutus_verification_counter
+            .unwrap_or_default()
+    );
 }

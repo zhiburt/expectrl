@@ -126,12 +126,12 @@ impl<R, W> InteractOptions<R, W> {
 }
 
 impl<R, W, C> InteractOptions<R, W, C> {
-    /// Context sets a context variable which will be available in callback calls.
+    /// State sets state which will be available in callback calls, throught context variable.
     ///
     /// Please beware that it cleans already set list of callbacks.
     /// So you need to call this method BEFORE you specify callbacks.
     ///
-    /// Default context type is a `()`.
+    /// Default state type is a unit type `()`.
     pub fn state<C1>(self, state: C1) -> InteractOptions<R, W, C1> {
         InteractOptions {
             state,
@@ -147,12 +147,12 @@ impl<R, W, C> InteractOptions<R, W, C> {
         }
     }
 
-    /// Get a mut reference on context
+    /// Get a mut reference on state
     pub fn get_state_mut(&mut self) -> &mut C {
         &mut self.state
     }
 
-    /// Get a reference on context
+    /// Get a reference on state
     pub fn get_state(&self) -> &C {
         &self.state
     }
