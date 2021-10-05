@@ -69,8 +69,5 @@ fn main() {
     );
 }
 
-
 #[cfg(feature = "async")]
-fn main() {
-
-}
+fn main() {}
