@@ -757,6 +757,16 @@ impl Found {
         &self.buf[..self.left_most_index()]
     }
 
+    /// as_bytes returns all bytes involved in a match, e.g. before the match and
+    /// in a match itself.
+    /// 
+    /// In most cases the returned value equeals to concatanted [Self::before] and [Self::matches].
+    /// But sometimes like in case of [crate::Regex] it may have a grouping so [Self::matches] might overlap, therefore
+    /// it will not longer be true.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.buf
+    }
+
     fn left_most_index(&self) -> usize {
         self.matches
             .iter()
