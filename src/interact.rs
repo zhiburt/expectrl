@@ -170,7 +170,6 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// The output_filter will be passed all the output from the child process.
     ///
     /// The filter isn't applied to user's `read` calls in the [`Session::on_output`] callback.
-    #[cfg(not(feature = "async"))]
     pub fn output_filter<F>(mut self, f: F) -> Self
     where
         F: FnMut(&[u8]) -> Result<Cow<[u8]>, Error> + 'static,
@@ -184,7 +183,6 @@ impl<R, W, C> InteractOptions<R, W, C> {
     ///
     /// The input_filter is run BEFORE the check for the escape_character.
     /// The filter is called BEFORE calling a on_input callback if it's set.
-    #[cfg(not(feature = "async"))]
     pub fn input_filter<F>(mut self, f: F) -> Self
     where
         F: FnMut(&[u8]) -> Result<Cow<[u8]>, Error> + 'static,
@@ -212,7 +210,6 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// IMPORTANT:
     /// Please be aware that your use of [Session::expect], [Session::check] and any `read` operation on session
     /// will cause the read bytes not to apeard in the output stream!
-    #[cfg(not(feature = "async"))]
     pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
         N: crate::Needle + 'static,
@@ -223,7 +220,6 @@ impl<R, W, C> InteractOptions<R, W, C> {
     }
 
     /// Puts a handler which will be called on each interaction.
-    #[cfg(not(feature = "async"))]
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
         F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,

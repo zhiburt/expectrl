@@ -7,6 +7,7 @@ struct State {
     pressed_yes_on_continue: Option<bool>,
 }
 
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 
@@ -66,4 +67,10 @@ fn main() {
             .stutus_verification_counter
             .unwrap_or_default()
     );
+}
+
+
+#[cfg(feature = "async")]
+fn main() {
+
 }

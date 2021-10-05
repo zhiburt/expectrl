@@ -759,7 +759,7 @@ impl Found {
 
     /// as_bytes returns all bytes involved in a match, e.g. before the match and
     /// in a match itself.
-    /// 
+    ///
     /// In most cases the returned value equeals to concatanted [Self::before] and [Self::matches].
     /// But sometimes like in case of [crate::Regex] it may have a grouping so [Self::matches] might overlap, therefore
     /// it will not longer be true.
