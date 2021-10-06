@@ -53,6 +53,8 @@ type OutputFn<R, W, C> = Box<dyn FnMut(Context<'_, R, W, C>, crate::Found) -> Re
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
+/// Context provides an interface to use a [Session], IO streams
+/// and a state.
 pub struct Context<'a, R, W, C> {
     session: &'a mut Session,
     input: &'a mut R,
@@ -169,7 +171,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// Sets the output filter.
     /// The output_filter will be passed all the output from the child process.
     ///
-    /// The filter isn't applied to user's `read` calls in the [`Session::on_output`] callback.
+    /// The filter isn't applied to user's `read` calls through the [`Context`] in callbacks.
     pub fn output_filter<F>(mut self, f: F) -> Self
     where
         F: FnMut(&[u8]) -> Result<Cow<[u8]>, Error> + 'static,
@@ -196,7 +198,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// The matched bytes won't be send to process.
     ///
     /// Be aware that currently async version doesn't take a Session as an argument.
-    /// See https://github.com/zhiburt/expectrl/issues/16.
+    /// See <https://github.com/zhiburt/expectrl/issues/16>.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
         F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,
@@ -784,6 +786,10 @@ where
     }
 }
 
+/// A non blocking version of STDIN.
+///
+/// It's not recomended to be used directly.
+/// But we expose it because its used in [InteractOptions::terminal]
 #[cfg(unix)]
 pub struct NonBlockingStdin {
     stream: Stream,
@@ -829,6 +835,7 @@ impl futures_lite::AsyncRead for NonBlockingStdin {
     }
 }
 
+/// See unix version
 #[cfg(windows)]
 pub struct NonBlockingStdin {
     current_terminal: Console,

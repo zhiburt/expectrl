@@ -18,7 +18,7 @@ If your application is not interactive you may not find the library the best cho
 
 ## Usage
 
-An example for interacting via ftp.
+A general example where the program simulates a used interacting with `ftp`.
 
 ```rust
 use expectrl::{spawn, Regex, Eof, WaitStatus};
@@ -53,8 +53,9 @@ fn main() {
 
 ## Notes
 
-It was originally inspired by [philippkeller/rexpect] and [pexpect](https://pexpect.readthedocs.io/en/stable/overview.html).
+It was originally inspired by [philippkeller/rexpect] and [pexpect].
 
 Licensed under [MIT License](LICENSE)
 
 [philippkeller/rexpect]: https://github.com/philippkeller/rexpect
+[pexpect]: https://pexpect.readthedocs.io/en/stable/overview.html
