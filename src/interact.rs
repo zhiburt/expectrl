@@ -313,6 +313,12 @@ where
 {
     /// Runs interact interactively.
     /// See [Session::interact]
+    /// 
+    /// On process exit it tries to read available bytes from output in order to run callbacks.
+    /// But it is not guaranteed that all output will be read therefore some callbacks might be not called.
+    /// 
+    /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
+    /// (at the point of the call)
     #[cfg(unix)]
     pub fn interact(&mut self, session: &mut Session) -> Result<WaitStatus, Error> {
         match self.input_from {
