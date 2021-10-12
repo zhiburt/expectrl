@@ -63,6 +63,34 @@ fn interact_callbacks_with_stream_redirection() {
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
+fn interact_callbacks_called_after_exit() {
+    use expectrl::WaitStatus;
+
+    let mut session = expectrl::spawn("echo 'Hello World'").unwrap();
+    let mut opts = expectrl::interact::InteractOptions::terminal()
+        .unwrap()
+        .state(0)
+        .on_output("World", |mut ctx, _| {
+            *ctx.state() += 1;
+            Ok(())
+        });
+
+    assert_eq!(
+        session.wait().unwrap(),
+        WaitStatus::Exited(session.pid(), 0)
+    );
+
+    assert_eq!(
+        opts.interact(&mut session).unwrap_err().to_string(),
+        "Nix error ECHILD: No child processes"
+    );
+
+    assert_eq!(*opts.get_state(), 1);
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
 fn interact_filters() {
     let commands = "1009\nNO\n";
 

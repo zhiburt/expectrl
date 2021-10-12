@@ -404,32 +404,35 @@ where
     R: Read,
     W: Write,
 {
+    let mut output_buffer = Vec::new();
     let options_has_input_checks = !options.input_handlers.is_empty();
     let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
     };
-
-    let mut output_buffer = Vec::new();
+    let mut exited = false;
 
     let mut buf = [0; 512];
     loop {
-        let status = session.status()?;
-        if !matches!(status, WaitStatus::StillAlive) {
-            return Ok(status);
+        // In case where proceses exits we are trying to
+        // fill buffer to run callbacks if there was something in.
+        //
+        // We ignore errors because there might be errors like EOCHILD etc.
+        let status = session.status().map_err(|e| e.into());
+        if !matches!(status, Ok(WaitStatus::StillAlive)) {
+            exited = true;
         }
 
         match session.try_read(&mut buf) {
             Ok(n) => {
                 let eof = n == 0;
+                if eof {
+                    exited = true;
+                }
 
                 output_buffer.extend_from_slice(&buf[..n]);
                 options.check_output(session, &mut output_buffer, eof)?;
-
-                if n == 0 {
-                    return Ok(status);
-                }
 
                 let bytes = if let Some(filter) = options.output_filter.as_mut() {
                     (filter)(&buf[..n])?
@@ -444,13 +447,17 @@ where
             Err(err) => return Err(err.into()),
         }
 
+        if exited {
+            return status;
+        }
+
         // We dont't print user input back to the screen.
         // In terminal mode it will be ECHOed back automatically.
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
         match options.input.read(&mut buf) {
             Ok(0) => {
-                return Ok(status);
+                return status;
             }
             Ok(n) => {
                 let bytes = &buf[..n];
@@ -487,7 +494,7 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buffer[..pos])?;
-                        return Ok(status);
+                        return status;
                     }
                     None => {
                         session.write_all(&buffer[..])?;
