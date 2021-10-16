@@ -14,4 +14,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: cargo test -- try_read_after_process_exit --show-output  --exact --nocapture
+          args: -- try_read_after_process_exit --show-output  --exact --nocapture
