@@ -387,12 +387,20 @@ fn try_read_after_process_exit() {
     command.arg("hello cat");
     let mut proc = Session::spawn(command).unwrap();
 
+    println!("Awaiting for processes exits");
+
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
+    println!("Now it's trying to read");
+
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
+    println!("READ 1");
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    println!("READ 2");
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    println!("READ 3");
     assert!(_p_is_empty(&mut proc).unwrap());
+    println!("is empty");
 
     // // on macos we may not able to read after process is dead.
     // // I assume that kernel consumes proceses resorces without any code check of parent,
