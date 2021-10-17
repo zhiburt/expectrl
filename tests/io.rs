@@ -388,6 +388,9 @@ fn try_read_after_process_exit() {
     let mut proc = Session::spawn(command).unwrap();
 
     println!("Awaiting for processes exits");
+    
+    println!("Waiting for 5sec");
+    thread::sleep(Duration::from_millis(5000));
 
     println!("Status {:?}", proc.status().unwrap());
 
