@@ -389,6 +389,8 @@ fn try_read_after_process_exit() {
 
     println!("Awaiting for processes exits");
 
+    println!("Status {:?}", proc.status().unwrap());
+
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
     println!("Now it's trying to read");
