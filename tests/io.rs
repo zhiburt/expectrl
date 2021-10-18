@@ -456,7 +456,6 @@ fn try_read_after_process_exit2() {
     // // assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 }
 
-
 #[test]
 #[cfg(unix)]
 // #[cfg(not(target_os = "macos"))]
@@ -490,15 +489,51 @@ fn try_read_after_process_exit3() {
     println!("READ 3");
     assert!(_p_is_empty(&mut proc).unwrap());
     println!("is empty");
+}
 
-    // // on macos we may not able to read after process is dead.
-    // // I assume that kernel consumes proceses resorces without any code check of parent,
-    // // which what is happening on linux.
-    // //
-    // // So we check that there may be None or Some(0)
+#[test]
+#[cfg(unix)]
+fn try_read_after_process_exit4() {
+    let mut command = Command::new("echo");
+    command.arg("'hello cat'");
+    let mut proc = Session::spawn(command).unwrap();
 
-    // // on macos we can't put it before read's for some reason something get blocked
-    // // assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
+    println!("Awaiting for processes exits");
+
+    println!("Status {:?}", proc.status().unwrap());
+    println!("Status {:?}", proc.status().unwrap());
+    
+    println!("Waiting for 5sec");
+    thread::sleep(Duration::from_millis(5000));
+
+    println!("Status {:?}", proc.status().unwrap());
+    println!("Status {:?}", proc.status().unwrap());
+
+    println!("Exit process");
+    proc.exit(false);
+
+    println!("Waiting for 5sec");
+    thread::sleep(Duration::from_millis(5000));
+    
+    println!("Exit process");
+    proc.exit(true);
+
+    println!("Waiting for 5sec");
+    thread::sleep(Duration::from_millis(5000));
+
+    println!("Status {:?}", proc.status().unwrap());
+    println!("Status {:?}", proc.status().unwrap());
+
+    println!("Now it's trying to read");
+
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
+    println!("READ 1");
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    println!("READ 2");
+    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+    println!("READ 3");
+    assert!(_p_is_empty(&mut proc).unwrap());
+    println!("is empty");
 }
 
 #[test]
