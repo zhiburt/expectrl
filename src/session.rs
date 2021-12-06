@@ -41,7 +41,7 @@ impl Session {
     #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
-        let stream = Stream::new(ptyproc.get_pty_handle()?);
+        let stream = Stream::new(ptyproc.get_raw_handle()?);
 
         Ok(Self {
             proc: ptyproc,
