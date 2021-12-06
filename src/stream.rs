@@ -59,11 +59,11 @@ mod unix {
             /// Try to read in a non-blocking mode.
             ///
             /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
-            pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+            pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 let fd = self.inner.as_raw_fd();
                 make_non_blocking(fd).map_err(nix_error_to_io)?;
 
-                let result = match self.read(&mut buf) {
+                let result = match self.read(buf) {
                     Ok(n) => Ok(n),
                     Err(err) => Err(err),
                 };
@@ -76,11 +76,11 @@ mod unix {
             }
 
             // non-buffered && non-blocking read
-            fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+            fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 let fd = self.inner.as_raw_fd();
                 make_non_blocking(fd).map_err(nix_error_to_io)?;
 
-                let result = match self.reader.get_mut().inner.read(&mut buf) {
+                let result = match self.reader.get_mut().inner.read(buf) {
                     Ok(n) => Ok(n),
                     Err(err) => Err(err),
                 };
@@ -385,10 +385,10 @@ mod win {
             }
         }
 
-        pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
-            let result = match self.read(&mut buf) {
+            let result = match self.read(buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
@@ -408,10 +408,10 @@ mod win {
         }
 
         // non-buffered && non-blocking read
-        fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
-            let result = match self.output.get_mut().inner.read(&mut buf) {
+            let result = match self.output.get_mut().inner.read(buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
