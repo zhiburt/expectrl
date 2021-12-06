@@ -543,7 +543,7 @@ where
         set_raw(STDIN_FILENO)?;
     }
 
-    session.set_echo(true)?;
+    session.set_echo(true, None)?;
 
     let result = interact(session, options).await;
 
@@ -559,7 +559,7 @@ where
         )?;
     }
 
-    session.set_echo(origin_pty_echo)?;
+    session.set_echo(origin_pty_echo, None)?;
 
     result
 }
