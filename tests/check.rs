@@ -91,8 +91,12 @@ fn check_eof() {
     thread::sleep(Duration::from_millis(600));
 
     let m = session.check(Eof).unwrap();
-    assert_eq!(m.first(), b"'Hello World'\r\n");
+
     assert_eq!(m.before(), b"");
+    #[cfg(target_os = "linux")]
+    assert_eq!(m.first(), b"'Hello World'\r\n");
+    #[cfg(not(target_os = "linux"))]
+    assert!(m.matches().is_empty());
 }
 
 #[cfg(unix)]
@@ -105,8 +109,12 @@ fn check_eof() {
         thread::sleep(Duration::from_millis(600));
 
         let m = session.check(Eof).await.unwrap();
-        assert_eq!(m.first(), b"'Hello World'\r\n");
+
         assert_eq!(m.before(), b"");
+        #[cfg(target_os = "linux")]
+        assert_eq!(m.first(), b"'Hello World'\r\n");
+        #[cfg(not(target_os = "linux"))]
+        assert!(m.matches().is_empty());
     })
 }
 
