@@ -168,7 +168,7 @@ fn check_after_is_matched_eof() {
     assert_eq!(m.first(), b"AfterSleep\r\n");
 
     #[cfg(not(target_os = "linux"))]
-    assert!(m.matches().is_empty());
+    assert_eq!(m.first(), b"");
 }
 
 #[cfg(unix)]
@@ -206,7 +206,7 @@ fn expect_after_is_matched_eof() {
     assert_eq!(m.first(), b"AfterSleep\r\n");
 
     #[cfg(not(target_os = "linux"))]
-    assert!(m.matches().is_empty());
+    assert_eq!(m.first(), b"");
 
     assert!(matches!(p.expect("").unwrap_err(), expectrl::Error::Eof));
 }
