@@ -85,7 +85,11 @@ fn interact_callbacks_called_after_exit() {
         "Nix error ECHILD: No child processes"
     );
 
+    #[cfg(target_os = "linux")]
     assert_eq!(*opts.get_state(), 1);
+
+    #[cfg(not(target_os = "linux"))]
+    assert_eq!(*opts.get_state(), 0);
 }
 
 #[cfg(unix)]

@@ -381,7 +381,6 @@ fn try_read_after_eof() {
 
 #[test]
 #[cfg(unix)]
-// #[cfg(not(target_os = "macos"))]
 fn try_read_after_process_exit() {
     let mut command = Command::new("echo");
     command.arg("hello cat");
@@ -389,8 +388,12 @@ fn try_read_after_process_exit() {
 
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
+    #[cfg(target_os = "linux")]
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
+
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
+
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 0);
     assert!(_p_is_empty(&mut proc).unwrap());
 

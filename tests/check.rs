@@ -243,17 +243,31 @@ fn check_macro_eof() {
 
     thread::sleep(Duration::from_millis(600));
 
-    expectrl::check!(
-        session,
-        output = Eof => {
-            assert_eq!(output.first(), b"'Hello World'\r\n");
-            assert_eq!(output.before(), b"");
-        },
-        default => {
-            panic!("Unexpected result");
-        },
-    )
-    .unwrap();
+    #[cfg(target_os = "linux")]
+    {
+        expectrl::check!(
+            session,
+            output = Eof => {
+                assert_eq!(output.first(), b"'Hello World'\r\n");
+                assert_eq!(output.before(), b"");
+            },
+            default => {
+                panic!("Unexpected result");
+            },
+        )
+        .unwrap();
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        expectrl::check!(
+            session,
+            output = Eof => {
+                panic!("Unexpected result");
+            },
+        )
+        .unwrap();
+    }
 }
 
 #[cfg(unix)]
@@ -265,18 +279,33 @@ fn check_macro_eof() {
     thread::sleep(Duration::from_millis(600));
 
     futures_lite::future::block_on(async {
-        expectrl::check!(
-            session,
-            output = Eof => {
-                assert_eq!(output.first(), b"'Hello World'\r\n");
-                assert_eq!(output.before(), b"");
-            },
-            default => {
-                panic!("Unexpected result");
-            },
-        )
-        .await
-        .unwrap();
+        #[cfg(target_os = "linux")]
+        {
+            expectrl::check!(
+                session,
+                output = Eof => {
+                    assert_eq!(output.first(), b"'Hello World'\r\n");
+                    assert_eq!(output.before(), b"");
+                },
+                default => {
+                    panic!("Unexpected result");
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            expectrl::check!(
+                session,
+                output = Eof => {
+                    panic!("Unexpected result");
+                },
+            )
+            .await
+            .unwrap();
+        }
     });
 }
 
