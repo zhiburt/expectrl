@@ -313,10 +313,10 @@ where
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    /// 
+    ///
     /// On process exit it tries to read available bytes from output in order to run callbacks.
     /// But it is not guaranteed that all output will be read therefore some callbacks might be not called.
-    /// 
+    ///
     /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
     /// (at the point of the call)
     #[cfg(unix)]
@@ -379,7 +379,7 @@ where
         set_raw(STDIN_FILENO)?;
     }
 
-    session.set_echo(true)?;
+    session.set_echo(true, None)?;
 
     let result = interact(session, options);
 
@@ -395,7 +395,7 @@ where
         )?;
     }
 
-    session.set_echo(origin_pty_echo)?;
+    session.set_echo(origin_pty_echo, None)?;
 
     result
 }
@@ -543,7 +543,7 @@ where
         set_raw(STDIN_FILENO)?;
     }
 
-    session.set_echo(true)?;
+    session.set_echo(true, None)?;
 
     let result = interact(session, options).await;
 
@@ -559,7 +559,7 @@ where
         )?;
     }
 
-    session.set_echo(origin_pty_echo)?;
+    session.set_echo(origin_pty_echo, None)?;
 
     result
 }

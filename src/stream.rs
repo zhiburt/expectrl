@@ -59,11 +59,11 @@ mod unix {
             /// Try to read in a non-blocking mode.
             ///
             /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
-            pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+            pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 let fd = self.inner.as_raw_fd();
                 make_non_blocking(fd).map_err(nix_error_to_io)?;
 
-                let result = match self.read(&mut buf) {
+                let result = match self.read(buf) {
                     Ok(n) => Ok(n),
                     Err(err) => Err(err),
                 };
@@ -76,11 +76,11 @@ mod unix {
             }
 
             // non-buffered && non-blocking read
-            fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+            fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 let fd = self.inner.as_raw_fd();
                 make_non_blocking(fd).map_err(nix_error_to_io)?;
 
-                let result = match self.reader.get_mut().inner.read(&mut buf) {
+                let result = match self.reader.get_mut().inner.read(buf) {
                     Ok(n) => Ok(n),
                     Err(err) => Err(err),
                 };
@@ -102,6 +102,8 @@ mod unix {
             }
 
             pub fn read_available(&mut self) -> std::io::Result<bool> {
+                self.flush_in_buffer();
+
                 let mut buf = [0; 248];
                 loop {
                     match self.try_read_inner(&mut buf) {
@@ -119,6 +121,8 @@ mod unix {
                 &mut self,
                 buf: &mut [u8],
             ) -> std::io::Result<Option<usize>> {
+                self.flush_in_buffer();
+
                 match self.try_read_inner(buf) {
                     Ok(0) => Ok(Some(0)),
                     Ok(n) => {
@@ -140,6 +144,16 @@ mod unix {
 
             pub fn keep_in_buffer(&mut self, v: &[u8]) {
                 self.reader.get_mut().keep_in_buffer(v);
+            }
+
+            pub fn flush_in_buffer(&mut self) {
+                // Because we have 2 buffered streams there might appear inconsistancy
+                // in read operations and the data which was via `keep_in_buffer` function.
+                //
+                // To eliminate it we move BufReader buffer to our buffer.
+                let b = self.reader.buffer().to_vec();
+                self.reader.consume(b.len());
+                self.keep_in_buffer(&b);
             }
         }
 
@@ -265,6 +279,8 @@ mod unix {
             }
 
             pub async fn read_available(&mut self) -> std::io::Result<bool> {
+                self.flush_in_buffer();
+
                 let mut buf = [0; 248];
                 loop {
                     match self.try_read_inner(&mut buf).await {
@@ -282,6 +298,8 @@ mod unix {
                 &mut self,
                 buf: &mut [u8],
             ) -> std::io::Result<Option<usize>> {
+                self.flush_in_buffer();
+
                 match self.try_read_inner(buf).await {
                     Ok(0) => Ok(Some(0)),
                     Ok(n) => {
@@ -303,6 +321,17 @@ mod unix {
 
             pub fn keep_in_buffer(&mut self, v: &[u8]) {
                 self.reader.get_mut().keep_in_buffer(v);
+            }
+
+            pub fn flush_in_buffer(&mut self) {
+                // Because we have 2 buffered streams there might appear inconsistancy
+                // in read operations and the data which was via `keep_in_buffer` function.
+                //
+                // To eliminate it we move BufReader buffer to our buffer.
+                use futures_lite::AsyncBufReadExt;
+                let b = self.reader.buffer().to_vec();
+                self.reader.consume(b.len());
+                self.keep_in_buffer(&b);
             }
         }
 
@@ -385,10 +414,10 @@ mod win {
             }
         }
 
-        pub fn try_read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
-            let result = match self.read(&mut buf) {
+            let result = match self.read(buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
@@ -408,10 +437,10 @@ mod win {
         }
 
         // non-buffered && non-blocking read
-        fn try_read_inner(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.output.get_mut().get_mut().set_non_blocking_mode()?;
 
-            let result = match self.output.get_mut().inner.read(&mut buf) {
+            let result = match self.output.get_mut().inner.read(buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
@@ -422,6 +451,8 @@ mod win {
         }
 
         pub fn read_available(&mut self) -> std::io::Result<bool> {
+            self.flush_in_buffer();
+
             let mut buf = [0; 248];
             loop {
                 match self.try_read_inner(&mut buf) {
@@ -436,6 +467,8 @@ mod win {
         }
 
         pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
+            self.flush_in_buffer();
+
             match self.try_read_inner(buf) {
                 Ok(0) => Ok(Some(0)),
                 Ok(n) => {
@@ -457,6 +490,16 @@ mod win {
 
         pub fn keep_in_buffer(&mut self, v: &[u8]) {
             self.output.get_mut().keep_in_buffer(v);
+        }
+
+        pub fn flush_in_buffer(&mut self) {
+            // Because we have 2 buffered streams there might appear inconsistancy
+            // in read operations and the data which was via `keep_in_buffer` function.
+            //
+            // To eliminate it we move BufReader buffer to our buffer.
+            let b = self.output.buffer().to_vec();
+            self.output.consume(b.len());
+            self.keep_in_buffer(&b);
         }
     }
 
@@ -521,28 +564,13 @@ impl<R: std::io::Read> ReaderWithBuffer<R> {
 #[cfg(not(feature = "async"))]
 impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
-        // We intentinally try to read from inner buffer in any case
-        // because calling code might endlessly save into inner buffer something and actuall read won't be called at all,
-        //
-        // For example caller code waits before something appear in the buffer,
-        // And if its not the read data saved into our buffer.
-        // In such a situation we will return a buffer which will never be filled with expected data.
-        //
-        // As a down side we might lose a error which might be important to caller code.
         if self.buffer.is_empty() {
             self.inner.read(buf)
         } else {
             use std::io::Write;
             let n = buf.write(&self.buffer)?;
             self.buffer.drain(..n);
-
-            self.inner
-                .read(&mut buf[n..])
-                .map(|n1| {
-                    // is it possible that overflow happen?
-                    n + n1
-                })
-                .or(Ok(n))
+            Ok(n)
         }
     }
 }

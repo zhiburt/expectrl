@@ -1,4 +1,4 @@
-use expectrl::{spawn, Any, Eof, NBytes, Regex};
+use expectrl::{spawn, Any, Eof, NBytes, Regex, WaitStatus};
 use std::thread;
 use std::time::Duration;
 
@@ -91,8 +91,12 @@ fn check_eof() {
     thread::sleep(Duration::from_millis(600));
 
     let m = session.check(Eof).unwrap();
-    assert_eq!(m.first(), b"'Hello World'\r\n");
+
     assert_eq!(m.before(), b"");
+    #[cfg(target_os = "linux")]
+    assert_eq!(m.first(), b"'Hello World'\r\n");
+    #[cfg(not(target_os = "linux"))]
+    assert!(m.matches().is_empty());
 }
 
 #[cfg(unix)]
@@ -105,8 +109,12 @@ fn check_eof() {
         thread::sleep(Duration::from_millis(600));
 
         let m = session.check(Eof).await.unwrap();
-        assert_eq!(m.first(), b"'Hello World'\r\n");
+
         assert_eq!(m.before(), b"");
+        #[cfg(target_os = "linux")]
+        assert_eq!(m.first(), b"'Hello World'\r\n");
+        #[cfg(not(target_os = "linux"))]
+        assert!(m.matches().is_empty());
     })
 }
 
@@ -241,12 +249,18 @@ fn check_macro() {
 fn check_macro_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
-    thread::sleep(Duration::from_millis(600));
+    assert_eq!(
+        WaitStatus::Exited(session.pid(), 0),
+        session.wait().unwrap()
+    );
 
     expectrl::check!(
         session,
         output = Eof => {
+            #[cfg(target_os = "linux")]
             assert_eq!(output.first(), b"'Hello World'\r\n");
+            #[cfg(not(target_os = "linux"))]
+            assert_eq!(output.first(), b"");
             assert_eq!(output.before(), b"");
         },
         default => {
@@ -262,13 +276,19 @@ fn check_macro_eof() {
 fn check_macro_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
-    thread::sleep(Duration::from_millis(600));
+    assert_eq!(
+        WaitStatus::Exited(session.pid(), 0),
+        session.wait().unwrap()
+    );
 
     futures_lite::future::block_on(async {
         expectrl::check!(
             session,
             output = Eof => {
+                #[cfg(target_os = "linux")]
                 assert_eq!(output.first(), b"'Hello World'\r\n");
+                #[cfg(not(target_os = "linux"))]
+                assert_eq!(output.first(), b"");
                 assert_eq!(output.before(), b"");
             },
             default => {
