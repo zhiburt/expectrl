@@ -67,18 +67,31 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
 }
 
 /// Spawn default python's IDLE.
+#[cfg(not(feature = "async"))]
 pub fn spawn_python() -> Result<ReplSession, Error> {
     #[cfg(unix)]
     {
-        let idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+        let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+        idle._expect_prompt()?;
         Ok(idle)
     }
     #[cfg(windows)]
     {
         // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
-        let idle = ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
+        let mut idle =
+            ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
+        idle._expect_prompt()?;
         Ok(idle)
     }
+}
+
+/// Spawn default python's IDLE.
+#[cfg(feature = "async")]
+#[cfg(unix)]
+pub async fn spawn_python() -> Result<ReplSession, Error> {
+    let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+    idle._expect_prompt().await?;
+    Ok(idle)
 }
 
 /// Spawn a powershell session.
