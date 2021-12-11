@@ -16,7 +16,7 @@ fn main() {
 fn main() {
     futures_lite::future::block_on(async {
         let mut p = spawn_python().await.unwrap();
-        
+
         p.execute("import platform").await.unwrap();
         p.send_line("platform.node()").await.unwrap();
 

@@ -52,23 +52,25 @@ fn python() {
 
         let prompt = p.execute("print('Hello World')").await.unwrap();
         assert_eq!(prompt, b"Hello World\r\n");
-    
+
         thread::sleep(Duration::from_millis(300));
         p.send_control(ControlCode::EndOfText).await.unwrap();
         thread::sleep(Duration::from_millis(300));
-    
+
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
         assert_eq!(msg, "\r\n");
-    
+
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
         assert_eq!(msg, "KeyboardInterrupt\r\n");
-    
+
         p.expect_prompt().await.unwrap();
-    
-        p.send_control(ControlCode::EndOfTransmission).await.unwrap();
-    
+
+        p.send_control(ControlCode::EndOfTransmission)
+            .await
+            .unwrap();
+
         assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
     })
 }
