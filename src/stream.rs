@@ -279,7 +279,7 @@ mod unix {
             }
 
             pub async fn read_available(&mut self) -> std::io::Result<bool> {
-                self.flush_in_buffer().await;
+                self.flush_in_buffer();
 
                 let mut buf = [0; 248];
                 loop {
@@ -298,7 +298,7 @@ mod unix {
                 &mut self,
                 buf: &mut [u8],
             ) -> std::io::Result<Option<usize>> {
-                self.flush_in_buffer().await;
+                self.flush_in_buffer();
 
                 match self.try_read_inner(buf).await {
                     Ok(0) => Ok(Some(0)),
@@ -323,14 +323,14 @@ mod unix {
                 self.reader.get_mut().keep_in_buffer(v);
             }
 
-            pub async fn flush_in_buffer(&mut self) {
+            pub fn flush_in_buffer(&mut self) {
                 // Because we have 2 buffered streams there might appear inconsistancy
                 // in read operations and the data which was via `keep_in_buffer` function.
                 //
                 // To eliminate it we move BufReader buffer to our buffer.
                 use futures_lite::AsyncBufReadExt;
                 let b = self.reader.buffer().to_vec();
-                self.reader.consume(b.len()).await;
+                self.reader.consume(b.len());
                 self.keep_in_buffer(&b);
             }
         }
