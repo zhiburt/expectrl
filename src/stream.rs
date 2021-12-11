@@ -10,7 +10,7 @@ pub type Stream = sync_stream::Stream;
 /// Stream represent a IO stream.
 #[cfg(feature = "async")]
 #[cfg(unix)]
-pub type Stream = unix::async_stream::AsyncStream;
+pub type Stream = async_stream::AsyncStream;
 
 #[cfg(not(feature = "async"))]
 pub(super) mod sync_stream {
@@ -240,7 +240,7 @@ pub(super) mod sync_stream {
 
 #[cfg(feature = "async")]
 pub(super) mod async_stream {
-    use super::super::ReaderWithBuffer;
+    use super::ReaderWithBuffer;
     use async_io::Async;
     use futures_lite::{io::BufReader, AsyncBufRead, AsyncRead, AsyncWrite};
     use ptyprocess::stream::Stream;
