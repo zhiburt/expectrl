@@ -49,27 +49,26 @@ fn bash() {
 fn python() {
     futures_lite::future::block_on(async {
         let mut p = spawn_python().await.unwrap();
-        
-        p.execute("print('Hello World')").await.unwrap();
-        let mut msg = String::new();
-        p.read_line(&mut msg).await.unwrap();
-        assert_eq!(msg, "Hello World\r\n");
 
+        let prompt = p.execute("print('Hello World')").await.unwrap();
+        assert_eq!(prompt, b"Hello World\r\n");
+    
         thread::sleep(Duration::from_millis(300));
         p.send_control(ControlCode::EndOfText).await.unwrap();
         thread::sleep(Duration::from_millis(300));
-
-        let mut msg1 = String::new();
-        p.read_line(&mut msg1).await.unwrap();
-        let mut msg2 = String::new();
-        p.read_line(&mut msg2).await.unwrap();
-        thread::sleep(Duration::from_millis(300));
-        assert_eq!(msg1 + &msg2, ">>> \r\nKeyboardInterrupt\r\n");
-
-        p.send_control(ControlCode::EndOfTransmission)
-            .await
-            .unwrap();
-
+    
+        let mut msg = String::new();
+        p.read_line(&mut msg).await.unwrap();
+        assert_eq!(msg, "\r\n");
+    
+        let mut msg = String::new();
+        p.read_line(&mut msg).await.unwrap();
+        assert_eq!(msg, "KeyboardInterrupt\r\n");
+    
+        p.expect_prompt().await.unwrap();
+    
+        p.send_control(ControlCode::EndOfTransmission).await.unwrap();
+    
         assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
     })
 }
