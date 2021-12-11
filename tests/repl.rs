@@ -47,9 +47,9 @@ fn bash() {
 #[cfg(feature = "async")]
 #[test]
 fn python() {
-    let mut p = spawn_python().unwrap();
-
     futures_lite::future::block_on(async {
+        let mut p = spawn_python().await.unwrap();
+        
         p.execute("print('Hello World')").await.unwrap();
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
