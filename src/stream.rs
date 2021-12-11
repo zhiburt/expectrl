@@ -36,8 +36,8 @@ pub(super) mod sync_stream {
     /// Stream represent a IO stream.
     #[derive(Debug)]
     pub struct Stream {
-        input: StreamReader,
-        output: BufReader<ReaderWithBuffer<StreamWriter>>,
+        input: StreamWriter,
+        output: BufReader<ReaderWithBuffer<StreamReader>>,
     }
 
     #[cfg(windows)]
