@@ -249,7 +249,10 @@ fn check_macro() {
 fn check_macro_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
-    assert_eq!(WaitStatus::Exited(session.pid(), 0), session.wait().unwrap());
+    assert_eq!(
+        WaitStatus::Exited(session.pid(), 0),
+        session.wait().unwrap()
+    );
 
     expectrl::check!(
         session,
@@ -273,7 +276,10 @@ fn check_macro_eof() {
 fn check_macro_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
-    assert_eq!(WaitStatus::Exited(session.pid(), 0), session.wait().unwrap());
+    assert_eq!(
+        WaitStatus::Exited(session.pid(), 0),
+        session.wait().unwrap()
+    );
 
     futures_lite::future::block_on(async {
         expectrl::check!(

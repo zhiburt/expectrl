@@ -79,10 +79,8 @@ fn python() {
 fn python() {
     let mut p = spawn_python().unwrap();
 
-    p.execute("print('Hello World')").unwrap();
-    let mut msg = String::new();
-    p.read_line(&mut msg).unwrap();
-    assert_eq!(msg, "Hello World\r\n");
+    let prompt = p.execute("print('Hello World')").unwrap();
+    assert_eq!(prompt, b"Hello World\r\n");
 
     thread::sleep(Duration::from_millis(300));
     p.send_control(ControlCode::EndOfText).unwrap();
@@ -90,8 +88,13 @@ fn python() {
 
     let mut msg = String::new();
     p.read_line(&mut msg).unwrap();
+    assert_eq!(msg, "\r\n");
+
+    let mut msg = String::new();
     p.read_line(&mut msg).unwrap();
-    assert_eq!(msg, ">>> \r\nKeyboardInterrupt\r\n");
+    assert_eq!(msg, "KeyboardInterrupt\r\n");
+
+    p.expect_prompt().unwrap();
 
     p.send_control(ControlCode::EndOfTransmission).unwrap();
 
