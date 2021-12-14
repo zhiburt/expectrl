@@ -1,25 +1,19 @@
 //! This module contains a [InteractOptions] which allows a castomization of
 //! [crate::Session::interact] flow.
 
-use crate::{session::Session, ControlCode, Error};
+use crate::{session::Session, stream::non_blocking_reader::TryReader, ControlCode, Error};
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{self, Write},
+    io::{self, Stdin, Write},
 };
 
 #[cfg(unix)]
-use crate::{stream::Stream, WaitStatus};
+use crate::WaitStatus;
 #[cfg(unix)]
-use nix::{
-    libc::STDIN_FILENO,
-    sys::termios,
-    unistd::{dup, isatty},
-};
+use nix::{libc::STDIN_FILENO, sys::termios, unistd::isatty};
 #[cfg(unix)]
 use ptyprocess::set_raw;
-#[cfg(unix)]
-use std::os::unix::prelude::FromRawFd;
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -805,25 +799,14 @@ where
 /// But we expose it because its used in [InteractOptions::terminal]
 #[cfg(unix)]
 pub struct NonBlockingStdin {
-    stream: Stream,
+    reader: TryReader<Stdin>,
 }
 
 #[cfg(unix)]
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
-        // it's crusial to make a DUP call here.
-        // If we don't actual stdin will be closed,
-        // And any interaction with it may cause errors.
-        //
-        // Why we don't use a `std::fs::File::try_clone` with a 0 fd?
-        // Because for some reason it actually doesn't make the same things as DUP does,
-        // eventhough a research showed that it should.
-        // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
-        let stdin_copy_fd = dup(STDIN_FILENO)?;
-        let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-        let stream = Stream::new(stdin)?;
-
-        Ok(Self { stream })
+        let reader = TryReader::new(std::io::stdin())?;
+        Ok(Self { reader })
     }
 }
 
@@ -831,7 +814,7 @@ impl NonBlockingStdin {
 #[cfg(not(feature = "async"))]
 impl Read for NonBlockingStdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.try_read(buf)
+        self.reader.try_read(buf)
     }
 }
 
@@ -844,7 +827,7 @@ impl futures_lite::AsyncRead for NonBlockingStdin {
         buf: &mut [u8],
     ) -> std::task::Poll<io::Result<usize>> {
         use futures_lite::FutureExt;
-        Box::pin(self.stream.try_read(buf)).poll(cx)
+        Box::pin(self.reader.try_read(buf)).poll(cx)
     }
 }
 
