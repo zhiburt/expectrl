@@ -41,7 +41,7 @@ impl Session {
     #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
-        let stream = Stream::new(ptyproc.get_raw_handle()?);
+        let stream = Stream::new(ptyproc.get_raw_handle()?)?;
 
         Ok(Self {
             proc: ptyproc,
@@ -197,7 +197,7 @@ impl Session {
             if !found.is_empty() {
                 let end_index = Found::right_most_index(&found);
                 let involved_bytes = data[..end_index].to_vec();
-                self.stream.consume_from_buffer(end_index);
+                self.stream.consume_available(end_index);
                 return Ok(Found::new(involved_bytes, found));
             }
 
@@ -236,7 +236,7 @@ impl Session {
         if !found.is_empty() {
             let end_index = Found::right_most_index(&found);
             let involved_bytes = buf[..end_index].to_vec();
-            self.stream.consume_from_buffer(end_index);
+            self.stream.consume_available(end_index);
             return Ok(Found::new(involved_bytes, found));
         }
 

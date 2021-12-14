@@ -821,7 +821,7 @@ impl NonBlockingStdin {
         // https://github.com/zhiburt/expectrl/issues/7#issuecomment-884787229
         let stdin_copy_fd = dup(STDIN_FILENO)?;
         let stdin = unsafe { std::fs::File::from_raw_fd(stdin_copy_fd) };
-        let stream = Stream::new(stdin);
+        let stream = Stream::new(stdin)?;
 
         Ok(Self { stream })
     }

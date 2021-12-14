@@ -22,7 +22,7 @@ pub(super) mod sync_stream {
     #[cfg(unix)]
     use std::os::unix::prelude::{AsRawFd, RawFd};
 
-    use super::reader::ControlledReader;
+    use super::non_blocking_reader::{NonBlocking, TryReader};
 
     #[cfg(unix)]
     type StreamReader = ptyprocess::stream::Stream;
@@ -38,7 +38,7 @@ pub(super) mod sync_stream {
     #[derive(Debug)]
     pub struct Stream {
         input: StreamWriter,
-        output: ControlledReader<StreamReader>,
+        output: TryReader<StreamReader>,
     }
 
     #[cfg(windows)]
@@ -47,43 +47,23 @@ pub(super) mod sync_stream {
         pub fn new(input: conpty::io::PipeWriter, output: conpty::io::PipeReader) -> Self {
             Self {
                 input,
-                output: BufReader::new(ReaderWithBuffer::new(output)),
+                output: TryReader::new(output),
             }
-        }
-
-        fn set_non_blocking_output(&mut self) -> io::Result<()> {
-            self.output.get_mut().get_mut().set_non_blocking_mode()
-        }
-
-        fn set_blocking_output(&mut self) -> io::Result<()> {
-            self.output.get_mut().get_mut().set_blocking_mode()
         }
     }
 
     #[cfg(unix)]
     impl Stream {
         /// The function returns a new Stream from a file.
-        pub fn new(file: File) -> Self {
-            let copy_file = file
-                .try_clone()
-                .expect("It's ok to clone fd as it will be just DUPed");
-            let reader = ControlledReader::new(ptyprocess::stream::Stream::new(copy_file));
+        pub fn new(file: File) -> io::Result<Self> {
+            let copy_file = file.try_clone()?;
+            let reader = TryReader::new(ptyprocess::stream::Stream::new(copy_file))?;
             let file = ptyprocess::stream::Stream::new(file);
 
-            Self {
+            Ok(Self {
                 input: file,
                 output: reader,
-            }
-        }
-
-        fn set_non_blocking_output(&mut self) -> io::Result<()> {
-            let fd = self.input.as_raw_fd();
-            _make_non_blocking(fd, true)
-        }
-
-        fn set_blocking_output(&mut self) -> io::Result<()> {
-            let fd = self.input.as_raw_fd();
-            _make_non_blocking(fd, false)
+            })
         }
     }
 
@@ -92,89 +72,27 @@ pub(super) mod sync_stream {
         ///
         /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
         pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            self.set_non_blocking_output()?;
-
-            let result = match self.read(buf) {
-                Ok(n) => Ok(n),
-                Err(err) => Err(err),
-            };
-
-            // As file is DUPed changes in one descriptor affects all ones
-            // so we need to make blocking file after we finished.
-            self.set_blocking_output()?;
-
-            result
-        }
-
-        // non-buffered && non-blocking read
-        fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            self.set_non_blocking_output()?;
-
-            let result = match self.output.get_mut().read(buf) {
-                Ok(n) => Ok(n),
-                Err(err) => Err(err),
-            };
-
-            // As file is DUPed changes in one descriptor affects all ones
-            // so we need to make blocking file after we finished.
-            self.set_blocking_output()?;
-
-            result
-        }
-
-        pub fn is_empty(&mut self) -> io::Result<bool> {
-            match self.try_read(&mut []) {
-                Ok(0) => Ok(true),
-                Ok(_) => Ok(false),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
-                Err(err) => Err(err),
-            }
+            self.output.try_read(buf)
         }
 
         pub fn read_available(&mut self) -> std::io::Result<bool> {
-            self.flush_in_buffer();
-
-            let mut buf = [0; 248];
-            loop {
-                match self.try_read_inner(&mut buf) {
-                    Ok(0) => break Ok(true),
-                    Ok(n) => {
-                        self.keep_in_buffer(&buf[..n]);
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
-                    Err(err) => break Err(err),
-                }
-            }
+            self.output.read_available()
         }
 
         pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
-            self.flush_in_buffer();
+            self.output.read_available_once(buf)
+        }
 
-            match self.try_read_inner(buf) {
-                Ok(0) => Ok(Some(0)),
-                Ok(n) => {
-                    self.keep_in_buffer(&buf[..n]);
-                    Ok(Some(n))
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
-                Err(err) => Err(err),
-            }
+        pub fn is_empty(&mut self) -> io::Result<bool> {
+            self.output.is_empty()
         }
 
         pub fn get_available(&mut self) -> &[u8] {
             self.output.buffer()
         }
 
-        pub fn consume_from_buffer(&mut self, n: usize) {
-            self.output.consume_from_buffer(n);
-        }
-
-        pub fn keep_in_buffer(&mut self, v: &[u8]) {
-            self.output.keep(v);
-        }
-
-        pub fn flush_in_buffer(&mut self) {
-            self.output.flush()
+        pub fn consume_available(&mut self, n: usize) {
+            self.output.consume_from_buffer(n)
         }
     }
 
@@ -209,6 +127,19 @@ pub(super) mod sync_stream {
     }
 
     #[cfg(unix)]
+    impl<A: AsRawFd> NonBlocking for A {
+        fn set_non_blocking(&mut self) -> io::Result<()> {
+            let fd = self.as_raw_fd();
+            _make_non_blocking(fd, true)
+        }
+
+        fn set_blocking(&mut self) -> io::Result<()> {
+            let fd = self.as_raw_fd();
+            _make_non_blocking(fd, false)
+        }
+    }
+
+    #[cfg(unix)]
     fn _make_non_blocking(fd: RawFd, blocking: bool) -> io::Result<()> {
         use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
@@ -229,6 +160,17 @@ pub(super) mod sync_stream {
             ),
         }
     }
+
+    #[cfg(windows)]
+    impl NonBlocking for PipeReader {
+        fn set_non_blocking(&mut self) -> io::Result<()> {
+            self.set_non_blocking_mode()
+        }
+
+        fn set_blocking(&mut self) -> io::Result<()> {
+            self.set_blocking_mode()
+        }
+    }
 }
 
 #[cfg(feature = "async")]
@@ -239,92 +181,53 @@ pub(super) mod async_stream {
     use std::{
         fs::File,
         io,
+        ops::DerefMut,
         pin::Pin,
         task::{Context, Poll},
     };
 
-    use super::reader::ControlledReader;
+    use super::non_blocking_reader::TryReader;
 
     /// Stream represent a IO stream.
     #[derive(Debug)]
     pub struct AsyncStream {
         inner: Async<File>,
-        reader: ControlledReader<Stream>,
+        reader: TryReader<Stream>,
     }
 
     impl AsyncStream {
         /// The function returns a new Stream from a file.
-        pub fn new(file: File) -> Self {
+        pub fn new(file: File) -> io::Result<Self> {
             let cloned = file.try_clone().unwrap();
-            let reader = ControlledReader::new(Stream::new(file)).unwrap();
+            let reader = TryReader::new(Stream::new(file))?;
             let file = Async::new(cloned).unwrap();
 
-            Self {
+            Ok(Self {
                 inner: file,
                 reader,
-            }
+            })
         }
 
         /// Try to read in a non-blocking mode.
         ///
         /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
         pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            use futures_lite::AsyncReadExt;
-            match futures_lite::future::poll_once(self.reader.read(buf)).await {
-                Some(result) => result,
-                None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
-            }
+            self.reader.try_read(buf).await
         }
 
         pub async fn is_empty(&mut self) -> io::Result<bool> {
-            match self.try_read(&mut []).await {
-                Ok(0) => Ok(true),
-                Ok(_) => Ok(false),
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
-                Err(err) => Err(err),
-            }
-        }
-
-        // non-buffered && non-blocking read
-        async fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            use futures_lite::AsyncReadExt;
-            match futures_lite::future::poll_once(self.reader.get_mut().read(buf)).await {
-                Some(result) => result,
-                None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
-            }
+            self.reader.is_empty().await
         }
 
         pub async fn read_available(&mut self) -> std::io::Result<bool> {
-            self.flush_in_buffer();
-
-            let mut buf = [0; 248];
-            loop {
-                match self.try_read_inner(&mut buf).await {
-                    Ok(0) => break Ok(true),
-                    Ok(n) => {
-                        self.keep_in_buffer(&buf[..n]);
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
-                    Err(err) => break Err(err),
-                }
-            }
+            self.reader.read_available().await
         }
 
         pub async fn read_available_once(
             &mut self,
             buf: &mut [u8],
         ) -> std::io::Result<Option<usize>> {
-            self.flush_in_buffer();
-
-            match self.try_read_inner(buf).await {
-                Ok(0) => Ok(Some(0)),
-                Ok(n) => {
-                    self.keep_in_buffer(&buf[..n]);
-                    Ok(Some(n))
-                }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
-                Err(err) => Err(err),
-            }
+            self.reader.read_available_once(buf).await
         }
 
         pub fn get_available(&mut self) -> &[u8] {
@@ -332,15 +235,7 @@ pub(super) mod async_stream {
         }
 
         pub fn consume_from_buffer(&mut self, n: usize) {
-            self.reader.consume_from_buffer(n)
-        }
-
-        pub fn keep_in_buffer(&mut self, v: &[u8]) {
-            self.reader.keep(v);
-        }
-
-        pub fn flush_in_buffer(&mut self) {
-            self.reader.flush_buffer();
+            self.reader.consume_from_buffer(n);
         }
     }
 
@@ -376,7 +271,7 @@ pub(super) mod async_stream {
             cx: &mut Context<'_>,
             buf: &mut [u8],
         ) -> Poll<io::Result<usize>> {
-            Pin::new(&mut self.reader).poll_read(cx, buf)
+            Pin::new(self.reader.deref_mut()).poll_read(cx, buf)
         }
     }
 
@@ -388,11 +283,226 @@ pub(super) mod async_stream {
             // pin_project is used only for this function.
             // the solution was found in the original implementation of BufReader.
             let this = self.get_mut();
-            Pin::new(&mut this.reader).poll_fill_buf(cx)
+            Pin::new(this.reader.deref_mut()).poll_fill_buf(cx)
         }
 
         fn consume(mut self: Pin<&mut Self>, amt: usize) {
-            Pin::new(&mut self.reader).consume(amt)
+            Pin::new(self.reader.deref_mut()).consume(amt)
+        }
+    }
+}
+
+#[cfg(not(feature = "async"))]
+pub mod non_blocking_reader {
+    use super::reader::ControlledReader;
+
+    use std::{
+        io::{self, Read},
+        ops::{Deref, DerefMut},
+    };
+
+    #[derive(Debug)]
+    pub struct TryReader<R> {
+        inner: ControlledReader<R>,
+    }
+
+    pub trait NonBlocking {
+        fn set_non_blocking(&mut self) -> io::Result<()>;
+        fn set_blocking(&mut self) -> io::Result<()>;
+    }
+
+    impl<R: Read + NonBlocking> TryReader<R> {
+        pub fn new(reader: R) -> io::Result<Self> {
+            Ok(Self {
+                inner: ControlledReader::new(reader),
+            })
+        }
+
+        /// Try to read in a non-blocking mode.
+        ///
+        /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
+        pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.inner.get_mut().set_non_blocking()?;
+
+            let result = match self.inner.read(buf) {
+                Ok(n) => Ok(n),
+                Err(err) => Err(err),
+            };
+
+            // As file is DUPed changes in one descriptor affects all ones
+            // so we need to make blocking file after we finished.
+            self.inner.get_mut().set_blocking()?;
+
+            result
+        }
+
+        pub fn is_empty(&mut self) -> io::Result<bool> {
+            match self.try_read(&mut []) {
+                Ok(0) => Ok(true),
+                Ok(_) => Ok(false),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
+                Err(err) => Err(err),
+            }
+        }
+
+        pub fn read_available(&mut self) -> std::io::Result<bool> {
+            self.inner.flush_in_buffer();
+
+            let mut buf = [0; 248];
+            loop {
+                match self.try_read_inner(&mut buf) {
+                    Ok(0) => break Ok(true),
+                    Ok(n) => {
+                        self.inner.keep_in_buffer(&buf[..n]);
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+                    Err(err) => break Err(err),
+                }
+            }
+        }
+
+        pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
+            self.inner.flush_in_buffer();
+
+            match self.try_read_inner(buf) {
+                Ok(0) => Ok(Some(0)),
+                Ok(n) => {
+                    self.inner.keep_in_buffer(&buf[..n]);
+                    Ok(Some(n))
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
+                Err(err) => Err(err),
+            }
+        }
+
+        // non-buffered && non-blocking read
+        fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.inner.get_mut().set_non_blocking()?;
+
+            let result = match self.inner.get_mut().read(buf) {
+                Ok(n) => Ok(n),
+                Err(err) => Err(err),
+            };
+
+            // As file is DUPed changes in one descriptor affects all ones
+            // so we need to make blocking file after we finished.
+            self.inner.get_mut().set_blocking()?;
+
+            result
+        }
+    }
+
+    impl<R> Deref for TryReader<R> {
+        type Target = ControlledReader<R>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl<R> DerefMut for TryReader<R> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.inner
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+pub mod non_blocking_reader {
+    use super::reader::ControlledReader;
+
+    use std::{
+        io::{self, Read},
+        ops::{Deref, DerefMut},
+        os::unix::prelude::AsRawFd,
+    };
+
+    #[derive(Debug)]
+    pub struct TryReader<R: Read> {
+        inner: ControlledReader<R>,
+    }
+
+    impl<R: Read + AsRawFd> TryReader<R> {
+        pub fn new(reader: R) -> io::Result<Self> {
+            Ok(Self {
+                inner: ControlledReader::new(reader)?,
+            })
+        }
+
+        /// Try to read in a non-blocking mode.
+        ///
+        /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
+        pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            use futures_lite::AsyncReadExt;
+            match futures_lite::future::poll_once(self.inner.read(buf)).await {
+                Some(result) => result,
+                None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
+            }
+        }
+
+        pub async fn is_empty(&mut self) -> io::Result<bool> {
+            match self.try_read(&mut []).await {
+                Ok(0) => Ok(true),
+                Ok(_) => Ok(false),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(true),
+                Err(err) => Err(err),
+            }
+        }
+
+        // non-buffered && non-blocking read
+        async fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            use futures_lite::AsyncReadExt;
+            match futures_lite::future::poll_once(self.inner.get_mut().read(buf)).await {
+                Some(result) => result,
+                None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
+            }
+        }
+
+        pub async fn read_available(&mut self) -> std::io::Result<bool> {
+            self.inner.flush_in_buffer();
+
+            let mut buf = [0; 248];
+            loop {
+                match self.try_read_inner(&mut buf).await {
+                    Ok(0) => break Ok(true),
+                    Ok(n) => {
+                        self.keep_in_buffer(&buf[..n]);
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break Ok(false),
+                    Err(err) => break Err(err),
+                }
+            }
+        }
+
+        pub async fn read_available_once(
+            &mut self,
+            buf: &mut [u8],
+        ) -> std::io::Result<Option<usize>> {
+            self.flush_in_buffer();
+
+            match self.try_read_inner(buf).await {
+                Ok(0) => Ok(Some(0)),
+                Ok(n) => {
+                    self.keep_in_buffer(&buf[..n]);
+                    Ok(Some(n))
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
+                Err(err) => Err(err),
+            }
+        }
+    }
+
+    impl<R: Read> Deref for TryReader<R> {
+        type Target = ControlledReader<R>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl<R: Read> DerefMut for TryReader<R> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.inner
         }
     }
 }
@@ -413,7 +523,7 @@ pub mod reader {
             }
         }
 
-        pub fn keep(&mut self, v: &[u8]) {
+        pub fn keep_in_buffer(&mut self, v: &[u8]) {
             self.inner.get_mut().buffer.extend(v);
         }
 
@@ -429,14 +539,14 @@ pub mod reader {
             self.inner.get_mut().buffer.drain(..n);
         }
 
-        pub fn flush(&mut self) {
+        pub fn flush_in_buffer(&mut self) {
             // Because we have 2 buffered streams there might appear inconsistancy
             // in read operations and the data which was via `keep_in_buffer` function.
             //
             // To eliminate it we move BufReader buffer to our buffer.
             let b = self.inner.buffer().to_vec();
             self.inner.consume(b.len());
-            self.keep(&b);
+            self.keep_in_buffer(&b);
         }
     }
 
@@ -514,7 +624,7 @@ pub mod reader {
             &mut self.inner.get_mut().inner
         }
 
-        pub fn keep(&mut self, v: &[u8]) {
+        pub fn keep_in_buffer(&mut self, v: &[u8]) {
             self.inner.get_mut().buffer.extend(v);
         }
 
@@ -526,14 +636,14 @@ pub mod reader {
             self.inner.get_mut().buffer.drain(..n);
         }
 
-        pub fn flush_buffer(&mut self) {
+        pub fn flush_in_buffer(&mut self) {
             // Because we have 2 buffered streams there might appear inconsistancy
             // in read operations and the data which was via `keep_in_buffer` function.
             //
             // To eliminate it we move BufReader buffer to our buffer.
             let b = self.inner.buffer().to_vec();
             self.inner.consume(b.len());
-            self.keep(&b);
+            self.keep_in_buffer(&b);
         }
     }
 
