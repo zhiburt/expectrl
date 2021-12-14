@@ -14,14 +14,15 @@ pub type Stream = async_stream::AsyncStream;
 
 #[cfg(not(feature = "async"))]
 pub(super) mod sync_stream {
-    use super::ReaderWithBuffer;
     use std::{
         fs::File,
-        io::{self, BufRead, BufReader, Read, Write},
+        io::{self, BufRead, Read, Write},
     };
 
     #[cfg(unix)]
     use std::os::unix::prelude::{AsRawFd, RawFd};
+
+    use super::reader::ControlledReader;
 
     #[cfg(unix)]
     type StreamReader = ptyprocess::stream::Stream;
@@ -37,7 +38,7 @@ pub(super) mod sync_stream {
     #[derive(Debug)]
     pub struct Stream {
         input: StreamWriter,
-        output: BufReader<ReaderWithBuffer<StreamReader>>,
+        output: ControlledReader<StreamReader>,
     }
 
     #[cfg(windows)]
@@ -66,9 +67,7 @@ pub(super) mod sync_stream {
             let copy_file = file
                 .try_clone()
                 .expect("It's ok to clone fd as it will be just DUPed");
-            let reader = BufReader::new(ReaderWithBuffer::new(ptyprocess::stream::Stream::new(
-                copy_file,
-            )));
+            let reader = ControlledReader::new(ptyprocess::stream::Stream::new(copy_file));
             let file = ptyprocess::stream::Stream::new(file);
 
             Self {
@@ -111,7 +110,7 @@ pub(super) mod sync_stream {
         fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.set_non_blocking_output()?;
 
-            let result = match self.output.get_mut().inner.read(buf) {
+            let result = match self.output.get_mut().read(buf) {
                 Ok(n) => Ok(n),
                 Err(err) => Err(err),
             };
@@ -163,25 +162,19 @@ pub(super) mod sync_stream {
         }
 
         pub fn get_available(&mut self) -> &[u8] {
-            &self.output.get_mut().buffer
+            self.output.buffer()
         }
 
         pub fn consume_from_buffer(&mut self, n: usize) {
-            self.output.get_mut().buffer.drain(..n);
+            self.output.consume_from_buffer(n);
         }
 
         pub fn keep_in_buffer(&mut self, v: &[u8]) {
-            self.output.get_mut().keep_in_buffer(v);
+            self.output.keep(v);
         }
 
         pub fn flush_in_buffer(&mut self) {
-            // Because we have 2 buffered streams there might appear inconsistancy
-            // in read operations and the data which was via `keep_in_buffer` function.
-            //
-            // To eliminate it we move BufReader buffer to our buffer.
-            let b = self.output.buffer().to_vec();
-            self.output.consume(b.len());
-            self.keep_in_buffer(&b);
+            self.output.flush()
         }
     }
 
@@ -240,9 +233,8 @@ pub(super) mod sync_stream {
 
 #[cfg(feature = "async")]
 pub(super) mod async_stream {
-    use super::ReaderWithBuffer;
     use async_io::Async;
-    use futures_lite::{io::BufReader, AsyncBufRead, AsyncRead, AsyncWrite};
+    use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite};
     use ptyprocess::stream::Stream;
     use std::{
         fs::File,
@@ -251,21 +243,21 @@ pub(super) mod async_stream {
         task::{Context, Poll},
     };
 
+    use super::reader::ControlledReader;
+
     /// Stream represent a IO stream.
     #[derive(Debug)]
     pub struct AsyncStream {
-        inner: Async<Stream>,
-        reader: BufReader<ReaderWithBuffer<Async<Stream>>>,
+        inner: Async<File>,
+        reader: ControlledReader<Stream>,
     }
 
     impl AsyncStream {
         /// The function returns a new Stream from a file.
         pub fn new(file: File) -> Self {
             let cloned = file.try_clone().unwrap();
-            let file = Async::new(Stream::new(file)).unwrap();
-            let reader = BufReader::new(ReaderWithBuffer::new(
-                Async::new(Stream::new(cloned)).unwrap(),
-            ));
+            let reader = ControlledReader::new(Stream::new(file)).unwrap();
+            let file = Async::new(cloned).unwrap();
 
             Self {
                 inner: file,
@@ -296,7 +288,7 @@ pub(super) mod async_stream {
         // non-buffered && non-blocking read
         async fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             use futures_lite::AsyncReadExt;
-            match futures_lite::future::poll_once(self.reader.get_mut().inner.read(buf)).await {
+            match futures_lite::future::poll_once(self.reader.get_mut().read(buf)).await {
                 Some(result) => result,
                 None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
             }
@@ -336,26 +328,19 @@ pub(super) mod async_stream {
         }
 
         pub fn get_available(&mut self) -> &[u8] {
-            &self.reader.get_mut().buffer
+            self.reader.available()
         }
 
         pub fn consume_from_buffer(&mut self, n: usize) {
-            self.reader.get_mut().buffer.drain(..n);
+            self.reader.consume_from_buffer(n)
         }
 
         pub fn keep_in_buffer(&mut self, v: &[u8]) {
-            self.reader.get_mut().keep_in_buffer(v);
+            self.reader.keep(v);
         }
 
         pub fn flush_in_buffer(&mut self) {
-            // Because we have 2 buffered streams there might appear inconsistancy
-            // in read operations and the data which was via `keep_in_buffer` function.
-            //
-            // To eliminate it we move BufReader buffer to our buffer.
-            use futures_lite::AsyncBufReadExt;
-            let b = self.reader.buffer().to_vec();
-            self.reader.consume(b.len());
-            self.keep_in_buffer(&b);
+            self.reader.flush_buffer();
         }
     }
 
@@ -365,15 +350,15 @@ pub(super) mod async_stream {
             cx: &mut Context<'_>,
             buf: &[u8],
         ) -> Poll<io::Result<usize>> {
-            <Async<Stream> as AsyncWrite>::poll_write(Pin::new(&mut self.inner), cx, buf)
+            <Async<File> as AsyncWrite>::poll_write(Pin::new(&mut self.inner), cx, buf)
         }
 
         fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-            <Async<Stream> as AsyncWrite>::poll_flush(Pin::new(&mut self.inner), cx)
+            <Async<File> as AsyncWrite>::poll_flush(Pin::new(&mut self.inner), cx)
         }
 
         fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-            <Async<Stream> as AsyncWrite>::poll_close(Pin::new(&mut self.inner), cx)
+            <Async<File> as AsyncWrite>::poll_close(Pin::new(&mut self.inner), cx)
         }
 
         fn poll_write_vectored(
@@ -381,7 +366,7 @@ pub(super) mod async_stream {
             cx: &mut Context<'_>,
             bufs: &[io::IoSlice<'_>],
         ) -> Poll<io::Result<usize>> {
-            <Async<Stream> as AsyncWrite>::poll_write_vectored(Pin::new(&mut self.inner), cx, bufs)
+            <Async<File> as AsyncWrite>::poll_write_vectored(Pin::new(&mut self.inner), cx, bufs)
         }
     }
 
@@ -412,79 +397,201 @@ pub(super) mod async_stream {
     }
 }
 
-#[derive(Debug)]
-struct ReaderWithBuffer<R> {
-    inner: R,
-    buffer: Vec<u8>,
-}
-
-impl<R> ReaderWithBuffer<R> {
-    fn keep_in_buffer(&mut self, v: &[u8]) {
-        self.buffer.extend(v);
-    }
-
-    #[allow(dead_code)]
-    fn get_mut(&mut self) -> &mut R {
-        &mut self.inner
-    }
-}
-
 #[cfg(not(feature = "async"))]
-impl<R: std::io::Read> ReaderWithBuffer<R> {
-    fn new(reader: R) -> Self {
-        Self {
-            inner: reader,
-            buffer: Vec::new(),
+pub mod reader {
+    use std::io::{self, BufRead, BufReader, Read};
+
+    #[derive(Debug)]
+    pub struct ControlledReader<R> {
+        inner: BufReader<BufferedReader<R>>,
+    }
+
+    impl<R: Read> ControlledReader<R> {
+        pub fn new(reader: R) -> Self {
+            Self {
+                inner: BufReader::new(BufferedReader::new(reader)),
+            }
+        }
+
+        pub fn keep(&mut self, v: &[u8]) {
+            self.inner.get_mut().buffer.extend(v);
+        }
+
+        pub fn get_mut(&mut self) -> &mut R {
+            &mut self.inner.get_mut().inner
+        }
+
+        pub fn buffer(&mut self) -> &[u8] {
+            &self.inner.get_ref().buffer
+        }
+
+        pub fn consume_from_buffer(&mut self, n: usize) {
+            self.inner.get_mut().buffer.drain(..n);
+        }
+
+        pub fn flush(&mut self) {
+            // Because we have 2 buffered streams there might appear inconsistancy
+            // in read operations and the data which was via `keep_in_buffer` function.
+            //
+            // To eliminate it we move BufReader buffer to our buffer.
+            let b = self.inner.buffer().to_vec();
+            self.inner.consume(b.len());
+            self.keep(&b);
         }
     }
-}
 
-#[cfg(not(feature = "async"))]
-impl<R: std::io::Read> std::io::Read for ReaderWithBuffer<R> {
-    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.buffer.is_empty() {
+    impl<R: Read> Read for ControlledReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.inner.read(buf)
-        } else {
-            use std::io::Write;
-            let n = buf.write(&self.buffer)?;
-            self.buffer.drain(..n);
-            Ok(n)
+        }
+    }
+
+    impl<R: Read> BufRead for ControlledReader<R> {
+        fn fill_buf(&mut self) -> io::Result<&[u8]> {
+            self.inner.fill_buf()
+        }
+
+        fn consume(&mut self, amt: usize) {
+            self.inner.consume(amt)
+        }
+    }
+
+    #[derive(Debug)]
+    struct BufferedReader<R> {
+        inner: R,
+        buffer: Vec<u8>,
+    }
+
+    impl<R> BufferedReader<R> {
+        fn new(reader: R) -> Self {
+            Self {
+                inner: reader,
+                buffer: Vec::new(),
+            }
+        }
+    }
+
+    impl<R: std::io::Read> std::io::Read for BufferedReader<R> {
+        fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.buffer.is_empty() {
+                self.inner.read(buf)
+            } else {
+                use std::io::Write;
+                let n = buf.write(&self.buffer)?;
+                self.buffer.drain(..n);
+                Ok(n)
+            }
         }
     }
 }
 
 #[cfg(feature = "async")]
-impl<R: futures_lite::AsyncRead> ReaderWithBuffer<R> {
-    fn new(reader: R) -> Self {
-        Self {
-            inner: reader,
-            buffer: Vec::new(),
+pub mod reader {
+    use std::{
+        io::{self, Read, Result},
+        marker::Unpin,
+        os::unix::prelude::AsRawFd,
+        pin::Pin,
+        task::{Context, Poll},
+    };
+
+    use async_io::Async;
+    use futures_lite::{io::BufReader, AsyncBufRead, AsyncBufReadExt, AsyncRead};
+
+    #[derive(Debug)]
+    pub struct ControlledReader<R: Read> {
+        inner: BufReader<BufferedReader<Async<R>>>,
+    }
+
+    impl<R: Read + AsRawFd> ControlledReader<R> {
+        pub fn new(reader: R) -> io::Result<Self> {
+            Ok(Self {
+                inner: BufReader::new(BufferedReader::new(Async::new(reader)?)),
+            })
+        }
+
+        pub fn get_mut(&mut self) -> &mut Async<R> {
+            &mut self.inner.get_mut().inner
+        }
+
+        pub fn keep(&mut self, v: &[u8]) {
+            self.inner.get_mut().buffer.extend(v);
+        }
+
+        pub fn available(&mut self) -> &[u8] {
+            &self.inner.get_ref().buffer
+        }
+
+        pub fn consume_from_buffer(&mut self, n: usize) {
+            self.inner.get_mut().buffer.drain(..n);
+        }
+
+        pub fn flush_buffer(&mut self) {
+            // Because we have 2 buffered streams there might appear inconsistancy
+            // in read operations and the data which was via `keep_in_buffer` function.
+            //
+            // To eliminate it we move BufReader buffer to our buffer.
+            let b = self.inner.buffer().to_vec();
+            self.inner.consume(b.len());
+            self.keep(&b);
         }
     }
-}
 
-#[cfg(feature = "async")]
-impl<R: futures_lite::AsyncRead + std::marker::Unpin> futures_lite::AsyncRead
-    for ReaderWithBuffer<R>
-{
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        mut buf: &mut [u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        // see sync version
-        if self.buffer.is_empty() {
-            std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
-        } else {
-            use std::io::Write;
-            let n = buf.write(&self.buffer)?;
-            self.buffer.drain(..n);
+    impl<R: Read> AsyncRead for ControlledReader<R> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            Pin::new(&mut self.inner).poll_read(cx, buf)
+        }
+    }
 
-            let poll = std::pin::Pin::new(&mut self.inner).poll_read(cx, &mut buf[n..]);
-            match poll {
-                std::task::Poll::Ready(Ok(n1)) => std::task::Poll::Ready(Ok(n + n1)),
-                std::task::Poll::Ready(Err(..)) => std::task::Poll::Ready(Ok(n)),
-                std::task::Poll::Pending => std::task::Poll::Pending,
+    impl<R: Read> AsyncBufRead for ControlledReader<R> {
+        fn poll_fill_buf<'a>(
+            self: Pin<&'a mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<io::Result<&'a [u8]>> {
+            // pin_project is used only for this function.
+            // the solution was found in the original implementation of BufReader.
+            let this = self.get_mut();
+            Pin::new(&mut this.inner).poll_fill_buf(cx)
+        }
+
+        fn consume(mut self: Pin<&mut Self>, amt: usize) {
+            Pin::new(&mut self.inner).consume(amt)
+        }
+    }
+
+    #[derive(Debug)]
+    struct BufferedReader<R> {
+        inner: R,
+        buffer: Vec<u8>,
+    }
+
+    impl<R> BufferedReader<R> {
+        fn new(reader: R) -> Self {
+            Self {
+                inner: reader,
+                buffer: Vec::new(),
+            }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    impl<R: AsyncRead + Unpin> AsyncRead for BufferedReader<R> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            mut buf: &mut [u8],
+        ) -> Poll<Result<usize>> {
+            if self.buffer.is_empty() {
+                Pin::new(&mut self.inner).poll_read(cx, buf)
+            } else {
+                use std::io::Write;
+                let n = buf.write(&self.buffer)?;
+                self.buffer.drain(..n);
+                Poll::Ready(Ok(n))
             }
         }
     }
