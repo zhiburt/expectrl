@@ -799,12 +799,18 @@ where
 /// But we expose it because its used in [InteractOptions::terminal]
 #[cfg(unix)]
 pub struct NonBlockingStdin {
+    #[cfg(feature = "async")]
+    reader: TryReader<crate::stream::async_stream::AsyncStream<Stdin>>,
+    #[cfg(not(feature = "async"))]
     reader: TryReader<Stdin>,
 }
 
 #[cfg(unix)]
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
+        #[cfg(feature = "async")]
+        let reader = TryReader::new(crate::stream::async_stream::AsyncStream::new(std::io::stdin())?)?;
+        #[cfg(not(feature = "async"))]
         let reader = TryReader::new(std::io::stdin())?;
         Ok(Self { reader })
     }

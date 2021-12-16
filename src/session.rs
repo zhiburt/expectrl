@@ -41,7 +41,7 @@ impl Session {
     #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let ptyproc = PtyProcess::spawn(command)?;
-        let stream = Stream::new(ptyproc.get_raw_handle()?)?;
+        let stream = Stream::open(&ptyproc)?;
 
         Ok(Self {
             proc: ptyproc,
@@ -698,7 +698,7 @@ impl futures_lite::io::AsyncRead for Session {
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        futures_lite::io::AsyncRead::poll_read(std::pin::Pin::new(&mut self.stream), cx, buf)
+        std::pin::Pin::new(&mut self.stream).poll_read(cx, buf)
     }
 }
 
