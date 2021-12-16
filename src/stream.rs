@@ -5,162 +5,8 @@
 
 use std::io;
 
-#[cfg(unix)]
-pub type ProcessStream = unix::ProcessStream;
-
-#[cfg(windows)]
-pub type ProcessStream = windows::ProcessStream;
-
-pub trait NonBlocking {
-    fn set_non_blocking(&mut self) -> io::Result<()>;
-    fn set_blocking(&mut self) -> io::Result<()>;
-}
-
-mod unix {
-    use std::{
-        io::{self, Read, Result, Write},
-        os::unix::prelude::{AsRawFd, RawFd},
-    };
-
-    use ptyprocess::{stream::Stream, PtyProcess};
-
-    use super::NonBlocking;
-
-    #[derive(Debug)]
-    pub struct ProcessStream {
-        handle: Stream,
-    }
-
-    impl ProcessStream {
-        pub fn new(proc: &PtyProcess) -> Result<Self> {
-            let handle_stream = proc.get_pty_stream().map_err(nix_error_to_io)?;
-
-            Ok(Self {
-                handle: handle_stream,
-            })
-        }
-    }
-
-    impl Write for ProcessStream {
-        fn write(&mut self, buf: &[u8]) -> Result<usize> {
-            self.handle.write(buf)
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            self.handle.flush()
-        }
-
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> Result<usize> {
-            self.handle.write_vectored(bufs)
-        }
-    }
-
-    impl Read for ProcessStream {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-            self.handle.read(buf)
-        }
-    }
-
-    impl AsRawFd for ProcessStream {
-        fn as_raw_fd(&self) -> RawFd {
-            self.handle.as_raw_fd()
-        }
-    }
-
-    impl<A: AsRawFd> NonBlocking for A {
-        fn set_non_blocking(&mut self) -> io::Result<()> {
-            let fd = self.as_raw_fd();
-            _make_non_blocking(fd, true)
-        }
-
-        fn set_blocking(&mut self) -> io::Result<()> {
-            let fd = self.as_raw_fd();
-            _make_non_blocking(fd, false)
-        }
-    }
-
-    fn _make_non_blocking(fd: RawFd, blocking: bool) -> io::Result<()> {
-        use nix::fcntl::{fcntl, FcntlArg, OFlag};
-
-        let opt = fcntl(fd, FcntlArg::F_GETFL).map_err(nix_error_to_io)?;
-        let mut opt = OFlag::from_bits_truncate(opt);
-        opt.set(OFlag::O_NONBLOCK, blocking);
-        fcntl(fd, FcntlArg::F_SETFL(opt)).map_err(nix_error_to_io)?;
-        Ok(())
-    }
-
-    fn nix_error_to_io(err: nix::Error) -> io::Error {
-        match err.as_errno() {
-            Some(code) => io::Error::from_raw_os_error(code as _),
-            None => io::Error::new(
-                io::ErrorKind::Other,
-                "Unexpected error type conversion from nix to io",
-            ),
-        }
-    }
-}
-
-#[cfg(windows)]
-mod windows {
-    use std::io::{self, BufRead, Read, Result, Write};
-
-    use conpty::io::{PipeReader, PipeWriter};
-
-    use super::NonBlocking;
-
-    #[derive(Debug)]
-    pub struct ProcessStream {
-        pub input: PipeWriter,
-        pub output: PipeReader,
-    }
-
-    impl Write for ProcessStream {
-        fn write(&mut self, buf: &[u8]) -> Result<usize> {
-            self.input.write(buf)
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            self.input.flush()
-        }
-
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> Result<usize> {
-            self.input.write_vectored(bufs)
-        }
-    }
-
-    impl Read for ProcessStream {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-            self.output.read(buf)
-        }
-    }
-
-    impl NonBlocking for ProcessStream {
-        fn set_non_blocking(&mut self) -> io::Result<()> {
-            self.output.set_non_blocking_mode()
-        }
-
-        fn set_blocking(&mut self) -> io::Result<()> {
-            self.output.set_blocking_mode()
-        }
-    }
-}
-
-pub type Stream = NonBlockingStream<ProcessStream>;
-
-impl Stream {
-    pub fn open(proc: &ptyprocess::PtyProcess) -> io::Result<Self> {
-        let proc = unix::ProcessStream::new(proc)?;
-        Stream::new(proc)
-    }
-
-    #[cfg(windows)]
-    pub fn open(proc: &conpty::Process) -> io::Result<Self> {
-        let proc = windows::ProcessStream::new(proc)?;
-        Stream::new(proc)
-    }
-}
-
 #[cfg(feature = "async")]
+#[cfg(unix)]
 use std::os::unix::prelude::AsRawFd;
 #[cfg(feature = "async")]
 use std::pin::Pin;
@@ -183,16 +29,21 @@ use non_blocking_reader::TryReader;
 #[cfg(not(feature = "async"))]
 use non_blocking_reader::TryReader;
 
+use crate::process::NonBlocking;
+
+#[cfg(not(feature = "async"))]
+type Reader<S> = TryReader<S>;
+
+#[cfg(feature = "async")]
+type Reader<S> = TryReader<AsyncStream<S>>;
+
 #[derive(Debug)]
-pub struct NonBlockingStream<S: Read> {
-    #[cfg(feature = "async")]
-    stream: TryReader<AsyncStream<S>>,
-    #[cfg(not(feature = "async"))]
-    stream: TryReader<S>,
+pub struct TryStream<S: Read> {
+    stream: Reader<S>,
 }
 
 #[cfg(not(feature = "async"))]
-impl<S: Write + Read + NonBlocking> NonBlockingStream<S> {
+impl<S: Write + Read + NonBlocking> TryStream<S> {
     /// The function returns a new Stream from a file.
     pub fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
@@ -202,7 +53,7 @@ impl<S: Write + Read + NonBlocking> NonBlockingStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Write + Read + AsRawFd> NonBlockingStream<S> {
+impl<S: Write + Read + AsRawFd> TryStream<S> {
     /// The function returns a new Stream from a file.
     pub fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
@@ -211,8 +62,18 @@ impl<S: Write + Read + AsRawFd> NonBlockingStream<S> {
     }
 }
 
+impl<P, S: Read> TryStream<S> {
+    fn from_stream<N: Read>(&mut self, stream: N) -> io::Result<TryStream<N>> {
+        self.stream.flush_in_buffer();
+        let buffer = self.stream.get_available();
+        let mut stream = TryStream::new(stream)?;
+        stream.keep_in_buffer(buffer);
+        Ok(stream)
+    }
+}
+
 #[cfg(not(feature = "async"))]
-impl<S: Read + Write> Write for NonBlockingStream<S> {
+impl<S: Read + Write> Write for TryStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.get_mut().write(buf)
     }
@@ -227,7 +88,7 @@ impl<S: Read + Write> Write for NonBlockingStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Write + Read> AsyncWrite for NonBlockingStream<S> {
+impl<S: Write + Read> AsyncWrite for TryStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -254,7 +115,7 @@ impl<S: Write + Read> AsyncWrite for NonBlockingStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Read + Unpin> AsyncRead for NonBlockingStream<S> {
+impl<S: Read + Unpin> AsyncRead for TryStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -265,7 +126,7 @@ impl<S: Read + Unpin> AsyncRead for NonBlockingStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Read + Unpin> AsyncBufRead for NonBlockingStream<S> {
+impl<S: Read + Unpin> AsyncBufRead for TryStream<S> {
     fn poll_fill_buf<'a>(
         self: Pin<&'a mut Self>,
         cx: &mut Context<'_>,
@@ -282,7 +143,7 @@ impl<S: Read + Unpin> AsyncBufRead for NonBlockingStream<S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<S: Read> Deref for NonBlockingStream<S> {
+impl<S: Read> Deref for TryStream<S> {
     type Target = TryReader<S>;
 
     fn deref(&self) -> &Self::Target {
@@ -291,7 +152,7 @@ impl<S: Read> Deref for NonBlockingStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Read> Deref for NonBlockingStream<S> {
+impl<S: Read> Deref for TryStream<S> {
     type Target = TryReader<AsyncStream<S>>;
 
     fn deref(&self) -> &Self::Target {
@@ -299,7 +160,7 @@ impl<S: Read> Deref for NonBlockingStream<S> {
     }
 }
 
-impl<S: Read> DerefMut for NonBlockingStream<S> {
+impl<S: Read> DerefMut for TryStream<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
@@ -756,65 +617,5 @@ pub mod non_blocking_reader {
                 Poll::Ready(Ok(n))
             }
         }
-    }
-}
-
-#[cfg(feature = "log")]
-mod log {
-    use std::{
-        io::{Read, Result, Write},
-        os::unix::prelude::AsRawFd,
-    };
-
-    pub struct LoggedStream<S, L> {
-        stream: S,
-        logger: L,
-    }
-
-    impl<S, L: Write> LoggedStream<S, L> {
-        pub fn new(stream: S, logger: L) -> Self {
-            Self { stream, logger }
-        }
-
-        fn log_write(&mut self, buf: &[u8]) {
-            log(&mut self.logger, "write", buf);
-        }
-
-        fn log_read(&mut self, buf: &[u8]) {
-            log(&mut self.logger, "read", buf);
-        }
-    }
-
-    impl<S: Write, L: Write> Write for LoggedStream<S, L> {
-        fn write(&mut self, buf: &[u8]) -> Result<usize> {
-            let n = self.stream.write(buf)?;
-            self.log_write(&buf[..n]);
-            Ok(n)
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            self.stream.flush()
-        }
-    }
-
-    impl<S: Read, L: Write> Read for LoggedStream<S, L> {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-            let n = self.stream.read(buf)?;
-            self.log_read(&buf[..n]);
-            Ok(n)
-        }
-    }
-
-    impl<S: AsRawFd, L> AsRawFd for LoggedStream<S, L> {
-        fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-            self.stream.as_raw_fd()
-        }
-    }
-
-    fn log(mut writer: impl Write, target: &str, data: &[u8]) {
-        let _ = match std::str::from_utf8(data) {
-            Ok(data) => writeln!(writer, "{}: {:?}", target, data),
-            Err(..) => writeln!(writer, "{}:(bytes): {:?}", target, data),
-        };
     }
 }

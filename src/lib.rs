@@ -47,12 +47,14 @@ mod check_macros;
 mod control_code;
 mod error;
 mod expect;
+mod process;
 pub mod interact;
-#[cfg(feature = "log")]
 mod log;
 pub mod repl;
 pub mod session;
 mod stream;
+
+use std::{io::Write, slice::SliceIndex};
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -64,12 +66,51 @@ pub use conpty::ProcAttr;
 
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
+use session::Session;
 
-#[cfg(not(feature = "log"))]
-pub use session::Session;
+#[cfg(unix)]
+type Process = process::unix::UnixProcess;
 
-#[cfg(feature = "log")]
-pub use log::SessionWithLog as Session;
+#[cfg(windows)]
+type Process = process::windows::WindowsProcess;
+
+struct SessionBuilder {
+    command: String,
+}
+
+struct SessionBuilderWithLog<W> {
+    command: String,
+    logger: W,
+}
+
+impl SessionBuilder {
+    pub fn new<S: AsRef<str>>(command: S) -> Self {
+        Self {
+            command
+        }
+    }
+
+    pub fn with_log<W: Write>(mut self, logger: W) -> SessionBuilderWithLog<W> {
+        SessionBuilderWithLog {
+            command: self.command,
+            logger,
+        }
+    }
+
+    pub fn spawn(self) -> Session<Process, <Process as crate::process::Process>::Stream> {
+        let process = Process::spawn(&self.command)?;
+        Session::from_process(process).map_err(Into::into)
+    }
+}
+
+impl<W> SessionBuilderWithLog<W> {
+    pub fn spawn(self) -> Session<Process, log::LoggedStream<<Process as crate::process::Process>::Stream, W>> {
+        let process = Process::spawn(&self.command)?;
+        let proc_stream = <Process as crate::process::Process>::stream(&mut process)?;
+        let stream = log::LoggedStream::new(proc_stream, self.logger);
+        Session::new(process, stream)
+    }
+}
 
 /// Spawn spawnes a new session.
 ///
@@ -107,7 +148,8 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
         let mut command = std::process::Command::new(&args[0]);
         command.args(args.iter().skip(1));
 
-        Session::spawn(command)
+        let process = crate::pptyprocess::PtyProcess::spawn(command)?;
+
     }
     #[cfg(windows)]
     {
