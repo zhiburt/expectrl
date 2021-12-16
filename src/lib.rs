@@ -47,26 +47,32 @@ mod check_macros;
 mod control_code;
 mod error;
 mod expect;
-mod process;
 pub mod interact;
 mod log;
+mod process;
 pub mod repl;
 pub mod session;
 mod stream;
-
-use std::{io::Write, slice::SliceIndex};
 
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
 pub use session::Found;
 
+pub use process::Stream;
+
 #[cfg(windows)]
 pub use conpty::ProcAttr;
 
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
-use session::Session;
+
+use process::Process as ProcessTrait;
+use std::{
+    io::{self, Write},
+    ops::{Deref, DerefMut},
+    process::Command,
+};
 
 #[cfg(unix)]
 type Process = process::unix::UnixProcess;
@@ -74,43 +80,7 @@ type Process = process::unix::UnixProcess;
 #[cfg(windows)]
 type Process = process::windows::WindowsProcess;
 
-struct SessionBuilder {
-    command: String,
-}
-
-struct SessionBuilderWithLog<W> {
-    command: String,
-    logger: W,
-}
-
-impl SessionBuilder {
-    pub fn new<S: AsRef<str>>(command: S) -> Self {
-        Self {
-            command
-        }
-    }
-
-    pub fn with_log<W: Write>(mut self, logger: W) -> SessionBuilderWithLog<W> {
-        SessionBuilderWithLog {
-            command: self.command,
-            logger,
-        }
-    }
-
-    pub fn spawn(self) -> Session<Process, <Process as crate::process::Process>::Stream> {
-        let process = Process::spawn(&self.command)?;
-        Session::from_process(process).map_err(Into::into)
-    }
-}
-
-impl<W> SessionBuilderWithLog<W> {
-    pub fn spawn(self) -> Session<Process, log::LoggedStream<<Process as crate::process::Process>::Stream, W>> {
-        let process = Process::spawn(&self.command)?;
-        let proc_stream = <Process as crate::process::Process>::stream(&mut process)?;
-        let stream = log::LoggedStream::new(proc_stream, self.logger);
-        Session::new(process, stream)
-    }
-}
+type ProcessStream = <Process as ProcessTrait>::Stream;
 
 /// Spawn spawnes a new session.
 ///
@@ -137,40 +107,210 @@ impl<W> SessionBuilderWithLog<W> {
 /// ```
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
-pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
+pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session<ProcessStream>, Error> {
+    let proc = Process::spawn(cmd)?;
+    Session::from_process(proc)
+}
+
+pub struct Session<S: Stream> {
+    inner: session::Session<Process, S>,
+}
+
+impl Session<ProcessStream> {
+    pub fn spawn(command: Command) -> Result<Self, Error> {
+        let mut process = Process::spawn_command(command)?;
+        let stream = process.stream()?;
+        Self::new(process, stream)
+    }
+
+    pub fn from_process(mut process: Process) -> Result<Self, Error> {
+        let stream = process.stream()?;
+        Self::new(process, stream)
+    }
+}
+
+impl<S: Stream> Session<S> {
+    pub fn new(process: Process, stream: S) -> Result<Self, Error> {
+        let session = session::Session::new(process, stream)?;
+        Ok(Self { inner: session })
+    }
+
+    pub fn with_log<W: Write>(
+        mut self,
+        logger: W,
+    ) -> Result<Session<log::LoggedStream<S, W>>, Error> {
+        let (session, old) = self.inner.swap_stream(log::EmptyStream)?;
+        let stream = log::LoggedStream::new(old, logger);
+        let (session, _) = session.swap_stream(stream)?;
+
+        Ok(Session { inner: session })
+    }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    ///
+    /// Returns a status of a process ater interactions.
+    /// Why it's crusial to return a status is after check of is_alive the actuall
+    /// status might be gone.
+    ///
+    /// Keystrokes are sent to the child process, and
+    /// the `stdout` and `stderr` output of the child process is printed.
+    ///
+    /// When the user types the `escape_character` this method will return control to a running process.
+    /// The escape_character will not be transmitted.
+    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+    ///
+    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+    /// it echos the real `stdin` to the child `stdin`.
     #[cfg(unix)]
-    {
-        let args = tokenize_command(cmd.as_ref());
-        if args.is_empty() {
-            return Err(Error::CommandParsing);
-        }
-
-        let mut command = std::process::Command::new(&args[0]);
-        command.args(args.iter().skip(1));
-
-        let process = crate::pptyprocess::PtyProcess::spawn(command)?;
-
+    pub fn interact(&mut self) -> Result<WaitStatus, Error> {
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
     #[cfg(windows)]
-    {
-        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
+    pub fn interact(&mut self) -> Result<(), Error> {
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
 }
 
-/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
-/// It takes care of single and double quotes but,
-///
-/// It doesn't cover all edge cases.
-/// So it may not be compatible with real shell arguments parsing.
-#[cfg(unix)]
-fn tokenize_command(program: &str) -> Vec<String> {
-    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
-    let mut res = vec![];
-    for cap in re.captures_iter(program) {
-        res.push(cap[0].to_string());
+impl<S: Stream> Deref for Session<S> {
+    type Target = session::Session<Process, S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
-    res
 }
+
+impl<S: Stream> DerefMut for Session<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<S: Stream> io::Write for Session<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.inner.write_vectored(bufs)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<S: Stream> io::Read for Session<S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<S: Stream> io::BufRead for Session<S> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.inner.consume(amt)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncWrite for Session {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::pin::Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::pin::Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_close(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::pin::Pin::new(&mut self.stream).poll_close(cx)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncRead for Session {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::pin::Pin::new(&mut self.stream).poll_read(cx, buf)
+    }
+}
+
+#[cfg(feature = "async")]
+impl futures_lite::io::AsyncBufRead for Session {
+    fn poll_fill_buf(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<&[u8]>> {
+        let this = self.get_mut();
+        let proc = std::pin::Pin::new(&mut this.stream);
+        proc.poll_fill_buf(cx)
+    }
+
+    fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
+        std::pin::Pin::new(&mut self.stream).consume(amt);
+    }
+}
+
+// pub struct Builder {
+//     command: String,
+// }
+
+// pub struct SessionBuilderWithLog<W> {
+//     command: String,
+//     logger: W,
+// }
+
+// impl Builder {
+//     pub fn new<S: AsRef<str>>(command: S) -> Self {
+//         Self {
+//             command: command.as_ref().to_string(),
+//         }
+//     }
+
+//     pub fn with_log<W: Write>(mut self, logger: W) -> SessionBuilderWithLog<W> {
+//         SessionBuilderWithLog {
+//             command: self.command,
+//             logger,
+//         }
+//     }
+
+//     pub fn spawn(self) -> Result<Session<ProcessStream>, Error> {
+//         let process = Process::spawn(&self.command)?;
+//         Session::from_process(process)
+//     }
+// }
+
+// impl<W: Write> SessionBuilderWithLog<W> {
+//     pub fn spawn(self) -> Result<Session<log::LoggedStream<ProcessStream, W>>, Error> {
+//         let process = Process::spawn(&self.command)?;
+//         let proc_stream = <Process as crate::process::Process>::stream(&mut process)?;
+//         let stream = log::LoggedStream::new(proc_stream, self.logger);
+//         Session::new(process, stream)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -178,24 +318,10 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_tokenize_command() {
-        let res = tokenize_command("prog arg1 arg2");
-        assert_eq!(vec!["prog", "arg1", "arg2"], res);
-
-        let res = tokenize_command("prog -k=v");
-        assert_eq!(vec!["prog", "-k=v"], res);
-
-        let res = tokenize_command("prog 'my text'");
-        assert_eq!(vec!["prog", "'my text'"], res);
-
-        let res = tokenize_command(r#"prog "my text""#);
-        assert_eq!(vec!["prog", r#""my text""#], res);
-    }
-
-    #[cfg(unix)]
-    #[test]
     fn test_spawn_no_command() {
-        assert!(matches!(spawn(""), Err(Error::CommandParsing)));
+        assert!(
+            matches!(spawn(""), Err(Error::IO(err)) if err.kind() == io::ErrorKind::InvalidInput && err.to_string() == "a commandline argument is not correct")
+        );
     }
 
     #[test]
@@ -210,7 +336,7 @@ mod tests {
             let _: Box<dyn std::io::BufRead> =
                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
 
-            fn _io_copy(mut session: Session) {
+            fn _io_copy<S: Stream>(mut session: Session<S>) {
                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
             }
         }

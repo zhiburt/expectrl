@@ -3,7 +3,10 @@ pub mod unix;
 #[cfg(windows)]
 pub mod windows;
 
-use std::{io::{Result, Write, Read}, process::Command};
+use std::{
+    io::{Read, Result, Write},
+    process::Command,
+};
 
 pub trait Process {
     type Stream;
@@ -13,8 +16,7 @@ pub trait Process {
     fn get_intr_char(&mut self) -> Result<u8>;
 }
 
-pub trait Stream: Write + Read + NonBlocking {
-}
+pub trait Stream: Write + Read + NonBlocking {}
 
 pub trait NonBlocking {
     fn set_non_blocking(&mut self) -> Result<()>;

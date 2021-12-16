@@ -1,7 +1,10 @@
 //! A wrapper of [Session] to log a read/write operations
-use std::{io::{Read, Result, Write}, ops::{Deref, DerefMut}};
+use std::{
+    io::{Read, Result, Write},
+    ops::{Deref, DerefMut},
+};
 
-use crate::process::{Stream, NonBlocking};
+use crate::process::{NonBlocking, Stream};
 
 pub struct LoggedStream<S, L> {
     stream: S,
@@ -66,8 +69,7 @@ impl<S: NonBlocking, L> NonBlocking for LoggedStream<S, L> {
     }
 }
 
-impl<S: Stream, L: Write> Stream for LoggedStream<S, L> {
-}
+impl<S: Stream, L: Write> Stream for LoggedStream<S, L> {}
 
 fn log(mut writer: impl Write, target: &str, data: &[u8]) {
     let _ = match std::str::from_utf8(data) {
@@ -75,3 +77,33 @@ fn log(mut writer: impl Write, target: &str, data: &[u8]) {
         Err(..) => writeln!(writer, "{}:(bytes): {:?}", target, data),
     };
 }
+
+pub struct EmptyStream;
+
+impl Write for EmptyStream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        Ok(0)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Read for EmptyStream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        Ok(0)
+    }
+}
+
+impl NonBlocking for EmptyStream {
+    fn set_non_blocking(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_blocking(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Stream for EmptyStream {}

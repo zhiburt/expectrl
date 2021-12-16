@@ -365,7 +365,7 @@ fn check_macro_doest_consume_missmatch() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn check_macro_with_different_needles() {
-    let check_input = |session: &mut expectrl::Session| {
+    let check_input = |session: &mut expectrl::Session<_>| {
         expectrl::check!(
             session,
             number = Any(["123", "345"]) => {

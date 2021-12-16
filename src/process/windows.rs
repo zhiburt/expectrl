@@ -7,11 +7,11 @@ use super::{NonBlocking, Process};
 pub struct WindowsProcess(Process);
 
 impl WindowsProcess {
-    fn spawn<S: AsRef<str>>(command: S) -> Result<Self> {
+    pub fn spawn<S: AsRef<str>>(command: S) -> Result<Self> {
         Process::spawn(conpty::ProcAttr::cmd(command.as_ref().to_string())).map(WindowsProcess)
     }
 
-    fn spawn_command(command: std::process::Command) -> Result<Self> {
+    pub fn spawn_command(command: std::process::Command) -> Result<Self> {
         todo!("Can work on latest compiler")
     }
 }
@@ -77,3 +77,17 @@ impl NonBlocking for ProcessStream {
 }
 
 impl super::Stream for ProcessStream {}
+
+impl Deref for WindowsProcess {
+    type Target = Process;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for WindowsProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

@@ -62,13 +62,25 @@ impl<S: Write + Read + AsRawFd> TryStream<S> {
     }
 }
 
-impl<P, S: Read> TryStream<S> {
-    fn from_stream<N: Read>(&mut self, stream: N) -> io::Result<TryStream<N>> {
-        self.stream.flush_in_buffer();
+impl<S: Write + Read + NonBlocking> TryStream<S> {
+    fn from_stream<N: Write + Read + NonBlocking>(
+        &mut self,
+        stream: N,
+    ) -> io::Result<TryStream<N>> {
+        self.flush_in_buffer();
         let buffer = self.stream.get_available();
         let mut stream = TryStream::new(stream)?;
         stream.keep_in_buffer(buffer);
         Ok(stream)
+    }
+
+    pub fn swap_stream<N: Write + Read + NonBlocking>(
+        mut self,
+        stream: N,
+    ) -> io::Result<(TryStream<N>, S)> {
+        let new = self.from_stream(stream)?;
+        let old = self.stream.into_inner();
+        Ok((new, old))
     }
 }
 
@@ -142,18 +154,8 @@ impl<S: Read + Unpin> AsyncBufRead for TryStream<S> {
     }
 }
 
-#[cfg(not(feature = "async"))]
 impl<S: Read> Deref for TryStream<S> {
-    type Target = TryReader<S>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.stream
-    }
-}
-
-#[cfg(feature = "async")]
-impl<S: Read> Deref for TryStream<S> {
-    type Target = TryReader<AsyncStream<S>>;
+    type Target = Reader<S>;
 
     fn deref(&self) -> &Self::Target {
         &self.stream
@@ -246,6 +248,10 @@ pub mod non_blocking_reader {
             Ok(Self {
                 inner: ControlledReader::new(reader),
             })
+        }
+
+        pub fn into_inner(self) -> R {
+            self.inner.inner.into_inner().inner
         }
 
         /// Try to read in a non-blocking mode.

@@ -1,5 +1,6 @@
 use std::{
     io::{self, Read, Result, Write},
+    ops::{Deref, DerefMut},
     os::unix::prelude::{AsRawFd, RawFd},
 };
 
@@ -10,10 +11,13 @@ use super::{NonBlocking, Process};
 pub struct UnixProcess(PtyProcess);
 
 impl UnixProcess {
-    fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
+    pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
         let args = tokenize_command(cmd.as_ref());
         if args.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a commandline argument is not correct"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "a commandline argument is not correct",
+            ));
         }
 
         let mut command = std::process::Command::new(&args[0]);
@@ -22,8 +26,10 @@ impl UnixProcess {
         Self::spawn_command(command)
     }
 
-    fn spawn_command(command: std::process::Command) -> Result<Self> {
-        PtyProcess::spawn(command).map( UnixProcess).map_err(nix_error_to_io)
+    pub fn spawn_command(command: std::process::Command) -> Result<Self> {
+        PtyProcess::spawn(command)
+            .map(UnixProcess)
+            .map_err(nix_error_to_io)
     }
 }
 
@@ -93,7 +99,20 @@ impl<A: AsRawFd> NonBlocking for A {
     }
 }
 
-impl super::Stream for PtyStream {
+impl super::Stream for PtyStream {}
+
+impl Deref for UnixProcess {
+    type Target = PtyProcess;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for UnixProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {

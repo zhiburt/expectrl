@@ -1,4 +1,4 @@
-use expectrl::{ControlCode, Session};
+use expectrl::{ControlCode, Session, Stream};
 use std::{thread, time::Duration};
 
 #[cfg(unix)]
@@ -520,7 +520,7 @@ fn spawn_after_interact() {
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
 }
 
-fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
+fn _p_read<S: Stream>(proc: &mut Session<S>, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.read(buf)
@@ -531,7 +531,7 @@ fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     }
 }
 
-fn _p_write_all(proc: &mut Session, buf: &[u8]) -> std::io::Result<()> {
+fn _p_write_all<S: Stream>(proc: &mut Session<impl Stream>, buf: &[u8]) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.write_all(buf)
@@ -542,7 +542,7 @@ fn _p_write_all(proc: &mut Session, buf: &[u8]) -> std::io::Result<()> {
     }
 }
 
-fn _p_flush(proc: &mut Session) -> std::io::Result<()> {
+fn _p_flush(proc: &mut Session<impl Stream>) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.flush()
@@ -553,7 +553,7 @@ fn _p_flush(proc: &mut Session) -> std::io::Result<()> {
     }
 }
 
-fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
+fn _p_send(proc: &mut Session<impl Stream>, buf: &str) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send(buf)
@@ -564,7 +564,7 @@ fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
+fn _p_send_line(proc: &mut Session<impl Stream>, buf: &str) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send_line(buf)
@@ -575,7 +575,10 @@ fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::Result<()> {
+fn _p_send_control(
+    proc: &mut Session<impl Stream>,
+    buf: impl Into<ControlCode>,
+) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send_control(buf)
@@ -586,7 +589,7 @@ fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::
     }
 }
 
-fn _p_read_to_string(proc: &mut Session) -> std::io::Result<String> {
+fn _p_read_to_string(proc: &mut Session<impl Stream>) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -599,7 +602,7 @@ fn _p_read_to_string(proc: &mut Session) -> std::io::Result<String> {
     Ok(buf)
 }
 
-fn _p_read_to_end(proc: &mut Session) -> std::io::Result<Vec<u8>> {
+fn _p_read_to_end(proc: &mut Session<impl Stream>) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -612,7 +615,7 @@ fn _p_read_to_end(proc: &mut Session) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn _p_read_until(proc: &mut Session, ch: u8) -> std::io::Result<Vec<u8>> {
+fn _p_read_until(proc: &mut Session<impl Stream>, ch: u8) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -627,7 +630,7 @@ fn _p_read_until(proc: &mut Session, ch: u8) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn _p_read_line(proc: &mut Session) -> std::io::Result<String> {
+fn _p_read_line(proc: &mut Session<impl Stream>) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -640,7 +643,7 @@ fn _p_read_line(proc: &mut Session) -> std::io::Result<String> {
     Ok(buf)
 }
 
-fn _p_is_empty(proc: &mut Session) -> std::io::Result<bool> {
+fn _p_is_empty(proc: &mut Session<impl Stream>) -> std::io::Result<bool> {
     #[cfg(not(feature = "async"))]
     {
         proc.is_empty()
@@ -651,7 +654,7 @@ fn _p_is_empty(proc: &mut Session) -> std::io::Result<bool> {
     }
 }
 
-fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
+fn _p_try_read(proc: &mut Session<impl Stream>, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.try_read(buf)
@@ -663,7 +666,7 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 }
 
 #[cfg(unix)]
-fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
+fn _p_interact(proc: &mut Session<impl Stream>) -> Result<WaitStatus, expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.interact()
