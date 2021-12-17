@@ -9,16 +9,10 @@ use crate::{
 };
 use std::{
     convert::TryInto,
-    io::{self, BufRead, Read},
+    io::{self, Read, Write},
     ops::{Deref, DerefMut},
     time::{self, Duration},
 };
-
-#[cfg(unix)]
-use crate::WaitStatus;
-
-#[cfg(not(feature = "async"))]
-use io::Write;
 
 #[cfg(all(unix, feature = "async"))]
 use futures_lite::AsyncWriteExt;
@@ -444,16 +438,16 @@ impl<P: Process, S: Stream> Session<P, S> {
 }
 
 #[cfg(all(feature = "async", not(windows)))]
-impl Session {
+impl<P: Process + Unpin, S: Stream>  Session<P, S> {
     /// Send text to child's `STDIN`.
     ///
     /// To write bytes you can use a [std::io::Write] operations instead.
-    pub async fn send<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
+    pub async fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         self.stream.write_all(s.as_ref().as_bytes()).await
     }
 
     /// Send a line to child's `STDIN`.
-    pub async fn send_line<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
+    pub async fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         #[cfg(windows)]
         const LINE_ENDING: &[u8] = b"\r\n";
         #[cfg(not(windows))]
@@ -494,46 +488,14 @@ impl Session {
     ///
     /// Often `eof` char handled as it would be a CTRL-C.
     pub async fn send_eof(&mut self) -> io::Result<()> {
-        self.stream.write_all(&[self.proc.get_eof_char()]).await
+        self.stream.write_all(&[self.proc.get_eof_char()?]).await
     }
 
     /// Send `INTR` indicator to a child process.
     ///
     /// Often `intr` char handled as it would be a CTRL-D.
     pub async fn send_intr(&mut self) -> io::Result<()> {
-        self.stream.write_all(&[self.proc.get_intr_char()]).await
-    }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?
-            .interact(self)
-            .await
-    }
-
-    pub(crate) async fn read_available_once(
-        &mut self,
-        buf: &mut [u8],
-    ) -> Result<Option<usize>, Error> {
-        self.stream
-            .read_available_once(buf)
-            .await
-            .map_err(|err| err.into())
+        self.stream.write_all(&[self.proc.get_intr_char()?]).await
     }
 
     pub(crate) fn get_available(&mut self) -> &[u8] {
@@ -560,7 +522,7 @@ impl<P, S: Read> DerefMut for Session<P, S> {
 }
 
 #[cfg(feature = "async")]
-impl Session {
+impl<P, S: Stream> Session<P, S> {
     /// Try to read in a non-blocking mode.
     ///
     /// Returns `[std::io::ErrorKind::WouldBlock]`
@@ -625,7 +587,7 @@ impl<P, S: Read> std::io::BufRead for Session<P, S> {
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncWrite for Session {
+impl<P, S: Read + Write> futures_lite::io::AsyncWrite for Session<P, S> {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -650,7 +612,7 @@ impl futures_lite::io::AsyncWrite for Session {
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncRead for Session {
+impl<P, S: Read + Unpin> futures_lite::io::AsyncRead for Session<P, S> {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -661,7 +623,7 @@ impl futures_lite::io::AsyncRead for Session {
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncBufRead for Session {
+impl<P: Unpin, S: Read + Unpin> futures_lite::io::AsyncBufRead for Session<P, S> {
     fn poll_fill_buf(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

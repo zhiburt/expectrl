@@ -1,6 +1,6 @@
 //! A wrapper of [Session] to log a read/write operations
 use std::{
-    io::{Read, Result, Write},
+    io::{Read, Result, Write, self},
     ops::{Deref, DerefMut},
 };
 
@@ -34,6 +34,27 @@ impl<S: Write, L: Write> Write for LoggedStream<S, L> {
 
     fn flush(&mut self) -> Result<()> {
         self.stream.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> Result<usize> {
+        let n = self.stream.write_vectored(bufs)?;
+
+        let mut rest = n;
+        let mut bytes = Vec::new();
+        for buf in bufs {
+            let written = std::cmp::min(buf.len(), rest);
+            rest -= written;
+
+            bytes.extend(&buf.as_ref()[..written]);
+
+            if rest == 0 {
+                break;
+            }
+        }
+
+        self.log_write(&bytes);
+
+        Ok(n)
     }
 }
 
@@ -81,7 +102,7 @@ fn log(mut writer: impl Write, target: &str, data: &[u8]) {
 pub struct EmptyStream;
 
 impl Write for EmptyStream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, _: &[u8]) -> Result<usize> {
         Ok(0)
     }
 
@@ -91,7 +112,7 @@ impl Write for EmptyStream {
 }
 
 impl Read for EmptyStream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, _: &mut [u8]) -> Result<usize> {
         Ok(0)
     }
 }

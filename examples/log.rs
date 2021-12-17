@@ -1,8 +1,6 @@
 #[cfg(not(feature = "async"))]
-#[cfg(feature = "log")]
 fn main() -> Result<(), expectrl::Error> {
-    let mut p = expectrl::spawn("cat")?;
-    p.set_log(std::io::stdout());
+    let mut p = expectrl::spawn("cat")?.with_log(std::io::stdout())?;
     p.send_line("Hello World")?;
 
     // reading doesn't apear here because
@@ -12,7 +10,7 @@ fn main() -> Result<(), expectrl::Error> {
     Ok(())
 }
 
-#[cfg(any(not(feature = "log"), feature = "async"))]
+#[cfg(any(feature = "async"))]
 fn main() {
     println!(
         "To run the example set necessary features `--no-default-features --features log,sync`"

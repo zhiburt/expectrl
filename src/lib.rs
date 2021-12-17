@@ -47,18 +47,18 @@ mod check_macros;
 mod control_code;
 mod error;
 mod expect;
-pub mod interact;
 mod log;
 mod process;
+mod stream;
+
 pub mod repl;
 pub mod session;
-mod stream;
+pub mod interact;
 
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
 pub use session::Found;
-
 pub use process::Stream;
 
 #[cfg(windows)]
@@ -135,10 +135,7 @@ impl<S: Stream> Session<S> {
         Ok(Self { inner: session })
     }
 
-    pub fn with_log<W: Write>(
-        mut self,
-        logger: W,
-    ) -> Result<Session<log::LoggedStream<S, W>>, Error> {
+    pub fn with_log<W: Write>(self, logger: W) -> Result<Session<log::LoggedStream<S, W>>, Error> {
         let (session, old) = self.inner.swap_stream(log::EmptyStream)?;
         let stream = log::LoggedStream::new(old, logger);
         let (session, _) = session.swap_stream(stream)?;
@@ -163,8 +160,33 @@ impl<S: Stream> Session<S> {
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
     #[cfg(unix)]
+    #[cfg(not(feature = "async"))]
     pub fn interact(&mut self) -> Result<WaitStatus, Error> {
         crate::interact::InteractOptions::terminal()?.interact(self)
+    }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    ///
+    /// Returns a status of a process ater interactions.
+    /// Why it's crusial to return a status is after check of is_alive the actuall
+    /// status might be gone.
+    ///
+    /// Keystrokes are sent to the child process, and
+    /// the `stdout` and `stderr` output of the child process is printed.
+    ///
+    /// When the user types the `escape_character` this method will return control to a running process.
+    /// The escape_character will not be transmitted.
+    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+    ///
+    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+    /// it echos the real `stdin` to the child `stdin`.
+    #[cfg(unix)]
+    #[cfg(feature = "async")]
+    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
+        crate::interact::InteractOptions::terminal()?
+            .interact(self)
+            .await
     }
 
     /// Interact gives control of the child process to the interactive user (the
@@ -223,54 +245,54 @@ impl<S: Stream> io::BufRead for Session<S> {
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncWrite for Session {
+impl<S: Stream> futures_lite::io::AsyncWrite for Session<S> {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<io::Result<usize>> {
-        std::pin::Pin::new(&mut self.stream).poll_write(cx, buf)
+        std::pin::Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        std::pin::Pin::new(&mut self.stream).poll_flush(cx)
+        std::pin::Pin::new(&mut self.inner).poll_flush(cx)
     }
 
     fn poll_close(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        std::pin::Pin::new(&mut self.stream).poll_close(cx)
+        std::pin::Pin::new(&mut self.inner).poll_close(cx)
     }
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncRead for Session {
+impl<S: Stream> futures_lite::io::AsyncRead for Session<S> {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<io::Result<usize>> {
-        std::pin::Pin::new(&mut self.stream).poll_read(cx, buf)
+        std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }
 
 #[cfg(feature = "async")]
-impl futures_lite::io::AsyncBufRead for Session {
+impl<S: Stream> futures_lite::io::AsyncBufRead for Session<S> {
     fn poll_fill_buf(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<io::Result<&[u8]>> {
         let this = self.get_mut();
-        let proc = std::pin::Pin::new(&mut this.stream);
+        let proc = std::pin::Pin::new(&mut this.inner);
         proc.poll_fill_buf(cx)
     }
 
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {
-        std::pin::Pin::new(&mut self.stream).consume(amt);
+        std::pin::Pin::new(&mut self.inner).consume(amt);
     }
 }
 
@@ -349,7 +371,7 @@ mod tests {
             let _: Box<dyn futures_lite::AsyncBufRead> =
                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
 
-            async fn _io_copy(mut session: Session) {
+            async fn _io_copy(mut session: Session<impl Stream>) {
                 futures_lite::io::copy(futures_lite::io::empty(), &mut session)
                     .await
                     .unwrap();

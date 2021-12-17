@@ -3,10 +3,7 @@ pub mod unix;
 #[cfg(windows)]
 pub mod windows;
 
-use std::{
-    io::{Read, Result, Write},
-    process::Command,
-};
+use std::io::{Read, Result, Write};
 
 pub trait Process {
     type Stream;

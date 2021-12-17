@@ -336,14 +336,14 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<R, W> InteractOptions<R, W>
+impl<S: Stream, R, W, C> InteractOptions<S, R, W, C>
 where
     R: futures_lite::AsyncRead + std::marker::Unpin,
     W: Write,
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
+    pub async fn interact(self, session: &mut Session<S>) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self).await,
             InputFrom::Other => interact(session, self).await,
@@ -514,9 +514,9 @@ where
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact_in_terminal<R, W>(
-    session: &mut Session,
-    options: InteractOptions<R, W>,
+async fn interact_in_terminal<S: Stream, R, W, C>(
+    session: &mut Session<S>,
+    options: InteractOptions<S, R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: futures_lite::AsyncRead + std::marker::Unpin,
@@ -563,9 +563,9 @@ where
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact<R, W>(
-    session: &mut Session,
-    mut options: InteractOptions<R, W>,
+async fn interact<S: Stream, R, W, C>(
+    session: &mut Session<S>,
+    mut options: InteractOptions<S, R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: futures_lite::AsyncRead + std::marker::Unpin,
