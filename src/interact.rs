@@ -568,7 +568,7 @@ async fn interact<S: Stream, R, W, C>(
     mut options: InteractOptions<S, R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
-    R: futures_lite::AsyncRead + std::marker::Unpin,
+    R: futures_lite::AsyncRead + Unpin,
     W: Write,
 {
     use futures_lite::{AsyncReadExt, AsyncWriteExt};
@@ -803,7 +803,7 @@ where
 #[cfg(unix)]
 pub struct NonBlockingStdin {
     #[cfg(feature = "async")]
-    reader: TryReader<crate::stream::async_stream::AsyncStream<Stdin>>,
+    reader: TryReader<crate::process::async_stream::AsyncStream<Stdin>>,
     #[cfg(not(feature = "async"))]
     reader: TryReader<Stdin>,
 }
@@ -812,7 +812,7 @@ pub struct NonBlockingStdin {
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
         #[cfg(feature = "async")]
-        let reader = TryReader::new(crate::stream::async_stream::AsyncStream::new(
+        let reader = TryReader::new(crate::process::async_stream::AsyncStream::new(
             std::io::stdin(),
         )?)?;
         #[cfg(not(feature = "async"))]

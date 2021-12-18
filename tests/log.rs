@@ -6,6 +6,8 @@ use std::{
 };
 
 #[cfg(feature = "async")]
+use futures_lite::AsyncBufReadExt;
+#[cfg(feature = "async")]
 use futures_lite::AsyncReadExt;
 
 use expectrl::spawn;
@@ -25,6 +27,12 @@ fn log() {
 
         let mut buf = vec![0; 1024];
         let _ = session.read(&mut buf).await.unwrap();
+
+        let bytes = writer.inner.lock().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(bytes.get_ref()),
+            "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n"
+        )
     });
 
     #[cfg(not(feature = "async"))]
@@ -37,13 +45,13 @@ fn log() {
 
         let mut buf = vec![0; 1024];
         let _ = session.read(&mut buf).unwrap();
-    }
 
-    let bytes = writer.inner.lock().unwrap();
-    assert_eq!(
-        String::from_utf8_lossy(bytes.get_ref()),
-        "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
-    )
+        let bytes = writer.inner.lock().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(bytes.get_ref()),
+            "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
+        )
+    }
 }
 
 #[test]
@@ -58,6 +66,12 @@ fn log_read_line() {
         let mut buf = String::new();
         let _ = session.read_line(&mut buf).await.unwrap();
         assert_eq!(buf, "Hello World\r\n");
+
+        let bytes = writer.inner.lock().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(bytes.get_ref()),
+            "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n"
+        )
     });
 
     #[cfg(not(feature = "async"))]
@@ -67,13 +81,13 @@ fn log_read_line() {
         let mut buf = String::new();
         let _ = session.read_line(&mut buf).unwrap();
         assert_eq!(buf, "Hello World\r\n");
-    }
 
-    let bytes = writer.inner.lock().unwrap();
-    assert_eq!(
-        String::from_utf8_lossy(bytes.get_ref()),
-        "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
-    )
+        let bytes = writer.inner.lock().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(bytes.get_ref()),
+            "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
+        )
+    }
 }
 
 #[derive(Debug, Clone, Default)]

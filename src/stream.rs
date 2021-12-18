@@ -13,7 +13,7 @@ use std::pin::Pin;
 #[cfg(feature = "async")]
 use std::task::{Context, Poll};
 use std::{
-    io::{Read, Write},
+    io::Write,
     ops::{Deref, DerefMut},
 };
 
@@ -23,27 +23,19 @@ use futures_lite::AsyncWrite;
 use futures_lite::{AsyncBufRead, AsyncRead};
 
 #[cfg(feature = "async")]
-use async_stream::AsyncStream;
-#[cfg(feature = "async")]
 use non_blocking_reader::TryReader;
 #[cfg(not(feature = "async"))]
 use non_blocking_reader::TryReader;
 
-use crate::process::NonBlocking;
-
-#[cfg(not(feature = "async"))]
-type Reader<S> = TryReader<S>;
-
-#[cfg(feature = "async")]
-type Reader<S> = TryReader<AsyncStream<S>>;
+use crate::process::Stream;
 
 #[derive(Debug)]
-pub struct TryStream<S: Read> {
-    stream: Reader<S>,
+pub struct TryStream<S: Stream> {
+    stream: TryReader<S>,
 }
 
 #[cfg(not(feature = "async"))]
-impl<S: Write + Read + NonBlocking> TryStream<S> {
+impl<S: Stream> TryStream<S> {
     /// The function returns a new Stream from a file.
     pub fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
@@ -53,20 +45,17 @@ impl<S: Write + Read + NonBlocking> TryStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Write + Read + AsRawFd> TryStream<S> {
+impl<S: Stream> TryStream<S> {
     /// The function returns a new Stream from a file.
     pub fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
-            stream: TryReader::new(AsyncStream::new(stream)?)?,
+            stream: TryReader::new(stream)?,
         })
     }
 }
 
-impl<S: Write + Read + NonBlocking> TryStream<S> {
-    fn from_stream<N: Write + Read + NonBlocking>(
-        &mut self,
-        stream: N,
-    ) -> io::Result<TryStream<N>> {
+impl<S: Stream> TryStream<S> {
+    fn from_stream<N: Stream>(&mut self, stream: N) -> io::Result<TryStream<N>> {
         self.flush_in_buffer();
         let buffer = self.stream.get_available();
         let mut stream = TryStream::new(stream)?;
@@ -74,10 +63,7 @@ impl<S: Write + Read + NonBlocking> TryStream<S> {
         Ok(stream)
     }
 
-    pub fn swap_stream<N: Write + Read + NonBlocking>(
-        mut self,
-        stream: N,
-    ) -> io::Result<(TryStream<N>, S)> {
+    pub fn swap_stream<N: Stream>(mut self, stream: N) -> io::Result<(TryStream<N>, S)> {
         let new = self.from_stream(stream)?;
         let old = self.stream.into_inner();
         Ok((new, old))
@@ -85,7 +71,7 @@ impl<S: Write + Read + NonBlocking> TryStream<S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<S: Read + Write> Write for TryStream<S> {
+impl<S: Stream> Write for TryStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.get_mut().write(buf)
     }
@@ -100,21 +86,21 @@ impl<S: Read + Write> Write for TryStream<S> {
 }
 
 #[cfg(feature = "async")]
-impl<S: Write + Read> AsyncWrite for TryStream<S> {
+impl<S: Stream> AsyncWrite for TryStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.stream.get_mut()).poll_write(cx, buf)
+        Pin::new(self.stream.get_mut()).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stream.get_mut()).poll_flush(cx)
+        Pin::new(self.stream.get_mut()).poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stream.get_mut()).poll_close(cx)
+        Pin::new(self.stream.get_mut()).poll_close(cx)
     }
 
     fn poll_write_vectored(
@@ -122,121 +108,57 @@ impl<S: Write + Read> AsyncWrite for TryStream<S> {
         cx: &mut Context<'_>,
         bufs: &[io::IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.stream.get_mut()).poll_write_vectored(cx, bufs)
+        Pin::new(self.stream.get_mut()).poll_write_vectored(cx, bufs)
     }
 }
 
 #[cfg(feature = "async")]
-impl<S: Read + Unpin> AsyncRead for TryStream<S> {
+impl<S: Stream> AsyncRead for TryStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(self.stream.deref_mut()).poll_read(cx, buf)
+        Pin::new(&mut self.stream).poll_read(cx, buf)
     }
 }
 
 #[cfg(feature = "async")]
-impl<S: Read + Unpin> AsyncBufRead for TryStream<S> {
+impl<S: Stream> AsyncBufRead for TryStream<S> {
     fn poll_fill_buf<'a>(
         self: Pin<&'a mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<&'a [u8]>> {
         // pin_project is used only for this function.
         // the solution was found in the original implementation of BufReader.
-        let this = self.get_mut();
-        Pin::new(this.stream.deref_mut()).poll_fill_buf(cx)
+        Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }
 
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
-        Pin::new(self.stream.deref_mut()).consume(amt)
+        Pin::new(&mut self.stream).consume(amt)
     }
 }
 
-impl<S: Read> Deref for TryStream<S> {
-    type Target = Reader<S>;
+impl<S: Stream> Deref for TryStream<S> {
+    type Target = TryReader<S>;
 
     fn deref(&self) -> &Self::Target {
         &self.stream
     }
 }
 
-impl<S: Read> DerefMut for TryStream<S> {
+impl<S: Stream> DerefMut for TryStream<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
 
-#[cfg(feature = "async")]
-pub(super) mod async_stream {
-    use std::{
-        io::{self, Read, Write},
-        os::unix::prelude::AsRawFd,
-        pin::Pin,
-        task::{Context, Poll},
-    };
-
-    use async_io::Async;
-    use futures_lite::{AsyncRead, AsyncWrite};
-
-    /// Stream represent a IO stream.
-    #[derive(Debug)]
-    pub struct AsyncStream<S> {
-        stream: Async<S>,
-    }
-
-    impl<S: AsRawFd> AsyncStream<S> {
-        /// The function returns a new Stream from a file.
-        pub fn new(stream: S) -> io::Result<Self> {
-            let stream = Async::new(stream)?;
-            Ok(Self { stream })
-        }
-    }
-
-    impl<S: Write> AsyncWrite for AsyncStream<S> {
-        fn poll_write(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<io::Result<usize>> {
-            Pin::new(&mut self.stream).poll_write(cx, buf)
-        }
-
-        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-            Pin::new(&mut self.stream).poll_flush(cx)
-        }
-
-        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-            Pin::new(&mut self.stream).poll_close(cx)
-        }
-
-        fn poll_write_vectored(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            bufs: &[io::IoSlice<'_>],
-        ) -> Poll<io::Result<usize>> {
-            Pin::new(&mut self.stream).poll_write_vectored(cx, bufs)
-        }
-    }
-
-    impl<S: Read> AsyncRead for AsyncStream<S> {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<io::Result<usize>> {
-            Pin::new(&mut self.stream).poll_read(cx, buf)
-        }
-    }
-}
-
 #[cfg(not(feature = "async"))]
 pub mod non_blocking_reader {
-    use super::NonBlocking;
-
     use std::io::{self, BufRead, BufReader, Read};
     use std::ops::{Deref, DerefMut};
+
+    use crate::process::NonBlocking;
 
     #[derive(Debug)]
     pub struct TryReader<R> {
@@ -450,12 +372,16 @@ pub mod non_blocking_reader {
             })
         }
 
+        pub fn into_inner(self) -> R {
+            self.inner.inner.into_inner().inner
+        }
+
         /// Try to read in a non-blocking mode.
         ///
         /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
         pub async fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             use futures_lite::AsyncReadExt;
-            match futures_lite::future::poll_once(self.inner.read(buf)).await {
+            match futures_lite::future::poll_once(self.inner.inner.read(buf)).await {
                 Some(result) => result,
                 None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
             }
@@ -473,7 +399,11 @@ pub mod non_blocking_reader {
         // non-buffered && non-blocking read
         async fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             use futures_lite::AsyncReadExt;
-            match futures_lite::future::poll_once(self.inner.get_mut().read(buf)).await {
+            match futures_lite::future::poll_once(
+                Box::pin(&mut self.inner.inner.get_mut().inner).read(buf),
+            )
+            .await
+            {
                 Some(result) => result,
                 None => Err(io::Error::new(io::ErrorKind::WouldBlock, "")),
             }
@@ -510,6 +440,34 @@ pub mod non_blocking_reader {
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
                 Err(err) => Err(err),
             }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    impl<S: AsyncRead + Unpin> AsyncRead for TryReader<S> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            Pin::new(&mut self.inner.inner).poll_read(cx, buf)
+        }
+    }
+
+    #[cfg(feature = "async")]
+    impl<S: AsyncRead + Unpin> AsyncBufRead for TryReader<S> {
+        fn poll_fill_buf<'a>(
+            self: Pin<&'a mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<io::Result<&'a [u8]>> {
+            // pin_project is used only for this function.
+            // the solution was found in the original implementation of BufReader.
+            let this = self.get_mut();
+            Pin::new(&mut this.inner.inner).poll_fill_buf(cx)
+        }
+
+        fn consume(mut self: Pin<&mut Self>, amt: usize) {
+            Pin::new(&mut self.inner.inner).consume(amt)
         }
     }
 
@@ -563,32 +521,6 @@ pub mod non_blocking_reader {
             let b = self.inner.buffer().to_vec();
             self.inner.consume(b.len());
             self.keep_in_buffer(&b);
-        }
-    }
-
-    impl<R: AsyncRead + Unpin> AsyncRead for ControlledReader<R> {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<io::Result<usize>> {
-            Pin::new(&mut self.inner).poll_read(cx, buf)
-        }
-    }
-
-    impl<R: AsyncRead + Unpin> AsyncBufRead for ControlledReader<R> {
-        fn poll_fill_buf<'a>(
-            self: Pin<&'a mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<io::Result<&'a [u8]>> {
-            // pin_project is used only for this function.
-            // the solution was found in the original implementation of BufReader.
-            let this = self.get_mut();
-            Pin::new(&mut this.inner).poll_fill_buf(cx)
-        }
-
-        fn consume(mut self: Pin<&mut Self>, amt: usize) {
-            Pin::new(&mut self.inner).consume(amt)
         }
     }
 

@@ -6,7 +6,10 @@ use std::{
 
 use ptyprocess::{stream::Stream, PtyProcess};
 
-use super::{NonBlocking, Process};
+use super::Process;
+
+#[cfg(feature = "async")]
+use super::async_stream::AsyncStream;
 
 pub struct UnixProcess(PtyProcess);
 
@@ -33,6 +36,7 @@ impl UnixProcess {
     }
 }
 
+#[cfg(not(feature = "async"))]
 impl Process for UnixProcess {
     type Stream = PtyStream;
 
@@ -47,6 +51,40 @@ impl Process for UnixProcess {
 
     fn get_intr_char(&mut self) -> std::io::Result<u8> {
         Ok(self.0.get_intr_char())
+    }
+}
+
+#[cfg(feature = "async")]
+impl Process for UnixProcess {
+    type Stream = AsyncStream<PtyStream>;
+
+    fn stream(&mut self) -> std::io::Result<Self::Stream> {
+        let handle_stream = self.0.get_pty_stream().map_err(nix_error_to_io)?;
+        let handle_stream = PtyStream::new(handle_stream);
+        let handle_stream = AsyncStream::new(handle_stream)?;
+        Ok(handle_stream)
+    }
+
+    fn get_eof_char(&mut self) -> std::io::Result<u8> {
+        Ok(self.0.get_eof_char())
+    }
+
+    fn get_intr_char(&mut self) -> std::io::Result<u8> {
+        Ok(self.0.get_intr_char())
+    }
+}
+
+impl Deref for UnixProcess {
+    type Target = PtyProcess;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for UnixProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -87,7 +125,8 @@ impl AsRawFd for PtyStream {
     }
 }
 
-impl<A: AsRawFd> NonBlocking for A {
+#[cfg(not(feature = "async"))]
+impl<A: AsRawFd> super::NonBlocking for A {
     fn set_non_blocking(&mut self) -> Result<()> {
         let fd = self.as_raw_fd();
         _make_non_blocking(fd, true)
@@ -99,21 +138,8 @@ impl<A: AsRawFd> NonBlocking for A {
     }
 }
 
+#[cfg(not(feature = "async"))]
 impl super::Stream for PtyStream {}
-
-impl Deref for UnixProcess {
-    type Target = PtyProcess;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for UnixProcess {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};

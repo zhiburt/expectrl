@@ -9,7 +9,7 @@ use crate::{
 };
 use std::{
     convert::TryInto,
-    io::{self, Read, Write},
+    io::{self, Write},
     ops::{Deref, DerefMut},
     time::{self, Duration},
 };
@@ -20,7 +20,7 @@ use futures_lite::AsyncWriteExt;
 /// Session represents a process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P, S: Read> {
+pub struct Session<P, S: Stream> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
@@ -438,7 +438,7 @@ impl<P: Process, S: Stream> Session<P, S> {
 }
 
 #[cfg(all(feature = "async", not(windows)))]
-impl<P: Process + Unpin, S: Stream>  Session<P, S> {
+impl<P: Process + Unpin, S: Stream> Session<P, S> {
     /// Send text to child's `STDIN`.
     ///
     /// To write bytes you can use a [std::io::Write] operations instead.
@@ -507,7 +507,7 @@ impl<P: Process + Unpin, S: Stream>  Session<P, S> {
     }
 }
 
-impl<P, S: Read> Deref for Session<P, S> {
+impl<P, S: Stream> Deref for Session<P, S> {
     type Target = P;
 
     fn deref(&self) -> &Self::Target {
@@ -515,7 +515,7 @@ impl<P, S: Read> Deref for Session<P, S> {
     }
 }
 
-impl<P, S: Read> DerefMut for Session<P, S> {
+impl<P, S: Stream> DerefMut for Session<P, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.proc
     }
@@ -554,7 +554,7 @@ impl<P, S: Stream> Session<P, S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S: Read + Write> std::io::Write for Session<P, S> {
+impl<P, S: Stream> std::io::Write for Session<P, S> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stream.write(buf)
     }
@@ -569,14 +569,14 @@ impl<P, S: Read + Write> std::io::Write for Session<P, S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S: Read> std::io::Read for Session<P, S> {
+impl<P, S: Stream> std::io::Read for Session<P, S> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.stream.read(buf)
     }
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S: Read> std::io::BufRead for Session<P, S> {
+impl<P, S: Stream> std::io::BufRead for Session<P, S> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         self.stream.fill_buf()
     }
@@ -587,50 +587,48 @@ impl<P, S: Read> std::io::BufRead for Session<P, S> {
 }
 
 #[cfg(feature = "async")]
-impl<P, S: Read + Write> futures_lite::io::AsyncWrite for Session<P, S> {
+impl<P: Unpin, S: Stream> futures_lite::io::AsyncWrite for Session<P, S> {
     fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        std::pin::Pin::new(&mut self.stream).poll_write(cx, buf)
+        std::pin::Pin::new(&mut self.get_mut().stream).poll_write(cx, buf)
     }
 
     fn poll_flush(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(&mut self.stream).poll_flush(cx)
+        std::pin::Pin::new(&mut self.get_mut().stream).poll_flush(cx)
     }
 
     fn poll_close(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(&mut self.stream).poll_close(cx)
+        std::pin::Pin::new(&mut self.get_mut().stream).poll_close(cx)
     }
 }
 
 #[cfg(feature = "async")]
-impl<P, S: Read + Unpin> futures_lite::io::AsyncRead for Session<P, S> {
+impl<P: Unpin, S: Stream> futures_lite::io::AsyncRead for Session<P, S> {
     fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        std::pin::Pin::new(&mut self.stream).poll_read(cx, buf)
+        std::pin::Pin::new(&mut self.get_mut().stream).poll_read(cx, buf)
     }
 }
 
 #[cfg(feature = "async")]
-impl<P: Unpin, S: Read + Unpin> futures_lite::io::AsyncBufRead for Session<P, S> {
+impl<P: Unpin, S: Stream> futures_lite::io::AsyncBufRead for Session<P, S> {
     fn poll_fill_buf(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<&[u8]>> {
-        let this = self.get_mut();
-        let proc = std::pin::Pin::new(&mut this.stream);
-        proc.poll_fill_buf(cx)
+        std::pin::Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }
 
     fn consume(mut self: std::pin::Pin<&mut Self>, amt: usize) {

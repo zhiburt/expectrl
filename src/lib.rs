@@ -51,15 +51,15 @@ mod log;
 mod process;
 mod stream;
 
+pub mod interact;
 pub mod repl;
 pub mod session;
-pub mod interact;
 
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use expect::{Any, Eof, NBytes, Needle, Regex};
-pub use session::Found;
 pub use process::Stream;
+pub use session::Found;
 
 #[cfg(windows)]
 pub use conpty::ProcAttr;
@@ -135,7 +135,20 @@ impl<S: Stream> Session<S> {
         Ok(Self { inner: session })
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn with_log<W: Write>(self, logger: W) -> Result<Session<log::LoggedStream<S, W>>, Error> {
+        let (session, old) = self.inner.swap_stream(log::EmptyStream)?;
+        let stream = log::LoggedStream::new(old, logger);
+        let (session, _) = session.swap_stream(stream)?;
+
+        Ok(Session { inner: session })
+    }
+
+    #[cfg(feature = "async")]
+    pub fn with_log<W: Write + Unpin>(
+        self,
+        logger: W,
+    ) -> Result<Session<log::LoggedStream<S, W>>, Error> {
         let (session, old) = self.inner.swap_stream(log::EmptyStream)?;
         let stream = log::LoggedStream::new(old, logger);
         let (session, _) = session.swap_stream(stream)?;
