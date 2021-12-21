@@ -117,8 +117,16 @@ pub struct Session<S: Stream> {
 }
 
 impl Session<ProcessStream> {
+    #[cfg(unix)]
     pub fn spawn(command: Command) -> Result<Self, Error> {
         let mut process = Process::spawn_command(command)?;
+        let stream = process.stream()?;
+        Self::new(process, stream)
+    }
+
+    #[cfg(windows)]
+    pub fn spawn(attr: ProcAttr) -> Result<Self, Error> {
+        let mut process = Process::spawn_command(attr)?;
         let stream = process.stream()?;
         Self::new(process, stream)
     }

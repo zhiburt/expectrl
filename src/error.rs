@@ -10,7 +10,7 @@ pub enum Error {
     #[cfg(unix)]
     Nix(ptyprocess::Error),
     #[cfg(windows)]
-    Win(conpty::Error),
+    Win(conpty::error::Error),
     CommandParsing,
     RegexParsing,
     ExpectTimeout,
@@ -51,8 +51,8 @@ impl From<ptyprocess::Error> for Error {
 }
 
 #[cfg(windows)]
-impl From<conpty::Error> for Error {
-    fn from(err: conpty::Error) -> Self {
+impl From<conpty::error::Error> for Error {
+    fn from(err: conpty::error::Error) -> Self {
         Self::Win(err)
     }
 }

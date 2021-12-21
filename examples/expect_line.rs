@@ -13,6 +13,8 @@ fn main() {
             ]))
             .expect("Expect failed");
 
+        println!("{:?}", String::from_utf8_lossy(m.as_bytes()));
+
         let is_eof = m.first().is_empty();
         if is_eof {
             break;

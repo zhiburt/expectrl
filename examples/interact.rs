@@ -32,7 +32,7 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
-    let mut pwsh = expectrl::spawn("cmd").expect("Error while spawning bash");
+    let mut pwsh = expectrl::spawn("pwsh").expect("Error while spawning bash");
 
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");

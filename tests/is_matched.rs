@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use expectrl::{spawn, Eof, NBytes, Regex, WaitStatus};
 use std::thread;
 use std::time::Duration;

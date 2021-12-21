@@ -327,7 +327,7 @@ where
     /// Runs interact interactively.
     /// See [Session::interact]
     #[cfg(windows)]
-    pub fn interact(self, session: &mut Session) -> Result<(), Error> {
+    pub fn interact(&mut self, session: &mut Session<S>) -> Result<(), Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
             InputFrom::Other => interact(session, self),
@@ -672,9 +672,9 @@ where
 }
 
 #[cfg(windows)]
-fn interact_in_terminal<R, W, C>(
-    session: &mut Session,
-    options: InteractOptions<R, W, C>,
+fn interact_in_terminal<S: Stream, R, W, C>(
+    session: &mut Session<S>,
+    options: &mut InteractOptions<S, R, W, C>,
 ) -> Result<(), Error>
 where
     R: Read,
@@ -695,9 +695,9 @@ where
 
 // copy paste of unix version with changed return type
 #[cfg(windows)]
-fn interact<R, W, C>(
-    session: &mut Session,
-    mut options: InteractOptions<R, W, C>,
+fn interact<S: Stream, R, W, C>(
+    session: &mut Session<S>,
+    options: &mut InteractOptions<S, R, W, C>,
 ) -> Result<(), Error>
 where
     R: Read,
@@ -864,7 +864,9 @@ impl Read for NonBlockingStdin {
         // we can't easily read in non-blocking manner,
         // but we can check when there's something to read,
         // which seems to be enough to not block.
-        if self.current_terminal.is_stdin_not_empty()? {
+        //
+        // fixme: I am not sure why reading works on is_stdin_empty() == true  
+        if self.current_terminal.is_stdin_empty().map_err(|err| io::Error::new(io::ErrorKind::Other, err))? {
             io::stdin().read(buf)
         } else {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
