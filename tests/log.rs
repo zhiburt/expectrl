@@ -47,10 +47,15 @@ fn log() {
         let _ = session.read(&mut buf).unwrap();
 
         let bytes = writer.inner.lock().unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(bytes.get_ref()),
-            "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
-        )
+        let s = String::from_utf8_lossy(bytes.get_ref());
+        if !matches!(
+            s.as_ref(),
+            "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
+                | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
+                | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n",
+        ) {
+            panic!("unexpected output {:?}", s);
+        }
     }
 }
 
@@ -92,6 +97,7 @@ fn log_read_line() {
             s.as_ref(),
             "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
                 | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
+                | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n",
         ) {
             panic!("unexpected output {:?}", s);
         }
