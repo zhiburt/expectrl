@@ -1,6 +1,12 @@
-use std::{io::{self, Read, Result, Write}, ops::{Deref, DerefMut}};
+use std::{
+    io::{self, Read, Result, Write},
+    ops::{Deref, DerefMut},
+};
 
-use conpty::{io::{PipeWriter, PipeReader}, Process, ProcAttr};
+use conpty::{
+    io::{PipeReader, PipeWriter},
+    ProcAttr, Process,
+};
 
 use super::{NonBlocking, Process as ProcessTrait};
 

@@ -865,8 +865,12 @@ impl Read for NonBlockingStdin {
         // but we can check when there's something to read,
         // which seems to be enough to not block.
         //
-        // fixme: I am not sure why reading works on is_stdin_empty() == true  
-        if self.current_terminal.is_stdin_empty().map_err(|err| io::Error::new(io::ErrorKind::Other, err))? {
+        // fixme: I am not sure why reading works on is_stdin_empty() == true
+        if self
+            .current_terminal
+            .is_stdin_empty()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+        {
             io::stdin().read(buf)
         } else {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))

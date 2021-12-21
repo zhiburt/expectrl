@@ -68,10 +68,14 @@ fn log_read_line() {
         assert_eq!(buf, "Hello World\r\n");
 
         let bytes = writer.inner.lock().unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(bytes.get_ref()),
-            "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n"
-        )
+        let s = String::from_utf8_lossy(bytes.get_ref());
+        if !matches!(
+            s.as_ref(),
+            "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
+                | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
+        ) {
+            panic!("unexpected output {:?}", s);
+        }
     });
 
     #[cfg(not(feature = "async"))]
@@ -83,10 +87,14 @@ fn log_read_line() {
         assert_eq!(buf, "Hello World\r\n");
 
         let bytes = writer.inner.lock().unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(bytes.get_ref()),
+        let s = String::from_utf8_lossy(bytes.get_ref());
+        if !matches!(
+            s.as_ref(),
             "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
-        )
+                | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
+        ) {
+            panic!("unexpected output {:?}", s);
+        }
     }
 }
 
