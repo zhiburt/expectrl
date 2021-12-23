@@ -1,3 +1,5 @@
+use expectrl::{self, Expect};
+
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), expectrl::Error> {
     let mut p = expectrl::spawn("cat")?.with_log(std::io::stdout())?;

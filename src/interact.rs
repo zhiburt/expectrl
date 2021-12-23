@@ -1,7 +1,10 @@
 //! This module contains a [InteractOptions] which allows a castomization of
 //! [crate::Session::interact] flow.
 
-use crate::{stream::non_blocking_reader::TryReader, ControlCode, Error, Session};
+use crate::{
+    process::Process, session::Session, stream::non_blocking_reader::TryReader, ControlCode, Error,
+    PlatformProcess,
+};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -24,7 +27,7 @@ use conpty::console::Console;
 use crate::process::Stream;
 
 /// InteractOptions represents options of an interact session.
-pub struct InteractOptions<S: Stream, R, W, C> {
+pub struct InteractOptions<S, R, W, C> {
     input: R,
     output: W,
     input_from: InputFrom,
@@ -52,16 +55,16 @@ type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
 /// Context provides an interface to use a [Session], IO streams
 /// and a state.
-pub struct Context<'a, S: Stream, R, W, C> {
-    session: &'a mut Session<S>,
+pub struct Context<'a, S, R, W, C> {
+    session: &'a mut S,
     input: &'a mut R,
     output: &'a mut W,
     state: &'a mut C,
 }
 
-impl<'a, S: Stream, R, W, C> Context<'a, S, R, W, C> {
+impl<'a, S, R, W, C> Context<'a, S, R, W, C> {
     /// Get a reference to the context's session.
-    pub fn session(&mut self) -> &mut Session<S> {
+    pub fn session(&mut self) -> &mut S {
         self.session
     }
 
@@ -81,7 +84,7 @@ impl<'a, S: Stream, R, W, C> Context<'a, S, R, W, C> {
     }
 }
 
-impl<S: Stream> InteractOptions<S, NonBlockingStdin, io::Stdout, ()> {
+impl<S> InteractOptions<S, NonBlockingStdin, io::Stdout, ()> {
     /// Constructs a interact options to interact via STDIN.
     ///
     /// Usage [InteractOptions::streamed] directly with [std::io::stdin],
@@ -104,7 +107,7 @@ impl<S: Stream> InteractOptions<S, NonBlockingStdin, io::Stdout, ()> {
     }
 }
 
-impl<S: Stream, R, W> InteractOptions<S, R, W, ()> {
+impl<S, R, W> InteractOptions<S, R, W, ()> {
     /// Create interact options with custom input and output streams.
     ///
     /// To construct default terminal session see [InteractOptions::terminal]
@@ -124,7 +127,7 @@ impl<S: Stream, R, W> InteractOptions<S, R, W, ()> {
     }
 }
 
-impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
+impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// State sets state which will be available in callback calls, throught context variable.
     ///
     /// Please beware that it cleans already set list of callbacks.
@@ -135,9 +138,9 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
         InteractOptions {
             state,
             escape_character: self.escape_character,
+            input_from: self.input_from,
             input: self.input,
             input_filter: self.input_filter,
-            input_from: self.input_from,
             output: self.output,
             output_filter: self.output_filter,
             idle_handler: None,
@@ -157,7 +160,7 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
     }
 }
 
-impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
+impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// Sets an escape character after seen which the interact interactions will be stopped
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
@@ -231,7 +234,7 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
         ControlCode::GroupSeparator.into() // Ctrl-]
     }
 
-    fn check_input(&mut self, session: &mut Session<S>, bytes: &[u8]) -> Result<Match, Error> {
+    fn check_input(&mut self, session: &mut S, bytes: &[u8]) -> Result<Match, Error> {
         for (pattern, callback) in self.input_handlers.iter_mut() {
             if !pattern.is_empty() && !bytes.is_empty() {
                 match contains_in_bytes(bytes, pattern.as_bytes()) {
@@ -256,12 +259,7 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
         Ok(Match::No)
     }
 
-    fn check_output(
-        &mut self,
-        session: &mut Session<S>,
-        buf: &mut Vec<u8>,
-        eof: bool,
-    ) -> Result<(), Error> {
+    fn check_output(&mut self, session: &mut S, buf: &mut Vec<u8>, eof: bool) -> Result<(), Error> {
         'checks: loop {
             for (search, callback) in self.output_handlers.iter_mut() {
                 let found = search.check(buf, eof)?;
@@ -287,7 +285,7 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
         }
     }
 
-    fn call_idle_handler(&mut self, session: &mut Session<S>) -> Result<(), Error> {
+    fn call_idle_handler(&mut self, session: &mut S) -> Result<(), Error> {
         let context = Context {
             input: &mut self.input,
             output: &mut self.output,
@@ -303,7 +301,7 @@ impl<S: Stream, R, W, C> InteractOptions<S, R, W, C> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<S: Stream, R, W, C> InteractOptions<S, R, W, C>
+impl<S: Stream, R, W, C> InteractOptions<crate::session::Session<PlatformProcess, S>, R, W, C>
 where
     R: Read,
     W: Write,
@@ -317,7 +315,10 @@ where
     /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
     /// (at the point of the call)
     #[cfg(unix)]
-    pub fn interact(&mut self, session: &mut Session<S>) -> Result<WaitStatus, Error> {
+    pub fn interact(
+        &mut self,
+        session: &mut Session<crate::PlatformProcess, S>,
+    ) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
             InputFrom::Other => interact(session, self),
@@ -327,7 +328,10 @@ where
     /// Runs interact interactively.
     /// See [Session::interact]
     #[cfg(windows)]
-    pub fn interact(&mut self, session: &mut Session<S>) -> Result<(), Error> {
+    pub fn interact(
+        &mut self,
+        session: &mut Session<crate::PlatformProcess, S>,
+    ) -> Result<(), Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
             InputFrom::Other => interact(session, self),
@@ -353,8 +357,8 @@ where
 
 #[cfg(all(unix, not(feature = "async")))]
 fn interact_in_terminal<S: Stream, R, W, C>(
-    session: &mut Session<S>,
-    options: &mut InteractOptions<S, R, W, C>,
+    session: &mut Session<crate::PlatformProcess, S>,
+    options: &mut InteractOptions<crate::session::Session<crate::PlatformProcess, S>, R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: Read,
@@ -400,8 +404,8 @@ where
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn interact<S: Stream, R, W, C>(
-    session: &mut Session<S>,
-    options: &mut InteractOptions<S, R, W, C>,
+    session: &mut Session<crate::PlatformProcess, S>,
+    options: &mut InteractOptions<crate::session::Session<crate::PlatformProcess, S>, R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
     R: Read,

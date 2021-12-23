@@ -10,7 +10,7 @@ use futures_lite::AsyncBufReadExt;
 #[cfg(feature = "async")]
 use futures_lite::AsyncReadExt;
 
-use expectrl::spawn;
+use expectrl::{spawn, Expect};
 
 #[test]
 fn log() {

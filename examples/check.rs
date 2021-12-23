@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use expectrl::{check, spawn, Error};
+use expectrl::{check, spawn, Error, Expect};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
@@ -8,7 +8,7 @@ fn main() {
 
     loop {
         match check!(
-            session,
+            &mut session,
             _ = "Password: " => {
                 println!("Set password to SECURE_PASSWORD");
                 session.send_line("SECURE_PASSWORD").unwrap();
@@ -32,7 +32,7 @@ fn main() {
 
         loop {
             match check!(
-                session,
+                &mut session,
                 _ = "Password: " => {
                     println!("Set password to SECURE_PASSWORD");
                     session.send_line("SECURE_PASSWORD").await.unwrap();

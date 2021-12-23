@@ -4,12 +4,14 @@ use crate::{
     control_code::ControlCode,
     error::Error,
     expect::{Match, Needle},
+    log,
     process::{Process, Stream},
     stream::TryStream,
+    Expect,
 };
 use std::{
     convert::TryInto,
-    io::{self, Write},
+    io::{self, BufRead, Read, Write},
     ops::{Deref, DerefMut},
     time::{self, Duration},
 };
@@ -17,7 +19,7 @@ use std::{
 #[cfg(all(unix, feature = "async"))]
 use futures_lite::AsyncWriteExt;
 
-/// Session represents a process and its streams.
+/// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
 pub struct Session<P, S: Stream> {
@@ -39,6 +41,45 @@ where
 }
 
 impl<P, S: Stream> Session<P, S> {
+    /// Create a session
+    pub fn new(process: P, stream: S) -> io::Result<Self> {
+        let stream = TryStream::new(stream)?;
+        Ok(Self {
+            proc: process,
+            stream,
+            expect_timeout: Some(Duration::from_millis(10000)),
+        })
+    }
+
+    /// Set the pty session's expect timeout.
+    pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
+        self.expect_timeout = expect_timeout;
+    }
+
+    #[cfg(not(feature = "async"))]
+    pub fn with_log<W: Write>(
+        self,
+        logger: W,
+    ) -> Result<Session<P, log::LoggedStream<S, W>>, Error> {
+        let (session, old) = self.swap_stream(log::EmptyStream)?;
+        let stream = log::LoggedStream::new(old, logger);
+        let (session, _) = session.swap_stream(stream)?;
+
+        Ok(session)
+    }
+
+    #[cfg(feature = "async")]
+    pub fn with_log<W: Write + Unpin>(
+        self,
+        logger: W,
+    ) -> Result<Session<log::LoggedStream<S, W>>, Error> {
+        let (session, old) = self.swap_stream(log::EmptyStream)?;
+        let stream = log::LoggedStream::new(old, logger);
+        let (session, _) = session.swap_stream(stream)?;
+
+        Ok(session)
+    }
+
     pub(crate) fn swap_stream<N: Stream>(self, stream: N) -> io::Result<(Session<P, N>, S)> {
         let (stream, old) = self.stream.swap_stream(stream)?;
         Ok((
@@ -52,115 +93,8 @@ impl<P, S: Stream> Session<P, S> {
     }
 }
 
-impl<P, S: Stream> Session<P, S> {
-    /// Create a session
-    pub fn new(process: P, stream: S) -> io::Result<Self> {
-        let stream = TryStream::new(stream)?;
-        Ok(Self {
-            proc: process,
-            stream,
-            expect_timeout: Some(Duration::from_millis(10000)),
-        })
-    }
-
-    /// Expect waits until a pattern is matched.
-    ///
-    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
-    ///
-    /// This make assertions in a lazy manner.
-    /// Starts from 1st byte then checks 2nd byte and goes further.
-    /// It is done intentinally to be presize.
-    /// It matters for example when you call this method with `crate::Regex("\\d+")` and output contains 123,
-    /// expect will return '1' as a match not '123'.
-    ///
-    /// ```
-    /// # futures_lite::future::block_on(async {
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.first(), b"1");
-    /// # })
-    /// ```
-    ///
-    /// This behaviour is different from [Session::check].
-    ///
-    /// It return an error if timeout is reached.
-    /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    #[cfg(feature = "async")]
-    pub async fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
-        let mut checking_data_length = 0;
-        let mut eof = false;
-        let start = time::Instant::now();
-        loop {
-            let mut available = self.stream.get_available();
-            if checking_data_length == available.len() {
-                // We read by byte to make things as lazy as possible.
-                //
-                // It's chose is important in using Regex as a Needle.
-                // Imagine we have a `\d+` regex.
-                // Using such buffer will match string `2` imidiately eventhough right after might be other digit.
-                //
-                // The second reason is
-                // if we wouldn't read by byte EOF indication could be lost.
-                // And next blocking std::io::Read operation could be blocked forever.
-                //
-                // We could read all data available via `read_available` to reduce IO operations,
-                // but in such case we would need to keep a EOF indicator internally in stream,
-                // which is OK if EOF happens onces, but I am not sure if this is a case.
-                eof = self.stream.read_available_once(&mut [0; 1]).await? == Some(0);
-                available = self.stream.get_available();
-            }
-
-            // We intentinally not increase the counter
-            // and run check one more time even though the data isn't changed.
-            // Because it may be important for custom implementations of Needle.
-            if checking_data_length < available.len() {
-                checking_data_length += 1;
-            }
-
-            let data = &available[..checking_data_length];
-
-            let found = expect.check(data, eof)?;
-            if !found.is_empty() {
-                let end_index = Found::right_most_index(&found);
-                let involved_bytes = data[..end_index].to_vec();
-                self.stream.consume_from_buffer(end_index);
-                return Ok(Found::new(involved_bytes, found));
-            }
-
-            if eof {
-                return Err(Error::Eof);
-            }
-
-            if let Some(timeout) = self.expect_timeout {
-                if start.elapsed() > timeout {
-                    return Err(Error::ExpectTimeout);
-                }
-            }
-        }
-    }
-
-    /// Expect waits until a pattern is matched.
-    ///
-    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
-    ///
-    /// This make assertions in a lazy manner.
-    /// Starts from 1st byte then checks 2nd byte and goes further.
-    /// It is done intentinally to be presize.
-    /// It matters for example when you call this method with `crate::Regex("\\d+")` and output contains 123,
-    /// expect will return '1' as a match not '123'.
-    ///
-    /// ```
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.first(), b"1");
-    /// ```
-    ///
-    /// This behaviour is different from [Session::check].
-    ///
-    /// It return an error if timeout is reached.
-    /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    #[cfg(not(feature = "async"))]
-    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+impl<P, S: Stream> Expect for Session<P, S> {
+    fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
         let mut eof = false;
         let start = time::Instant::now();
@@ -213,22 +147,7 @@ impl<P, S: Stream> Session<P, S> {
         }
     }
 
-    /// Check checks if a pattern is matched.
-    /// Returns empty found structure if nothing found.
-    ///
-    /// Is a non blocking version of [Session::expect].
-    /// But its strategy of matching is different from it.
-    /// It makes search agains all bytes available.
-    ///
-    /// ```
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.first(), b"123");
-    /// ```
-    #[cfg(not(feature = "async"))]
-    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+    fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
@@ -247,70 +166,7 @@ impl<P, S: Stream> Session<P, S> {
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
-    /// Check checks if a pattern is matched.
-    /// Returns empty found structure if nothing found.
-    ///
-    /// Is a non blocking version of [Session::expect].
-    /// But its strategy of matching is different from it.
-    /// It makes search agains all bytes available.
-    ///
-    /// ```
-    /// # futures_lite::future::block_on(async {
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.first(), b"123");
-    /// # });
-    /// ```
-    #[cfg(feature = "async")]
-    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
-        let eof = self.stream.read_available().await?;
-        let buf = self.stream.get_available();
-
-        let found = needle.check(buf, eof)?;
-        if !found.is_empty() {
-            let end_index = Found::right_most_index(&found);
-            let involved_bytes = buf[..end_index].to_vec();
-            self.stream.consume_from_buffer(end_index);
-            return Ok(Found::new(involved_bytes, found));
-        }
-
-        if eof {
-            return Err(Error::Eof);
-        }
-
-        Ok(Found::new(Vec::new(), Vec::new()))
-    }
-
-    /// Is matched checks if a pattern is matched.
-    /// It doesn't consumes bytes from stream.
-    ///
-    /// Its strategy of matching is different from the one in [Session::expect].
-    /// It makes search agains all bytes available.
-    ///
-    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option,
-    /// Because it is not guaranteed that [Session::check] or [Session::expect]
-    /// with the same parameters:
-    ///  * will successed even right after [Session::is_matched] call.
-    ///  * will operate on the same bytes
-    ///
-    /// IMPORTANT:
-    ///
-    /// If you call this method with Eof pattern be aware that
-    /// eof indication MAY be lost on the next interactions.
-    /// It depends from a process you spawn.
-    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
-    ///
-    /// ```
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.is_matched(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m, true);
-    /// ```
-    #[cfg(not(feature = "async"))]
-    pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+    fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
@@ -326,44 +182,11 @@ impl<P, S: Stream> Session<P, S> {
         Ok(false)
     }
 
-    /// Is matched checks if a pattern is matched.
-    /// It doesn't consumes bytes from stream.
-    ///
-    /// See sync version [Session::is_matched].
-    #[cfg(feature = "async")]
-    pub async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
-        let eof = self.stream.read_available().await?;
-        let buf = self.stream.get_available();
-
-        let found = needle.check(buf, eof)?;
-        if !found.is_empty() {
-            return Ok(true);
-        }
-
-        if eof {
-            return Err(Error::Eof);
-        }
-
-        Ok(false)
-    }
-
-    /// Set the pty session's expect timeout.
-    pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
-        self.expect_timeout = expect_timeout;
-    }
-}
-
-#[cfg(not(feature = "async"))]
-impl<P: Process, S: Stream> Session<P, S> {
-    /// Send text to child's `STDIN`.
-    ///
-    /// To write bytes you can use a [std::io::Write] operations instead.
-    pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
+    fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         self.stream.write_all(s.as_ref().as_bytes())
     }
 
-    /// Send a line to child's `STDIN`.
-    pub fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
+    fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         #[cfg(windows)]
         {
             // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
@@ -397,31 +220,32 @@ impl<P: Process, S: Stream> Session<P, S> {
         }
     }
 
-    /// Send controll character to a child process.
-    ///
-    /// You must be carefull passing a char or &str as an argument.
-    /// If you pass an unexpected controll you'll get a error.
-    /// So it may be better to use [ControlCode].
-    ///
-    /// ```no_run
-    /// use expectrl::{Session, ControlCode};
-    /// use std::process::Command;
-    ///
-    /// #[cfg(unix)]
-    /// let mut process = Session::spawn(Command::new("cat")).unwrap();
-    /// #[cfg(windows)]
-    /// let mut process = Session::spawn(expectrl::ProcAttr::cmd("cat".to_string())).unwrap();
-    /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
-    /// process.send_control('C'); // sends CTRL^C
-    /// process.send_control("^C"); // sends CTRL^C
-    /// ```
-    pub fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
+    fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
         let code = code.try_into().map_err(|_| {
             io::Error::new(io::ErrorKind::Other, "Failed to parse a control character")
         })?;
         self.stream.write_all(&[code.into()])
     }
+}
 
+#[cfg(not(feature = "async"))]
+impl<P, S: Stream> Session<P, S> {
+    /// Try to read in a non-blocking mode.
+    ///
+    /// Returns `[std::io::ErrorKind::WouldBlock]`
+    /// in case if there's nothing to read.
+    pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.stream.try_read(buf)
+    }
+
+    /// Verifyes if stream is empty or not.
+    pub fn is_empty(&mut self) -> io::Result<bool> {
+        self.stream.is_empty()
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<P: Process, S: Stream> Session<P, S> {
     /// Send `EOF` indicator to a child process.
     ///
     /// Often `eof` char handled as it would be a CTRL-C.
@@ -534,22 +358,6 @@ impl<P, S: Stream> Session<P, S> {
     /// Verifyes if stream is empty or not.
     pub async fn is_empty(&mut self) -> io::Result<bool> {
         self.stream.is_empty().await
-    }
-}
-
-#[cfg(not(feature = "async"))]
-impl<P, S: Stream> Session<P, S> {
-    /// Try to read in a non-blocking mode.
-    ///
-    /// Returns `[std::io::ErrorKind::WouldBlock]`
-    /// in case if there's nothing to read.
-    pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.try_read(buf)
-    }
-
-    /// Verifyes if stream is empty or not.
-    pub fn is_empty(&mut self) -> io::Result<bool> {
-        self.stream.is_empty()
     }
 }
 

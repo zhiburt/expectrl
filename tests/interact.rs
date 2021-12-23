@@ -1,3 +1,5 @@
+use expectrl::Expect;
+use expectrl::{interact::Context, PtySession};
 use std::{
     io::{self, Cursor, Read, Write},
     time::{Duration, Instant},
@@ -12,7 +14,7 @@ fn interact_callback() {
 
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("123", |mut ctx| {
+        .on_input("123", |mut ctx: Context<PtySession, _, _, _>| {
             ctx.session().send_line("Hello World")?;
             Ok(())
         })
@@ -42,7 +44,7 @@ fn interact_callbacks_with_stream_redirection() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .on_input("QWE", |mut ctx| {
+        .on_input("QWE", |mut ctx: Context<PtySession, _, _, _>| {
             ctx.session().send_line("Hello World")?;
             Ok(())
         });
@@ -150,10 +152,11 @@ fn interact_context() {
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
         .state((0, 0))
-        .on_input("QWE\n", |mut ctx| {
+        .on_input("QWE\n", |mut ctx: Context<PtySession, _, _, _>| {
             let state = ctx.state();
             state.0 += 1;
-            ctx.session().send_line("123")?;
+            let s = ctx.session();
+            s.send_line("123")?;
             Ok(())
         })
         .on_output(expectrl::NBytes(1), |mut ctx, _| {

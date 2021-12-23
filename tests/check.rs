@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use expectrl::{spawn, Any, Eof, NBytes, Regex, WaitStatus};
+use expectrl::{spawn, Any, Eof, Expect, NBytes, Regex, WaitStatus};
 use std::thread;
 use std::time::Duration;
 
@@ -204,7 +204,7 @@ fn check_macro() {
     thread::sleep(Duration::from_millis(600));
 
     expectrl::check!(
-        session,
+        &mut session,
         world = "\r" => {
             assert_eq!(world.first(), b"\r");
         },
@@ -257,7 +257,7 @@ fn check_macro_eof() {
     );
 
     expectrl::check!(
-        session,
+        &mut session,
         output = Eof => {
             #[cfg(target_os = "linux")]
             assert_eq!(output.first(), b"'Hello World'\r\n");
@@ -311,7 +311,7 @@ fn check_macro_doest_consume_missmatch() {
     thread::sleep(Duration::from_millis(600));
 
     expectrl::check!(
-        session,
+        &mut session,
         _ = "Something which is not inside" => {
             panic!("Unexpected result");
         },
@@ -322,7 +322,7 @@ fn check_macro_doest_consume_missmatch() {
     thread::sleep(Duration::from_millis(600));
 
     expectrl::check!(
-        session,
+        &mut session,
         buffer = Eof => {
             assert_eq!(buffer.first(), b"Hello World\r\n")
         },
@@ -367,7 +367,7 @@ fn check_macro_doest_consume_missmatch() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn check_macro_with_different_needles() {
-    let check_input = |session: &mut expectrl::Session<_>| {
+    let check_input = |session: &mut _| {
         expectrl::check!(
             session,
             number = Any(["123", "345"]) => {
