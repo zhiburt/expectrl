@@ -46,20 +46,19 @@
 mod check_macros;
 mod control_code;
 mod error;
-mod expect;
-mod log;
-mod process;
-mod stream;
-
+mod found;
 pub mod interact;
+mod log;
+mod needle;
+mod process;
 pub mod repl;
 pub mod session;
+mod stream;
 
 pub use control_code::ControlCode;
 pub use error::Error;
-pub use expect::{Any, Eof, NBytes, Needle, Regex};
-pub use process::Stream;
-pub use session::Found;
+pub use found::Found;
+pub use needle::{Any, Eof, NBytes, Needle, Regex};
 
 #[cfg(windows)]
 pub use conpty::ProcAttr;
@@ -67,7 +66,7 @@ pub use conpty::ProcAttr;
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
 
-use process::Process as ProcessTrait;
+use process::{Process as ProcessTrait, Stream};
 use std::{
     convert::TryInto,
     io::{self, BufRead, Read, Write},

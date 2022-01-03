@@ -1,6 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{error::Error, session::Found, Expect, PtySession};
+use crate::{error::Error, Found, PtySession};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
