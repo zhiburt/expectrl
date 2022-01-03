@@ -46,7 +46,7 @@
 mod check_macros;
 mod control_code;
 mod error;
-mod expect;
+mod needle;
 pub mod interact;
 #[cfg(feature = "log")]
 mod log;
@@ -56,7 +56,7 @@ mod stream;
 
 pub use control_code::ControlCode;
 pub use error::Error;
-pub use expect::{Any, Eof, NBytes, Needle, Regex};
+pub use needle::{Any, Eof, NBytes, Needle, Regex};
 pub use session::Found;
 
 #[cfg(windows)]

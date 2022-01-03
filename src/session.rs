@@ -3,7 +3,7 @@
 use crate::{
     control_code::ControlCode,
     error::Error,
-    expect::{Match, Needle},
+    needle::{Match, Needle},
     stream::Stream,
 };
 use std::{
