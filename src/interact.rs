@@ -1,10 +1,7 @@
 //! This module contains a [InteractOptions] which allows a castomization of
 //! [crate::Session::interact] flow.
 
-use crate::{
-    process::Process, session::Session, stream::non_blocking_reader::TryReader, ControlCode, Error,
-    PlatformProcess,
-};
+use crate::{session::Session, stream::stream::TryStream, ControlCode, Error, PlatformProcess};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -806,21 +803,13 @@ where
 /// But we expose it because its used in [InteractOptions::terminal]
 #[cfg(unix)]
 pub struct NonBlockingStdin {
-    #[cfg(feature = "async")]
-    reader: TryReader<crate::process::async_stream::AsyncStream<Stdin>>,
-    #[cfg(not(feature = "async"))]
-    reader: TryReader<Stdin>,
+    reader: TryStream<Stdin>,
 }
 
 #[cfg(unix)]
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
-        #[cfg(feature = "async")]
-        let reader = TryReader::new(crate::process::async_stream::AsyncStream::new(
-            std::io::stdin(),
-        )?)?;
-        #[cfg(not(feature = "async"))]
-        let reader = TryReader::new(std::io::stdin())?;
+        let reader = TryStream::new(std::io::stdin())?;
         Ok(Self { reader })
     }
 }

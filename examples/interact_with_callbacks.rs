@@ -1,4 +1,4 @@
-use expectrl::{interact::Context, PtySession};
+use expectrl::{interact::Context, session::Session};
 use expectrl::{interact::InteractOptions, spawn, Expect, Regex};
 
 #[derive(Debug, Default)]
@@ -17,13 +17,13 @@ fn main() {
         .state(State::default())
         .on_output(
             "Continue [y/n]:",
-            |mut ctx: Context<PtySession, _, _, _>, _| {
+            |mut ctx: Context<Session<_, expectrl::process::unix::PtyStream>, _, _, _>, _| {
                 ctx.state().wait_for_continue = Some(true);
                 Ok(())
             },
         )
         .on_input("y", |mut ctx| {
-            ctx.session().send("y")?;
+            Expect::send(ctx.session(), "y")?;
 
             if let Some(_a @ true) = ctx.state().wait_for_continue {
                 ctx.state().pressed_yes_on_continue = Some(true);
@@ -32,7 +32,7 @@ fn main() {
             Ok(())
         })
         .on_input("n", |mut ctx| {
-            ctx.session().send("n")?;
+            Expect::send(ctx.session(), "n")?;
 
             if let Some(_a @ true) = ctx.state().wait_for_continue {
                 ctx.state().pressed_yes_on_continue = Some(false);

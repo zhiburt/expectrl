@@ -6,18 +6,16 @@ pub mod windows;
 #[cfg(feature = "async")]
 pub mod async_stream;
 
-use std::io::Result;
+use std::io::{Read, Result, Write};
 
 pub trait Process {
     type Stream;
 
     fn stream(&mut self) -> Result<Self::Stream>;
-    fn get_eof_char(&mut self) -> Result<u8>;
-    fn get_intr_char(&mut self) -> Result<u8>;
 }
 
 #[cfg(not(feature = "async"))]
-pub trait Stream: std::io::Write + std::io::Read + NonBlocking {}
+pub trait Stream: Write + Read + NonBlocking {}
 
 #[cfg(not(feature = "async"))]
 pub trait NonBlocking {
@@ -25,5 +23,4 @@ pub trait NonBlocking {
     fn set_blocking(&mut self) -> Result<()>;
 }
 
-#[cfg(feature = "async")]
-pub trait Stream: futures_lite::AsyncWrite + futures_lite::AsyncRead + Unpin {}
+impl<T> Stream for T where T: Write + Read + NonBlocking {}

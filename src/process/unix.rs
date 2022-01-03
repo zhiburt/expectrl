@@ -8,9 +8,6 @@ use ptyprocess::{stream::Stream, PtyProcess};
 
 use super::Process;
 
-#[cfg(feature = "async")]
-use super::async_stream::AsyncStream;
-
 pub struct UnixProcess(PtyProcess);
 
 impl UnixProcess {
@@ -44,14 +41,6 @@ impl Process for UnixProcess {
         let handle_stream = self.0.get_pty_stream().map_err(nix_error_to_io)?;
         Ok(Self::Stream::new(handle_stream))
     }
-
-    fn get_eof_char(&mut self) -> std::io::Result<u8> {
-        Ok(self.0.get_eof_char())
-    }
-
-    fn get_intr_char(&mut self) -> std::io::Result<u8> {
-        Ok(self.0.get_intr_char())
-    }
 }
 
 #[cfg(feature = "async")]
@@ -63,14 +52,6 @@ impl Process for UnixProcess {
         let handle_stream = PtyStream::new(handle_stream);
         let handle_stream = AsyncStream::new(handle_stream)?;
         Ok(handle_stream)
-    }
-
-    fn get_eof_char(&mut self) -> std::io::Result<u8> {
-        Ok(self.0.get_eof_char())
-    }
-
-    fn get_intr_char(&mut self) -> std::io::Result<u8> {
-        Ok(self.0.get_intr_char())
     }
 }
 
@@ -137,9 +118,6 @@ impl<A: AsRawFd> super::NonBlocking for A {
         _make_non_blocking(fd, false)
     }
 }
-
-#[cfg(not(feature = "async"))]
-impl super::Stream for PtyStream {}
 
 fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};

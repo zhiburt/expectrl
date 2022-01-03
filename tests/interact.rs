@@ -1,5 +1,5 @@
+use expectrl::interact::Context;
 use expectrl::Expect;
-use expectrl::{interact::Context, PtySession};
 use std::{
     io::{self, Cursor, Read, Write},
     time::{Duration, Instant},
@@ -14,8 +14,8 @@ fn interact_callback() {
 
     let mut opts = expectrl::interact::InteractOptions::terminal()
         .unwrap()
-        .on_input("123", |mut ctx: Context<PtySession, _, _, _>| {
-            ctx.session().send_line("Hello World")?;
+        .on_input("123", |mut ctx: Context<_, _, _, _>| {
+            Expect::send_line(ctx.session(), "Hello World")?;
             Ok(())
         })
         .on_output(b'\n', |_, f| {
@@ -31,6 +31,8 @@ fn interact_callback() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_callbacks_with_stream_redirection() {
+    use expectrl::session::Session;
+
     let commands = vec![
         "NO_MATCHED\n".to_string(),
         "QWE\n".to_string(),
@@ -44,8 +46,8 @@ fn interact_callbacks_with_stream_redirection() {
     let mut session = expectrl::spawn("cat").unwrap();
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
-        .on_input("QWE", |mut ctx: Context<PtySession, _, _, _>| {
-            ctx.session().send_line("Hello World")?;
+        .on_input("QWE", |mut ctx: Context<Session<_, _>, _, _, _>| {
+            Expect::send_line(ctx.session(), "Hello World")?;
             Ok(())
         });
 
@@ -152,11 +154,11 @@ fn interact_context() {
     let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
         .unwrap()
         .state((0, 0))
-        .on_input("QWE\n", |mut ctx: Context<PtySession, _, _, _>| {
+        .on_input("QWE\n", |mut ctx: Context<_, _, _, _>| {
             let state = ctx.state();
             state.0 += 1;
             let s = ctx.session();
-            s.send_line("123")?;
+            Expect::send_line(s, "123")?;
             Ok(())
         })
         .on_output(expectrl::NBytes(1), |mut ctx, _| {

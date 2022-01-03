@@ -48,9 +48,8 @@ mod control_code;
 mod error;
 mod found;
 pub mod interact;
-mod log;
 mod needle;
-mod process;
+pub mod process;
 pub mod repl;
 pub mod session;
 mod stream;
@@ -67,12 +66,10 @@ pub use conpty::ProcAttr;
 pub use ptyprocess::{Signal, WaitStatus};
 
 use process::{Process as ProcessTrait, Stream};
-use std::{
-    convert::TryInto,
-    io::{self, BufRead, Read, Write},
-};
+use session::Session;
+use std::{convert::TryInto, io};
 
-pub trait Expect: Write + Read + BufRead {
+pub trait Expect {
     /// Expect waits until a pattern is matched.
     ///
     /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
@@ -225,35 +222,37 @@ impl<EE: Expect> Expect for &mut EE {
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn(cmd: impl AsRef<str>) -> Result<PtySession, Error> {
     let proc = PlatformProcess::spawn(cmd)?;
-    let session = session::Session::from_process(proc)?;
+    let session = Session::from_process(proc)?;
     Ok(session)
 }
 
 #[cfg(unix)]
-pub type PlatformProcess = process::unix::UnixProcess;
+type PlatformProcess = process::unix::UnixProcess;
 
 #[cfg(windows)]
-pub type PlatformProcess = process::windows::WindowsProcess;
+type PlatformProcess = process::windows::WindowsProcess;
 
-pub type PtySession = session::Session<PlatformProcess, <PlatformProcess as ProcessTrait>::Stream>;
+type PtySession = Session<PlatformProcess, <PlatformProcess as ProcessTrait>::Stream>;
 
+#[cfg(unix)]
 impl PtySession {
-    #[cfg(unix)]
-    pub fn spawn_command(command: std::process::Command) -> Result<PtySession, Error> {
-        let process = PlatformProcess::spawn_command(command)?;
-        let session = PtySession::from_process(process)?;
+    pub fn spawn_command(command: std::process::Command) -> Result<Self, Error> {
+        let process = process::unix::UnixProcess::spawn_command(command)?;
+        let session = Self::from_process(process)?;
         Ok(session)
     }
+}
 
-    #[cfg(windows)]
+#[cfg(windows)]
+impl PtySession {
     pub fn spawn_command(attr: ProcAttr) -> Result<PtySession, Error> {
-        let process = PlatformProcess::spawn_command(attr)?;
+        let process = process::windows::WindowsProcess::spawn_command(attr)?;
         let session = PtySession::from_process(process)?;
         Ok(session)
     }
 }
 
-impl<S: Stream> session::Session<PlatformProcess, S> {
+impl<S: Stream> Session<PlatformProcess, S> {
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
     ///
@@ -336,7 +335,7 @@ mod tests {
                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
             }
 
-            fn __io_copy(mut session: impl Expect) {
+            fn __io_copy<T>(mut session: session::Session<T, impl io::Write>) {
                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
             }
         }
