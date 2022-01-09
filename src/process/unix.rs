@@ -33,25 +33,12 @@ impl UnixProcess {
     }
 }
 
-#[cfg(not(feature = "async"))]
 impl Process for UnixProcess {
     type Stream = PtyStream;
 
     fn stream(&mut self) -> std::io::Result<Self::Stream> {
         let handle_stream = self.0.get_pty_stream().map_err(nix_error_to_io)?;
         Ok(Self::Stream::new(handle_stream))
-    }
-}
-
-#[cfg(feature = "async")]
-impl Process for UnixProcess {
-    type Stream = AsyncStream<PtyStream>;
-
-    fn stream(&mut self) -> std::io::Result<Self::Stream> {
-        let handle_stream = self.0.get_pty_stream().map_err(nix_error_to_io)?;
-        let handle_stream = PtyStream::new(handle_stream);
-        let handle_stream = AsyncStream::new(handle_stream)?;
-        Ok(handle_stream)
     }
 }
 
@@ -106,7 +93,6 @@ impl AsRawFd for PtyStream {
     }
 }
 
-#[cfg(not(feature = "async"))]
 impl<A: AsRawFd> super::NonBlocking for A {
     fn set_non_blocking(&mut self) -> Result<()> {
         let fd = self.as_raw_fd();

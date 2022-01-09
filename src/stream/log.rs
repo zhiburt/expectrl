@@ -4,6 +4,8 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use crate::process::NonBlocking;
+
 pub struct LoggedStream<S, L> {
     stream: S,
     logger: L,
@@ -78,7 +80,7 @@ impl<S, L> DerefMut for LoggedStream<S, L> {
     }
 }
 
-impl<S: crate::process::NonBlocking, L> crate::process::NonBlocking for LoggedStream<S, L> {
+impl<S: NonBlocking, L> NonBlocking for LoggedStream<S, L> {
     fn set_non_blocking(&mut self) -> Result<()> {
         self.stream.set_non_blocking()
     }

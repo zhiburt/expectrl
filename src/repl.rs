@@ -204,7 +204,8 @@ impl ReplSession {
     #[cfg(feature = "async")]
     async fn _expect_prompt(&mut self) -> Result<Found, Error> {
         let prompt = self.prompt.clone();
-        self.expect(prompt).await
+        // self.expect(prompt).await
+        Err(Error::CommandParsing)
     }
 
     /// Send a command to a repl and verifies that it exited.
@@ -241,10 +242,10 @@ impl ReplSession {
     /// If echo_on=true wait for the input to appear.
     #[cfg(feature = "async")]
     pub async fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
-        self.session.send_line(line.as_ref()).await?;
-        if self.is_echo_on {
-            self.expect(line.as_ref()).await?;
-        }
+        // self.session.send_line(line.as_ref()).await?;
+        // if self.is_echo_on {
+        //     self.expect(line.as_ref()).await?;
+        // }
         Ok(())
     }
 
@@ -255,7 +256,7 @@ impl ReplSession {
     #[cfg(feature = "async")]
     pub async fn exit(&mut self) -> Result<(), Error> {
         if let Some(quit_command) = self.quit_command.clone() {
-            self.session.send_line(quit_command).await?;
+            // self.session.send_line(quit_command).await?;
         }
 
         Ok(())

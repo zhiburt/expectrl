@@ -1,4 +1,6 @@
-use std::io::{Read, Result, Write};
+use std::{io::{Read, Result, Write}, os::unix::prelude::AsRawFd};
+
+use futures_lite::io::Empty;
 
 use crate::process::NonBlocking;
 
@@ -20,12 +22,9 @@ impl Read for EmptyStream {
     }
 }
 
-impl NonBlocking for EmptyStream {
-    fn set_non_blocking(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn set_blocking(&mut self) -> Result<()> {
-        Ok(())
+impl AsRawFd for EmptyStream {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        // it must be save as long as 
+        0
     }
 }

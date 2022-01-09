@@ -13,13 +13,16 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-async = ["futures-lite", "async-io"]
+default = ["async"]
+async = ["futures-lite", "futures-timer", "async-io"]
 
 [dependencies]
 regex = "1.5.4"
 futures-lite = { version = "1.12.0", optional = true }
+# It's commented as a reminder to add an optional second async backend.
 # blocking = { version = "1.1.0", optional = true }
 async-io = { version = "1.6.0", optional = true }
+futures-timer = { version = "3.0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 conpty = "0.3.0"

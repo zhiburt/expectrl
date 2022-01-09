@@ -53,6 +53,7 @@ pub mod process;
 pub mod repl;
 pub mod session;
 mod stream;
+mod async_session;
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -291,13 +292,13 @@ impl<S: Stream> Session<PlatformProcess, S> {
     ///
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
-    #[cfg(unix)]
-    #[cfg(feature = "async")]
-    pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?
-            .interact(self)
-            .await
-    }
+    // #[cfg(unix)]
+    // #[cfg(feature = "async")]
+    // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
+    //     crate::interact::InteractOptions::terminal()?
+    //         .interact(self)
+    //         .await
+    // }
 
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
@@ -307,58 +308,58 @@ impl<S: Stream> Session<PlatformProcess, S> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[cfg(unix)]
-    #[test]
-    fn test_spawn_no_command() {
-        assert!(
-            matches!(spawn(""), Err(Error::IO(err)) if err.kind() == io::ErrorKind::InvalidInput && err.to_string() == "a commandline argument is not correct")
-        );
-    }
+//     #[cfg(unix)]
+//     #[test]
+//     fn test_spawn_no_command() {
+//         assert!(
+//             matches!(spawn(""), Err(Error::IO(err)) if err.kind() == io::ErrorKind::InvalidInput && err.to_string() == "a commandline argument is not correct")
+//         );
+//     }
 
-    #[test]
-    #[ignore = "it's a compile time check"]
-    fn session_as_writer() {
-        #[cfg(not(feature = "async"))]
-        {
-            let _: Box<dyn std::io::Write> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
-            let _: Box<dyn std::io::Read> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
-            let _: Box<dyn std::io::BufRead> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+//     #[test]
+//     #[ignore = "it's a compile time check"]
+//     fn session_as_writer() {
+//         #[cfg(not(feature = "async"))]
+//         {
+//             let _: Box<dyn std::io::Write> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
+//             let _: Box<dyn std::io::Read> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
+//             let _: Box<dyn std::io::BufRead> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
 
-            fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
-                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
-            }
+//             fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
+//                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+//             }
 
-            fn __io_copy<T>(mut session: session::Session<T, impl io::Write>) {
-                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
-            }
-        }
-        #[cfg(feature = "async")]
-        {
-            let _: Box<dyn futures_lite::AsyncWrite> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
-            let _: Box<dyn futures_lite::AsyncRead> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
-            let _: Box<dyn futures_lite::AsyncBufRead> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+//             fn __io_copy<T>(mut session: session::Session<T, impl io::Write>) {
+//                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+//             }
+//         }
+//         #[cfg(feature = "async")]
+//         {
+//             let _: Box<dyn futures_lite::AsyncWrite> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
+//             let _: Box<dyn futures_lite::AsyncRead> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
+//             let _: Box<dyn futures_lite::AsyncBufRead> =
+//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
 
-            async fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
-                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
-                    .await
-                    .unwrap();
-            }
+//             async fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
+//                 futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+//                     .await
+//                     .unwrap();
+//             }
 
-            async fn __io_copy(mut session: impl Expect) {
-                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
-                    .await
-                    .unwrap();
-            }
-        }
-    }
-}
+//             async fn __io_copy(mut session: impl Expect) {
+//                 futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+//                     .await
+//                     .unwrap();
+//             }
+//         }
+//     }
+// }
