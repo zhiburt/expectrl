@@ -1,50 +1,56 @@
 //! Module contains a Session structure.
 
-use crate::{
-    control_code::ControlCode,
-    error::Error,
-    needle::Needle,
-    process::{NonBlocking, Process, Stream},
-    stream::{empty, log, stream::TryStream},
-    Expect, Found,
-};
 use std::{
     convert::TryInto,
     io::{self, BufRead, Read, Write},
     ops::{Deref, DerefMut},
-    time::{self, Duration},
+    time::{self, Duration}, process::Command,
 };
+
+use ptyprocess::PtyProcess;
+
+use crate::{
+    control_code::ControlCode,
+    error::Error,
+    needle::Needle,
+    stream::{
+        log::LoggedStream,
+        stream::{NonBlocking, TryStream},
+        unix::PtyStream,
+    },
+    Found,
+};
+
+#[cfg(unix)]
+pub type Session = PtySession<PtyProcess, LoggedStream<'static, PtyStream>>;
+
+#[cfg(windows)]
+pub type Session = PtySession<conpty::Process, LoggedStream<crate::stream::windows::ProcessStream>>;
+
+impl Session {
+    pub fn spawn(command: Command) -> Result<Self, Error> {
+        let process = PtyProcess::spawn(command)?;
+        let stream = PtyStream::new(process.get_pty_stream()?);
+        let logged_stream = LoggedStream::new(stream, io::sink());
+        let session = Self::new(process, logged_stream)?;
+    
+        Ok(session)
+    }
+}
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P, S> {
+pub struct PtySession<P, S> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
 }
 
-impl<P> Session<P, P::Stream>
-where
-    P: Process,
-    P::Stream: Stream,
-{
-    /// Create a session
-    pub fn from_process(mut process: P) -> io::Result<Self> {
-        let stream = process.stream()?;
-        Self::new(process, stream)
-    }
-}
 
-impl<P, S> Session<P, S> {
-    /// Set the pty session's expect timeout.
-    pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
-        self.expect_timeout = expect_timeout;
-    }
-}
 
-impl<P, S: Stream> Session<P, S> {
-    /// Create a session
+impl<P, S: Read> PtySession<P, S> {
+    //
     pub fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
@@ -53,33 +59,17 @@ impl<P, S: Stream> Session<P, S> {
             expect_timeout: Some(Duration::from_millis(10000)),
         })
     }
+}
 
-    pub fn with_log<W: Write>(
-        self,
-        logger: W,
-    ) -> Result<Session<P, log::LoggedStream<S, W>>, Error> {
-        let (session, old) = self.swap_stream(empty::EmptyStream)?;
-        let stream = log::LoggedStream::new(old, logger);
-        let (session, _) = session.swap_stream(stream)?;
-
-        Ok(session)
-    }
-
-    fn swap_stream<N: Stream>(self, stream: N) -> io::Result<(Session<P, N>, S)> {
-        let (stream, old) = self.stream.swap_stream(stream)?;
-        Ok((
-            Session {
-                proc: self.proc,
-                stream,
-                expect_timeout: self.expect_timeout,
-            },
-            old,
-        ))
+impl<P, S> PtySession<P, S> {
+    /// Set the pty session's expect timeout.
+    pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
+        self.expect_timeout = expect_timeout;
     }
 }
 
-impl<P, S: Stream> Expect for Session<P, S> {
-    fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+impl<P, S: Read + NonBlocking> PtySession<P, S> {
+    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
         let mut eof = false;
         let start = time::Instant::now();
@@ -132,7 +122,7 @@ impl<P, S: Stream> Expect for Session<P, S> {
         }
     }
 
-    fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
@@ -151,7 +141,7 @@ impl<P, S: Stream> Expect for Session<P, S> {
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
-    fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+    pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
@@ -166,12 +156,16 @@ impl<P, S: Stream> Expect for Session<P, S> {
 
         Ok(false)
     }
+}
 
-    fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
+
+
+impl<P, S: Write> PtySession<P, S> {
+    pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         self.stream.write_all(s.as_ref().as_bytes())
     }
 
-    fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
+    pub fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         #[cfg(windows)]
         {
             // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
@@ -205,7 +199,7 @@ impl<P, S: Stream> Expect for Session<P, S> {
         }
     }
 
-    fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
+    pub fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
         let code = code.try_into().map_err(|_| {
             io::Error::new(io::ErrorKind::Other, "Failed to parse a control character")
         })?;
@@ -213,7 +207,7 @@ impl<P, S: Stream> Expect for Session<P, S> {
     }
 }
 
-impl<P, S: Read + NonBlocking> Session<P, S> {
+impl<P, S: Read + NonBlocking> PtySession<P, S> {
     /// Try to read in a non-blocking mode.
     ///
     /// Returns `[std::io::ErrorKind::WouldBlock]`
@@ -228,7 +222,7 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     }
 }
 
-impl<P, S: Write> Write for Session<P, S> {
+impl<P, S: Write> Write for PtySession<P, S> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stream.write(buf)
     }
@@ -242,13 +236,13 @@ impl<P, S: Write> Write for Session<P, S> {
     }
 }
 
-impl<P, S: Read> Read for Session<P, S> {
+impl<P, S: Read> Read for PtySession<P, S> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.stream.read(buf)
     }
 }
 
-impl<P, S: Read> BufRead for Session<P, S> {
+impl<P, S: Read> BufRead for PtySession<P, S> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         self.stream.fill_buf()
     }
@@ -258,7 +252,7 @@ impl<P, S: Read> BufRead for Session<P, S> {
     }
 }
 
-impl<P, S> Deref for Session<P, S> {
+impl<P, S> Deref for PtySession<P, S> {
     type Target = P;
 
     fn deref(&self) -> &Self::Target {
@@ -266,7 +260,7 @@ impl<P, S> Deref for Session<P, S> {
     }
 }
 
-impl<P, S> DerefMut for Session<P, S> {
+impl<P, S> DerefMut for PtySession<P, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.proc
     }

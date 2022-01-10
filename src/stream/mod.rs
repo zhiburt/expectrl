@@ -2,4 +2,7 @@
 pub mod async_stream;
 pub mod log;
 pub mod stream;
-pub mod empty;
+#[cfg(unix)]
+pub mod unix;
+#[cfg(windows)]
+pub mod windows;

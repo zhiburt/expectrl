@@ -49,11 +49,13 @@ mod error;
 mod found;
 pub mod interact;
 mod needle;
-pub mod process;
 pub mod repl;
 pub mod session;
 mod stream;
-mod async_session;
+#[cfg(feature = "async")]
+mod async_stream;
+#[cfg(feature = "async")]
+pub mod async_session;
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -66,135 +68,62 @@ pub use conpty::ProcAttr;
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
 
-use process::{Process as ProcessTrait, Stream};
 use session::Session;
-use std::{convert::TryInto, io};
 
-pub trait Expect {
-    /// Expect waits until a pattern is matched.
-    ///
-    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
-    ///
-    /// This make assertions in a lazy manner.
-    /// Starts from 1st byte then checks 2nd byte and goes further.
-    /// It is done intentinally to be presize.
-    /// It matters for example when you call this method with `crate::Regex("\\d+")` and output contains 123,
-    /// expect will return '1' as a match not '123'.
-    ///
-    /// ```
-    /// use expectrl::Expect;
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.first(), b"1");
-    /// ```
-    ///
-    /// This behaviour is different from [Session::check].
-    ///
-    /// It return an error if timeout is reached.
-    /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error>;
+// impl Session {
+//     /// Interact gives control of the child process to the interactive user (the
+//     /// human at the keyboard).
+//     ///
+//     /// Returns a status of a process ater interactions.
+//     /// Why it's crusial to return a status is after check of is_alive the actuall
+//     /// status might be gone.
+//     ///
+//     /// Keystrokes are sent to the child process, and
+//     /// the `stdout` and `stderr` output of the child process is printed.
+//     ///
+//     /// When the user types the `escape_character` this method will return control to a running process.
+//     /// The escape_character will not be transmitted.
+//     /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+//     ///
+//     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+//     /// it echos the real `stdin` to the child `stdin`.
+//     #[cfg(unix)]
+//     #[cfg(not(feature = "async"))]
+//     pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
+//         crate::interact::InteractOptions::terminal()?.interact(self)
+//     }
 
-    /// Check checks if a pattern is matched.
-    /// Returns empty found structure if nothing found.
-    ///
-    /// Is a non blocking version of [Session::expect].
-    /// But its strategy of matching is different from it.
-    /// It makes search agains all bytes available.
-    ///
-    /// ```
-    /// use expectrl::Expect;
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.first(), b"123");
-    /// ```
-    fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error>;
+//     /// Interact gives control of the child process to the interactive user (the
+//     /// human at the keyboard).
+//     ///
+//     /// Returns a status of a process ater interactions.
+//     /// Why it's crusial to return a status is after check of is_alive the actuall
+//     /// status might be gone.
+//     ///
+//     /// Keystrokes are sent to the child process, and
+//     /// the `stdout` and `stderr` output of the child process is printed.
+//     ///
+//     /// When the user types the `escape_character` this method will return control to a running process.
+//     /// The escape_character will not be transmitted.
+//     /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+//     ///
+//     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+//     /// it echos the real `stdin` to the child `stdin`.
+//     // #[cfg(unix)]
+//     // #[cfg(feature = "async")]
+//     // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
+//     //     crate::interact::InteractOptions::terminal()?
+//     //         .interact(self)
+//     //         .await
+//     // }
 
-    /// Is matched checks if a pattern is matched.
-    /// It doesn't consumes bytes from stream.
-    ///
-    /// Its strategy of matching is different from the one in [Session::expect].
-    /// It makes search agains all bytes available.
-    ///
-    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option,
-    /// Because it is not guaranteed that [Session::check] or [Session::expect]
-    /// with the same parameters:
-    ///  * will successed even right after [Session::is_matched] call.
-    ///  * will operate on the same bytes
-    ///
-    /// IMPORTANT:
-    ///
-    /// If you call this method with Eof pattern be aware that
-    /// eof indication MAY be lost on the next interactions.
-    /// It depends from a process you spawn.
-    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
-    ///
-    /// ```
-    /// use expectrl::Expect;
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.is_matched(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m, true);
-    /// ```
-    fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error>;
-
-    /// Send text to child's `STDIN`.
-    ///
-    /// To write bytes you can use a [std::io::Write] operations instead.
-    fn send(&mut self, s: impl AsRef<str>) -> io::Result<()>;
-
-    /// Send a line to child's `STDIN`.
-    fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()>;
-
-    /// Send controll character to a child process.
-    ///
-    /// You must be carefull passing a char or &str as an argument.
-    /// If you pass an unexpected controll you'll get a error.
-    /// So it may be better to use [ControlCode].
-    ///
-    /// ```no_run
-    /// use expectrl::{PtySession, ControlCode, Expect};
-    /// use std::process::Command;
-    ///
-    /// #[cfg(unix)]
-    /// let cmd = Command::new("cat");
-    /// #[cfg(windows)]
-    /// let cmd = expectrl::ProcAttr::cmd("cat".to_string());
-    /// let mut process = PtySession::spawn_command(cmd).unwrap();
-    /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
-    /// process.send_control('C'); // sends CTRL^C
-    /// process.send_control("^C"); // sends CTRL^C
-    /// ```
-    fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()>;
-}
-
-impl<EE: Expect> Expect for &mut EE {
-    fn expect<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
-        (*self).expect(needle)
-    }
-
-    fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
-        (*self).check(needle)
-    }
-
-    fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
-        (*self).is_matched(needle)
-    }
-
-    fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
-        (*self).send(s)
-    }
-
-    fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
-        (*self).send_line(s)
-    }
-
-    fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
-        (*self).send_control(code)
-    }
-}
+//     /// Interact gives control of the child process to the interactive user (the
+//     /// human at the keyboard).
+//     #[cfg(windows)]
+//     pub fn interact(&mut self) -> Result<(), Error> {
+//         crate::interact::InteractOptions::terminal()?.interact(self)
+//     }
+// }
 
 /// Spawn spawnes a new session.
 ///
@@ -221,145 +150,96 @@ impl<EE: Expect> Expect for &mut EE {
 /// ```
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
-pub fn spawn(cmd: impl AsRef<str>) -> Result<PtySession, Error> {
-    let proc = PlatformProcess::spawn(cmd)?;
-    let session = Session::from_process(proc)?;
-    Ok(session)
-}
-
-#[cfg(unix)]
-type PlatformProcess = process::unix::UnixProcess;
-
-#[cfg(windows)]
-type PlatformProcess = process::windows::WindowsProcess;
-
-type PtySession = Session<PlatformProcess, <PlatformProcess as ProcessTrait>::Stream>;
-
-#[cfg(unix)]
-impl PtySession {
-    pub fn spawn_command(command: std::process::Command) -> Result<Self, Error> {
-        let process = process::unix::UnixProcess::spawn_command(command)?;
-        let session = Self::from_process(process)?;
-        Ok(session)
-    }
-}
-
-#[cfg(windows)]
-impl PtySession {
-    pub fn spawn_command(attr: ProcAttr) -> Result<PtySession, Error> {
-        let process = process::windows::WindowsProcess::spawn_command(attr)?;
-        let session = PtySession::from_process(process)?;
-        Ok(session)
-    }
-}
-
-impl<S: Stream> Session<PlatformProcess, S> {
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
+pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
     #[cfg(unix)]
-    #[cfg(not(feature = "async"))]
-    pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
+    {
+        let args = tokenize_command(cmd.as_ref());
+        if args.is_empty() {
+            return Err(Error::CommandParsing);
+        }
+
+        let mut command = std::process::Command::new(&args[0]);
+        command.args(args.iter().skip(1));
+
+        Session::spawn(command)
     }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    // #[cfg(unix)]
-    // #[cfg(feature = "async")]
-    // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-    //     crate::interact::InteractOptions::terminal()?
-    //         .interact(self)
-    //         .await
-    // }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
     #[cfg(windows)]
-    pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
+    {
+        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
+/// It takes care of single and double quotes but,
+///
+/// It doesn't cover all edge cases.
+/// So it may not be compatible with real shell arguments parsing.
+#[cfg(unix)]
+fn tokenize_command(program: &str) -> Vec<String> {
+    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
+    let mut res = vec![];
+    for cap in re.captures_iter(program) {
+        res.push(cap[0].to_string());
+    }
+    res
+}
 
-//     #[cfg(unix)]
-//     #[test]
-//     fn test_spawn_no_command() {
-//         assert!(
-//             matches!(spawn(""), Err(Error::IO(err)) if err.kind() == io::ErrorKind::InvalidInput && err.to_string() == "a commandline argument is not correct")
-//         );
-//     }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     #[ignore = "it's a compile time check"]
-//     fn session_as_writer() {
-//         #[cfg(not(feature = "async"))]
-//         {
-//             let _: Box<dyn std::io::Write> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
-//             let _: Box<dyn std::io::Read> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
-//             let _: Box<dyn std::io::BufRead> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+    #[cfg(unix)]
+    #[test]
+    fn test_tokenize_command() {
+        let res = tokenize_command("prog arg1 arg2");
+        assert_eq!(vec!["prog", "arg1", "arg2"], res);
 
-//             fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
-//                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
-//             }
+        let res = tokenize_command("prog -k=v");
+        assert_eq!(vec!["prog", "-k=v"], res);
 
-//             fn __io_copy<T>(mut session: session::Session<T, impl io::Write>) {
-//                 std::io::copy(&mut std::io::empty(), &mut session).unwrap();
-//             }
-//         }
-//         #[cfg(feature = "async")]
-//         {
-//             let _: Box<dyn futures_lite::AsyncWrite> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
-//             let _: Box<dyn futures_lite::AsyncRead> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
-//             let _: Box<dyn futures_lite::AsyncBufRead> =
-//                 Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+        let res = tokenize_command("prog 'my text'");
+        assert_eq!(vec!["prog", "'my text'"], res);
 
-//             async fn _io_copy(mut session: session::Session<impl ProcessTrait, impl Stream>) {
-//                 futures_lite::io::copy(futures_lite::io::empty(), &mut session)
-//                     .await
-//                     .unwrap();
-//             }
+        let res = tokenize_command(r#"prog "my text""#);
+        assert_eq!(vec!["prog", r#""my text""#], res);
+    }
 
-//             async fn __io_copy(mut session: impl Expect) {
-//                 futures_lite::io::copy(futures_lite::io::empty(), &mut session)
-//                     .await
-//                     .unwrap();
-//             }
-//         }
-//     }
-// }
+    #[cfg(unix)]
+    #[test]
+    fn test_spawn_no_command() {
+        assert!(matches!(spawn(""), Err(Error::CommandParsing)));
+    }
+
+    #[test]
+    #[ignore = "it's a compile time check"]
+    fn session_as_writer() {
+        #[cfg(not(feature = "async"))]
+        {
+            let _: Box<dyn std::io::Write> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
+            let _: Box<dyn std::io::Read> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
+            let _: Box<dyn std::io::BufRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+
+            fn _io_copy(mut session: Session) {
+                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+            }
+        }
+        #[cfg(feature = "async")]
+        {
+            let _: Box<dyn futures_lite::AsyncWrite> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
+            let _: Box<dyn futures_lite::AsyncRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
+            let _: Box<dyn futures_lite::AsyncBufRead> =
+                Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+
+            async fn _io_copy(mut session: Session) {
+                futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+                    .await
+                    .unwrap();
+            }
+        }
+    }
+}

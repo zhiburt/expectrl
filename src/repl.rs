@@ -1,6 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{error::Error, Found, PtySession, Expect};
+use crate::{error::Error, Found, Session};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
@@ -129,7 +129,7 @@ pub struct ReplSession {
     /// e.g. ">>> " for python.
     prompt: String,
     /// A pseudo-teletype session with a spawned process.
-    session: PtySession,
+    session: Session,
     /// A command which will be called before termination.
     quit_command: Option<String>,
     /// Flag to see if a echo is turned on.
@@ -143,7 +143,7 @@ impl ReplSession {
         prompt: P,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session = PtySession::spawn_command(cmd)?;
+        let session = Session::spawn(cmd)?;
         let is_echo_on = session.get_echo()?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());
@@ -273,7 +273,7 @@ impl Drop for ReplSession {
 }
 
 impl Deref for ReplSession {
-    type Target = PtySession;
+    type Target = Session;
 
     fn deref(&self) -> &Self::Target {
         &self.session

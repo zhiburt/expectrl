@@ -1,19 +1,28 @@
 //! A wrapper of [Session] to log a read/write operations
 use std::{
+    fmt,
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
+    os::unix::prelude::AsRawFd,
 };
 
-use crate::process::NonBlocking;
+use super::stream::NonBlocking;
 
-pub struct LoggedStream<S, L> {
+pub struct LoggedStream<'a, S> {
     stream: S,
-    logger: L,
+    logger: Box<dyn Write + 'a>,
 }
 
-impl<S, L: Write> LoggedStream<S, L> {
-    pub fn new(stream: S, logger: L) -> Self {
-        Self { stream, logger }
+impl<'a, S> LoggedStream<'a, S> {
+    pub fn new<L: Write + 'a>(stream: S, logger: L) -> Self {
+        Self {
+            stream,
+            logger: Box::new(logger),
+        }
+    }
+
+    pub fn set_logger<L: Write + 'a>(&mut self, logger: L) {
+        self.logger = Box::new(logger);
     }
 
     fn log_write(&mut self, buf: &[u8]) {
@@ -25,7 +34,7 @@ impl<S, L: Write> LoggedStream<S, L> {
     }
 }
 
-impl<S: Write, L: Write> Write for LoggedStream<S, L> {
+impl<S: Write> Write for LoggedStream<'_, S> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let n = self.stream.write(buf)?;
         self.log_write(&buf[..n]);
@@ -58,7 +67,7 @@ impl<S: Write, L: Write> Write for LoggedStream<S, L> {
     }
 }
 
-impl<S: Read, L: Write> Read for LoggedStream<S, L> {
+impl<S: Read> Read for LoggedStream<'_, S> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let n = self.stream.read(buf)?;
         self.log_read(&buf[..n]);
@@ -66,7 +75,23 @@ impl<S: Read, L: Write> Read for LoggedStream<S, L> {
     }
 }
 
-impl<S, L> Deref for LoggedStream<S, L> {
+impl<S: NonBlocking> NonBlocking for LoggedStream<'_, S> {
+    fn set_non_blocking(&mut self) -> Result<()> {
+        self.stream.set_non_blocking()
+    }
+
+    fn set_blocking(&mut self) -> Result<()> {
+        self.stream.set_blocking()
+    }
+}
+
+impl<S: AsRawFd> AsRawFd for LoggedStream<'_, S> {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.as_raw_fd()
+    }
+}
+
+impl<S> Deref for LoggedStream<'_, S> {
     type Target = S;
 
     fn deref(&self) -> &Self::Target {
@@ -74,19 +99,18 @@ impl<S, L> Deref for LoggedStream<S, L> {
     }
 }
 
-impl<S, L> DerefMut for LoggedStream<S, L> {
+impl<S> DerefMut for LoggedStream<'_, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
 
-impl<S: NonBlocking, L> NonBlocking for LoggedStream<S, L> {
-    fn set_non_blocking(&mut self) -> Result<()> {
-        self.stream.set_non_blocking()
-    }
-
-    fn set_blocking(&mut self) -> Result<()> {
-        self.stream.set_blocking()
+impl<S: fmt::Debug> fmt::Debug for LoggedStream<'_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoggedStream")
+            .field("stream", &self.stream)
+            // .field("logger", &self.logger)
+            .finish()
     }
 }
 

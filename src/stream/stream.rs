@@ -5,7 +5,10 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 
-use crate::process::NonBlocking;
+pub trait NonBlocking {
+    fn set_non_blocking(&mut self) -> io::Result<()>;
+    fn set_blocking(&mut self) -> io::Result<()>;
+}
 
 #[derive(Debug)]
 pub struct TryStream<S> {
