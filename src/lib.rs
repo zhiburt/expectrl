@@ -52,10 +52,6 @@ mod needle;
 pub mod repl;
 pub mod session;
 mod stream;
-#[cfg(feature = "async")]
-mod async_stream;
-#[cfg(feature = "async")]
-pub mod async_session;
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -67,63 +63,7 @@ pub use conpty::ProcAttr;
 
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
-
 use session::Session;
-
-impl Session {
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    #[cfg(unix)]
-    #[cfg(not(feature = "async"))]
-    pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
-    }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    // #[cfg(unix)]
-    // #[cfg(feature = "async")]
-    // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-    //     crate::interact::InteractOptions::terminal()?
-    //         .interact(self)
-    //         .await
-    // }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    #[cfg(windows)]
-    pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
-    }
-}
 
 /// Spawn spawnes a new session.
 ///

@@ -2,14 +2,16 @@
 //! [crate::Session::interact] flow.
 
 use crate::{
-    session::Session,
-    stream::stream::{NonBlocking, TryStream},
+    session::{
+        stream::{NonBlocking, TryStream},
+        Session,
+    },
     ControlCode, Error,
 };
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{self, Stdin, Write},
+    io::{self, Read, Stdin, Write},
 };
 
 #[cfg(unix)]
@@ -340,14 +342,14 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<S: Stream, R, W, C> InteractOptions<R, W, C>
+impl<R, W, C> InteractOptions<R, W, C>
 where
     R: futures_lite::AsyncRead + std::marker::Unpin,
     W: Write,
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    pub async fn interact(self, session: &mut Session<S>) -> Result<WaitStatus, Error> {
+    pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self).await,
             InputFrom::Other => interact(session, self).await,
@@ -518,8 +520,8 @@ where
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact_in_terminal<S: Stream, R, W, C>(
-    session: &mut Session<S>,
+async fn interact_in_terminal<R, W, C>(
+    session: &mut Session,
     options: InteractOptions<R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
@@ -567,8 +569,8 @@ where
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact<S: Stream, R, W, C>(
-    session: &mut Session<S>,
+async fn interact<R, W, C>(
+    session: &mut Session,
     mut options: InteractOptions<R, W, C>,
 ) -> Result<WaitStatus, Error>
 where
@@ -577,44 +579,48 @@ where
 {
     use futures_lite::{AsyncReadExt, AsyncWriteExt};
 
+    let mut output_buffer = Vec::new();
     let options_has_input_checks = !options.input_handlers.is_empty();
     let mut input_buffer = if options_has_input_checks {
         Some(Vec::new())
     } else {
         None
     };
-
-    let mut output_buffer = Vec::new();
+    let mut exited = false;
 
     let mut buf = [0; 512];
     loop {
-        let status = session.status()?;
-        if !matches!(status, WaitStatus::StillAlive) {
-            return Ok(status);
+        // In case where proceses exits we are trying to
+        // fill buffer to run callbacks if there was something in.
+        //
+        // We ignore errors because there might be errors like EOCHILD etc.
+        let status = session.status().map_err(|e| e.into());
+        if !matches!(status, Ok(WaitStatus::StillAlive)) {
+            exited = true;
         }
 
-        match session.try_read(&mut buf).await {
-            Ok(n) => {
-                let eof = n == 0;
-
-                output_buffer.extend_from_slice(&buf[..n]);
-                options.check_output(session, &mut output_buffer, eof)?;
-
-                if n == 0 {
-                    return Ok(status);
-                }
-
-                let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                    (filter)(&buf[..n])?
-                } else {
-                    Cow::Borrowed(&buf[..n])
-                };
-
-                options.output.write_all(&bytes)?;
-                options.output.flush()?;
+        if let Some(result) = futures_lite::future::poll_once(session.read(&mut buf)).await {
+            let n = result?;
+            let eof = n == 0;
+            if eof {
+                exited = true;
             }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err.into()),
+
+            output_buffer.extend_from_slice(&buf[..n]);
+            options.check_output(session, &mut output_buffer, eof)?;
+
+            let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                (filter)(&buf[..n])?
+            } else {
+                Cow::Borrowed(&buf[..n])
+            };
+
+            options.output.write_all(&bytes)?;
+            options.output.flush()?;
+        }
+
+        if exited {
+            return status;
         }
 
         // We dont't print user input back to the screen.
@@ -623,7 +629,7 @@ where
         // The terminal must have been prepared before.
         match options.input.read(&mut buf).await {
             Ok(0) => {
-                return Ok(status);
+                return status;
             }
             Ok(n) => {
                 let bytes = &buf[..n];
@@ -660,7 +666,7 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buffer[..pos]).await?;
-                        return Ok(status);
+                        return status;
                     }
                     None => {
                         session.write_all(&buffer[..]).await?;
@@ -818,7 +824,6 @@ impl NonBlockingStdin {
 }
 
 #[cfg(unix)]
-#[cfg(not(feature = "async"))]
 impl Read for NonBlockingStdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.reader.try_read(buf)
@@ -845,11 +850,10 @@ impl NonBlocking for Stdin {
 impl futures_lite::AsyncRead for NonBlockingStdin {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<io::Result<usize>> {
-        use futures_lite::FutureExt;
-        Box::pin(self.reader.try_read(buf)).poll(cx)
+        std::task::Poll::Ready(self.read(buf))
     }
 }
 

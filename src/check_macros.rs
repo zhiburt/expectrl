@@ -214,7 +214,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $session.check($exp).await {
+        match $crate::session::Session::check(&mut $session, $exp).await {
             result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
                 let $var = result.unwrap();
                 $body;
@@ -250,98 +250,98 @@ macro_rules! check {
     };
 }
 
-// #[cfg(test)]
-// mod tests {
-//     #[allow(unused_variables)]
-//     #[allow(unused_must_use)]
-//     #[test]
-//     #[ignore = "Testing in compile time"]
-//     fn test_check() {
-//         let mut session = crate::spawn("").unwrap();
-//         crate::check! {
-//             &mut session,
-//             as11d = "zxc" => {},
-//         };
-//         crate::check! {
-//             &mut session,
-//             as11d = "zxc" => {},
-//             asbb = "zxc123" => {},
-//         };
-//         crate::check! { session, };
+#[cfg(test)]
+mod tests {
+    #[allow(unused_variables)]
+    #[allow(unused_must_use)]
+    #[test]
+    #[ignore = "Testing in compile time"]
+    fn test_check() {
+        let mut session = crate::spawn("").unwrap();
+        crate::check! {
+            &mut session,
+            as11d = "zxc" => {},
+        };
+        crate::check! {
+            &mut session,
+            as11d = "zxc" => {},
+            asbb = "zxc123" => {},
+        };
+        crate::check! { session, };
 
-//         // crate::check! {
-//         //     as11d = "zxc" => {},
-//         //     asbb = "zxc123" => {},
-//         // };
+        // crate::check! {
+        //     as11d = "zxc" => {},
+        //     asbb = "zxc123" => {},
+        // };
 
-//         // panic on unused session
-//         // crate::check! { session };
+        // panic on unused session
+        // crate::check! { session };
 
-//         // trailing commas
-//         crate::check! {
-//             &mut session,
-//             as11d = "zxc" => {}
-//             asbb = "zxc123" => {}
-//         };
-//         crate::check! {
-//             &mut session,
-//             as11d = "zxc" => {}
-//             default => {}
-//         };
+        // trailing commas
+        crate::check! {
+            &mut session,
+            as11d = "zxc" => {}
+            asbb = "zxc123" => {}
+        };
+        crate::check! {
+            &mut session,
+            as11d = "zxc" => {}
+            default => {}
+        };
 
-//         #[cfg(not(feature = "async"))]
-//         {
-//             let _ = crate::check! {
-//                 &mut session,
-//                 as11d = "zxc" => {},
-//             }
-//             .unwrap();
-//             (crate::check! {
-//                 &mut session,
-//                 as11d = "zxc" => {},
-//             })
-//             .unwrap();
-//             (crate::check! {
-//                 &mut session,
-//                 as11d = "zxc" => {},
-//             })
-//             .unwrap();
-//             (crate::check! {
-//                 &mut session,
-//                 as11d = "zxc" => {
-//                     println!("asd")
-//                 },
-//             })
-//             .unwrap();
-//         }
-//         #[cfg(feature = "async")]
-//         async {
-//             let _ = crate::check! {
-//                 session,
-//                 as11d = "zxc" => {},
-//             }
-//             .await
-//             .unwrap();
-//             (crate::check! {
-//                 session,
-//                 as11d = "zxc" => {},
-//             })
-//             .await
-//             .unwrap();
-//             (crate::check! {
-//                 session,
-//                 as11d = "zxc" => {},
-//             })
-//             .await
-//             .unwrap();
-//             (crate::check! {
-//                 session,
-//                 as11d = "zxc" => {
-//                     println!("asd")
-//                 },
-//             })
-//             .await
-//             .unwrap();
-//         };
-//     }
-// }
+        #[cfg(not(feature = "async"))]
+        {
+            let _ = crate::check! {
+                &mut session,
+                as11d = "zxc" => {},
+            }
+            .unwrap();
+            (crate::check! {
+                &mut session,
+                as11d = "zxc" => {},
+            })
+            .unwrap();
+            (crate::check! {
+                &mut session,
+                as11d = "zxc" => {},
+            })
+            .unwrap();
+            (crate::check! {
+                &mut session,
+                as11d = "zxc" => {
+                    println!("asd")
+                },
+            })
+            .unwrap();
+        }
+        #[cfg(feature = "async")]
+        async {
+            let _ = crate::check! {
+                session,
+                as11d = "zxc" => {},
+            }
+            .await
+            .unwrap();
+            (crate::check! {
+                session,
+                as11d = "zxc" => {},
+            })
+            .await
+            .unwrap();
+            (crate::check! {
+                session,
+                as11d = "zxc" => {},
+            })
+            .await
+            .unwrap();
+            (crate::check! {
+                session,
+                as11d = "zxc" => {
+                    println!("asd")
+                },
+            })
+            .await
+            .unwrap();
+        };
+    }
+}

@@ -63,8 +63,7 @@ fn send() {
 #[cfg(windows)]
 fn send() {
     let mut proc =
-        Session::spawn(ProcAttr::default().commandline("powershell -C type".to_string()))
-            .unwrap();
+        Session::spawn(ProcAttr::default().commandline("powershell -C type".to_string())).unwrap();
     thread::sleep(Duration::from_millis(1000));
 
     _p_send(&mut proc, "hello cat\r\n").unwrap();
@@ -447,8 +446,7 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc =
-        PtySession::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+    let mut proc = PtySession::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
 
@@ -522,7 +520,7 @@ fn spawn_after_interact() {
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
 }
 
-fn _p_read(mut proc: impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
+fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.read(buf)
@@ -533,7 +531,7 @@ fn _p_read(mut proc: impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
     }
 }
 
-fn _p_write_all(proc: &mut impl Write, buf: &[u8]) -> std::io::Result<()> {
+fn _p_write_all(proc: &mut Session, buf: &[u8]) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.write_all(buf)
@@ -544,7 +542,7 @@ fn _p_write_all(proc: &mut impl Write, buf: &[u8]) -> std::io::Result<()> {
     }
 }
 
-fn _p_flush(proc: &mut impl Write) -> std::io::Result<()> {
+fn _p_flush(proc: &mut Session) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.flush()
@@ -588,7 +586,7 @@ fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::
     }
 }
 
-fn _p_read_to_string(proc: &mut impl BufRead) -> std::io::Result<String> {
+fn _p_read_to_string(proc: &mut Session) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -660,7 +658,11 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     }
     #[cfg(feature = "async")]
     {
-        block_on(proc.try_read(buf))
+        block_on(async {
+            futures_lite::future::poll_once(proc.read(buf))
+                .await
+                .unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::WouldBlock, "")))
+        })
     }
 }
 

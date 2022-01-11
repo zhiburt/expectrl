@@ -6,7 +6,7 @@ use std::{
     os::unix::prelude::AsRawFd,
 };
 
-use super::stream::NonBlocking;
+use crate::session::stream::NonBlocking;
 
 pub struct LoggedStream<'a, S> {
     stream: S,

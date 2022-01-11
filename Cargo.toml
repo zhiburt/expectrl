@@ -13,7 +13,7 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-# default = ["async"]
+default = ["async"]
 async = ["futures-lite", "futures-timer", "async-io"]
 
 [dependencies]

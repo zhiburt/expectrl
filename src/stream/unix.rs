@@ -5,8 +5,7 @@ use std::{
 
 use ptyprocess::stream::Stream;
 
-use super::stream::NonBlocking;
-
+use crate::session::stream::NonBlocking;
 
 #[derive(Debug)]
 pub struct PtyStream {

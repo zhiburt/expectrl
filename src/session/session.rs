@@ -4,7 +4,8 @@ use std::{
     convert::TryInto,
     io::{self, BufRead, Read, Write},
     ops::{Deref, DerefMut},
-    time::{self, Duration}, process::Command,
+    process::Command,
+    time::{self, Duration},
 };
 
 use ptyprocess::PtyProcess;
@@ -13,13 +14,11 @@ use crate::{
     control_code::ControlCode,
     error::Error,
     needle::Needle,
-    stream::{
-        log::LoggedStream,
-        stream::{NonBlocking, TryStream},
-        unix::PtyStream,
-    },
+    stream::{log::LoggedStream, unix::PtyStream},
     Found,
 };
+
+use super::stream::{TryStream, NonBlocking};
 
 #[cfg(unix)]
 pub type Session = PtySession<PtyProcess, LoggedStream<'static, PtyStream>>;
@@ -33,7 +32,7 @@ impl Session {
         let stream = PtyStream::new(process.get_pty_stream()?);
         let logged_stream = LoggedStream::new(stream, io::sink());
         let session = Self::new(process, logged_stream)?;
-    
+
         Ok(session)
     }
 
@@ -41,6 +40,63 @@ impl Session {
     pub fn set_log<W: io::Write + Send + 'static>(&mut self, logger: W) -> io::Result<()> {
         self.stream.get_mut().set_logger(logger);
         Ok(())
+    }
+}
+
+impl Session {
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    ///
+    /// Returns a status of a process ater interactions.
+    /// Why it's crusial to return a status is after check of is_alive the actuall
+    /// status might be gone.
+    ///
+    /// Keystrokes are sent to the child process, and
+    /// the `stdout` and `stderr` output of the child process is printed.
+    ///
+    /// When the user types the `escape_character` this method will return control to a running process.
+    /// The escape_character will not be transmitted.
+    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+    ///
+    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+    /// it echos the real `stdin` to the child `stdin`.
+
+    #[cfg(unix)]
+    #[cfg(not(feature = "async"))]
+    pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
+        let a = crate::interact::InteractOptions::terminal()?;
+        a.interact(self)
+    }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    ///
+    /// Returns a status of a process ater interactions.
+    /// Why it's crusial to return a status is after check of is_alive the actuall
+    /// status might be gone.
+    ///
+    /// Keystrokes are sent to the child process, and
+    /// the `stdout` and `stderr` output of the child process is printed.
+    ///
+    /// When the user types the `escape_character` this method will return control to a running process.
+    /// The escape_character will not be transmitted.
+    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+    ///
+    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+    /// it echos the real `stdin` to the child `stdin`.
+    // #[cfg(unix)]
+    // #[cfg(feature = "async")]
+    // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
+    //     crate::interact::InteractOptions::terminal()?
+    //         .interact(self)
+    //         .await
+    // }
+
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    #[cfg(windows)]
+    pub fn interact(&mut self) -> Result<(), Error> {
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
 }
 
@@ -52,8 +108,6 @@ pub struct PtySession<P, S> {
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
 }
-
-
 
 impl<P, S: Read> PtySession<P, S> {
     //
@@ -163,8 +217,6 @@ impl<P, S: Read + NonBlocking> PtySession<P, S> {
         Ok(false)
     }
 }
-
-
 
 impl<P, S: Write> PtySession<P, S> {
     pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {

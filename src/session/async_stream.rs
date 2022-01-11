@@ -166,7 +166,6 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         };
 
         let buf = self.stream.buffer();
-
         let found = needle.check(buf, eof)?;
         if !found.is_empty() {
             let end_index = Found::right_most_index(&found);
@@ -180,6 +179,16 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         }
 
         Ok(Found::new(Vec::new(), Vec::new()))
+    }
+
+    /// Verifyes if stream is empty or not.
+    pub async fn is_empty(&mut self) -> io::Result<bool> {
+        match futures_lite::future::poll_once(self.read(&mut [])).await {
+            Some(Ok(0)) => Ok(true),
+            Some(Ok(_)) => Ok(false),
+            Some(Err(err)) => Err(err),
+            None => Ok(true),
+        }
     }
 }
 
@@ -384,7 +393,7 @@ mod tests {
             stream.write_all(b"Hello World").await.unwrap();
             assert!(stream.is_matched("World").await.unwrap());
             assert!(!stream.is_matched("*****").await.unwrap());
-            
+
             let found = stream.check("World").await.unwrap();
             assert_eq!(b"Hello ", found.before());
             assert_eq!(vec![b"World"], found.matches());
@@ -405,11 +414,11 @@ mod tests {
             self.data.extend(buf);
             Poll::Ready(Ok(buf.len()))
         }
-    
+
         fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
             Poll::Ready(Ok(()))
         }
-    
+
         fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
             Poll::Ready(Ok(()))
         }
