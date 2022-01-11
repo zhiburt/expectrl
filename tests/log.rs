@@ -10,12 +10,13 @@ use futures_lite::AsyncBufReadExt;
 #[cfg(feature = "async")]
 use futures_lite::AsyncReadExt;
 
-use expectrl::{spawn, Expect};
+use expectrl::{spawn};
 
 #[test]
 fn log() {
     let writer = StubWriter::default();
-    let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+    let mut session = spawn("cat").unwrap();
+    session.set_log(writer.clone()).unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
@@ -67,7 +68,8 @@ fn log() {
 #[test]
 fn log_read_line() {
     let writer = StubWriter::default();
-    let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+    let mut session = spawn("cat").unwrap();
+    session.set_log(writer.clone()).unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {

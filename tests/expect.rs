@@ -1,4 +1,4 @@
-use expectrl::{spawn, Eof, Expect, NBytes, Regex};
+use expectrl::{spawn, Eof, NBytes, Regex};
 use std::time::Duration;
 
 #[cfg(not(feature = "async"))]

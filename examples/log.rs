@@ -1,8 +1,9 @@
-use expectrl::{self, Expect};
+use expectrl::{Error, spawn};
 
 #[cfg(not(feature = "async"))]
-fn main() -> Result<(), expectrl::Error> {
-    let mut p = expectrl::spawn("cat")?.with_log(std::io::stdout())?;
+fn main() -> Result<(), Error> {
+    let mut p = spawn("cat")?;
+    p.set_log(std::io::stdout())?;
     p.send_line("Hello World")?;
 
     // reading doesn't apear here because

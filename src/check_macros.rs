@@ -101,7 +101,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $crate::Expect::check($session, $exp) {
+        match $crate::session::Session::check($session, $exp) {
             result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
                 let $var = result.unwrap();
                 $body;

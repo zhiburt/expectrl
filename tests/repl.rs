@@ -2,7 +2,7 @@
 
 use expectrl::{
     repl::{spawn_bash, spawn_python},
-    ControlCode, Expect, WaitStatus,
+    ControlCode, WaitStatus,
 };
 #[cfg(feature = "async")]
 use futures_lite::io::AsyncBufReadExt;

@@ -1,4 +1,4 @@
-use expectrl::{self, Any, Eof, Expect};
+use expectrl::{self, Any, Eof};
 
 #[cfg(not(feature = "async"))]
 fn main() {

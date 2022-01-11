@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use expectrl::{repl::spawn_bash, ControlCode, Error, Expect};
+use expectrl::{repl::spawn_bash, ControlCode, Error};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]

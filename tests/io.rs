@@ -1,4 +1,4 @@
-use expectrl::{process::Stream, session::Session, ControlCode, Expect};
+use expectrl::{session::Session, ControlCode};
 use std::{thread, time::Duration};
 
 #[cfg(unix)]
@@ -22,7 +22,7 @@ use std::io::{BufRead, Read, Write};
 #[test]
 #[cfg(unix)]
 fn send_controll() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send_control(&mut proc, ControlCode::EOT).unwrap();
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0),);
 }
@@ -31,7 +31,7 @@ fn send_controll() {
 #[cfg(windows)]
 fn send_controll() {
     let mut proc =
-        Session::spawn_command(ProcAttr::cmd("powershell -C ping localhost".to_string())).unwrap();
+        Session::spawn(ProcAttr::cmd("powershell -C ping localhost".to_string())).unwrap();
 
     // give powershell a bit time
     thread::sleep(Duration::from_millis(100));
@@ -46,7 +46,7 @@ fn send_controll() {
 #[test]
 #[cfg(unix)]
 fn send() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send(&mut proc, "hello cat\n").unwrap();
 
     // give cat a time to react on input
@@ -63,7 +63,7 @@ fn send() {
 #[cfg(windows)]
 fn send() {
     let mut proc =
-        Session::spawn_command(ProcAttr::default().commandline("powershell -C type".to_string()))
+        Session::spawn(ProcAttr::default().commandline("powershell -C type".to_string()))
             .unwrap();
     thread::sleep(Duration::from_millis(1000));
 
@@ -89,7 +89,7 @@ fn send() {
 #[test]
 #[cfg(unix)]
 fn send_line() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     _p_send_line(&mut proc, "hello cat").unwrap();
 
@@ -106,7 +106,7 @@ fn send_line() {
 #[test]
 #[cfg(windows)]
 fn send_line() {
-    let mut proc = Session::spawn_command(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
+    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
     _p_send_line(&mut proc, "hello cat").unwrap();
@@ -127,7 +127,7 @@ fn send_line() {
 #[test]
 #[cfg(unix)]
 fn try_read_by_byte() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     assert_eq!(
         _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
@@ -163,7 +163,7 @@ fn try_read_by_byte() {
     // Mustn't it be turned down?
 
     let mut proc =
-        Session::spawn_command(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
@@ -192,7 +192,7 @@ fn try_read_by_byte() {
 #[test]
 #[cfg(unix)]
 fn blocking_read_after_non_blocking() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     assert!(_p_is_empty(&mut proc).unwrap());
 
@@ -223,7 +223,7 @@ fn blocking_read_after_non_blocking() {
 #[cfg(windows)]
 fn blocking_read_after_non_blocking() {
     let mut proc =
-        Session::spawn_command(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
@@ -249,7 +249,7 @@ fn blocking_read_after_non_blocking() {
 #[test]
 #[cfg(unix)]
 fn try_read() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     let mut buf = vec![0; 128];
     assert_eq!(
@@ -274,7 +274,7 @@ fn try_read() {
 #[cfg(windows)]
 fn try_read() {
     let mut proc =
-        Session::spawn_command(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
@@ -305,7 +305,7 @@ fn try_read() {
 #[test]
 #[cfg(unix)]
 fn blocking_read_after_non_blocking_try_read() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     let mut buf = vec![0; 1];
     assert_eq!(
@@ -338,7 +338,7 @@ fn blocking_read_after_non_blocking_try_read() {
 #[test]
 #[cfg(windows)]
 fn blocking_read_after_non_blocking_try_read() {
-    let mut proc = Session::spawn_command(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
+    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
     while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
@@ -364,7 +364,7 @@ fn blocking_read_after_non_blocking_try_read() {
 #[cfg(unix)]
 #[test]
 fn try_read_after_eof() {
-    let mut proc = Session::spawn_command(Command::new("cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
 
     _p_send_line(&mut proc, "hello").unwrap();
 
@@ -385,7 +385,7 @@ fn try_read_after_eof() {
 fn try_read_after_process_exit() {
     let mut command = Command::new("echo");
     command.arg("hello cat");
-    let mut proc = Session::spawn_command(command).unwrap();
+    let mut proc = Session::spawn(command).unwrap();
 
     assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 
@@ -411,7 +411,7 @@ fn try_read_after_process_exit() {
 #[test]
 #[cfg(windows)]
 fn try_read_after_process_exit() {
-    let mut proc = Session::spawn_command(ProcAttr::cmd("echo hello cat".to_string())).unwrap();
+    let mut proc = Session::spawn(ProcAttr::cmd("echo hello cat".to_string())).unwrap();
 
     assert_eq!(proc.wait(None).unwrap(), 0);
 
@@ -428,7 +428,7 @@ fn try_read_after_process_exit() {
 fn try_read_to_end() {
     let mut cmd = Command::new("echo");
     cmd.arg("Hello World");
-    let mut proc = Session::spawn_command(cmd).unwrap();
+    let mut proc = Session::spawn(cmd).unwrap();
 
     let mut buf: Vec<u8> = Vec::new();
     loop {
@@ -448,7 +448,7 @@ fn try_read_to_end() {
 #[cfg(windows)]
 fn try_read_to_end() {
     let mut proc =
-        PtySession::spawn_command(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+        PtySession::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
 
@@ -472,7 +472,7 @@ fn try_read_to_end() {
 fn continues_try_reads() {
     let cmd = ProcAttr::default().commandline("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"".to_string());
 
-    let mut proc = PtySession::spawn_command(cmd).unwrap();
+    let mut proc = PtySession::spawn(cmd).unwrap();
 
     let mut buf = [0; 128];
     loop {
@@ -492,7 +492,7 @@ fn continues_try_reads() {
 #[cfg(not(target_os = "macos"))]
 #[cfg(not(windows))]
 fn automatic_stop_of_interact() {
-    let mut p = Session::spawn_command(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let status = _p_interact(&mut p).unwrap();
 
     // It may be finished not only because process is done but
@@ -503,7 +503,7 @@ fn automatic_stop_of_interact() {
     ));
 
     // check that second spawn works
-    let mut p = Session::spawn_command(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let status = _p_interact(&mut p).unwrap();
     assert!(matches!(
         status,
@@ -515,10 +515,10 @@ fn automatic_stop_of_interact() {
 #[cfg(not(target_os = "macos"))]
 #[cfg(not(windows))]
 fn spawn_after_interact() {
-    let mut p = Session::spawn_command(Command::new("ls")).unwrap();
+    let mut p = Session::spawn(Command::new("ls")).unwrap();
     let _ = _p_interact(&mut p).unwrap();
 
-    let p = Session::spawn_command(Command::new("ls")).unwrap();
+    let p = Session::spawn(Command::new("ls")).unwrap();
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
 }
 
@@ -555,7 +555,7 @@ fn _p_flush(proc: &mut impl Write) -> std::io::Result<()> {
     }
 }
 
-fn _p_send(proc: &mut impl Expect, buf: &str) -> std::io::Result<()> {
+fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send(buf)
@@ -566,7 +566,7 @@ fn _p_send(proc: &mut impl Expect, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_send_line(proc: &mut impl Expect, buf: &str) -> std::io::Result<()> {
+fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send_line(buf)
@@ -577,7 +577,7 @@ fn _p_send_line(proc: &mut impl Expect, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_send_control(proc: &mut impl Expect, buf: impl Into<ControlCode>) -> std::io::Result<()> {
+fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.send_control(buf)
@@ -601,7 +601,7 @@ fn _p_read_to_string(proc: &mut impl BufRead) -> std::io::Result<String> {
     Ok(buf)
 }
 
-fn _p_read_to_end<P, S: Read>(proc: &mut Session<P, S>) -> std::io::Result<Vec<u8>> {
+fn _p_read_to_end(proc: &mut Session) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -614,7 +614,7 @@ fn _p_read_to_end<P, S: Read>(proc: &mut Session<P, S>) -> std::io::Result<Vec<u
     Ok(buf)
 }
 
-fn _p_read_until<P, S: Read>(proc: &mut Session<P, S>, ch: u8) -> std::io::Result<Vec<u8>> {
+fn _p_read_until(proc: &mut Session, ch: u8) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -629,7 +629,7 @@ fn _p_read_until<P, S: Read>(proc: &mut Session<P, S>, ch: u8) -> std::io::Resul
     Ok(buf)
 }
 
-fn _p_read_line<P, S: Read>(proc: &mut Session<P, S>) -> std::io::Result<String> {
+fn _p_read_line(proc: &mut Session) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -642,7 +642,7 @@ fn _p_read_line<P, S: Read>(proc: &mut Session<P, S>) -> std::io::Result<String>
     Ok(buf)
 }
 
-fn _p_is_empty<P, S: Stream>(proc: &mut Session<P, S>) -> std::io::Result<bool> {
+fn _p_is_empty(proc: &mut Session) -> std::io::Result<bool> {
     #[cfg(not(feature = "async"))]
     {
         proc.is_empty()
@@ -653,7 +653,7 @@ fn _p_is_empty<P, S: Stream>(proc: &mut Session<P, S>) -> std::io::Result<bool> 
     }
 }
 
-fn _p_try_read<P, S: Stream>(proc: &mut Session<P, S>, buf: &mut [u8]) -> std::io::Result<usize> {
+fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.try_read(buf)
@@ -665,9 +665,7 @@ fn _p_try_read<P, S: Stream>(proc: &mut Session<P, S>, buf: &mut [u8]) -> std::i
 }
 
 #[cfg(unix)]
-fn _p_interact(
-    proc: &mut Session<expectrl::process::unix::UnixProcess, expectrl::process::unix::PtyStream>,
-) -> Result<WaitStatus, expectrl::Error> {
+fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.interact()

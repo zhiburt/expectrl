@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use expectrl::{check, spawn, Error, Expect};
+use expectrl::{check, spawn, Error};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]

@@ -22,23 +22,11 @@ impl<S: Read> TryStream<S> {
             stream: ControlledReader::new(stream),
         })
     }
-}
 
-impl<S: Read> TryStream<S> {
-    fn from_stream<N: Read>(&mut self, stream: N) -> io::Result<TryStream<N>> {
-        self.stream.flush_in_buffer();
-        let buffer = self.stream.get_available();
-        let mut stream = TryStream::new(stream)?;
-        stream.stream.keep_in_buffer(buffer);
-        Ok(stream)
+    pub fn get_mut(&mut self) -> &mut S {
+        self.stream.get_mut()
     }
-
-    pub fn swap_stream<N: Read>(mut self, stream: N) -> io::Result<(TryStream<N>, S)> {
-        let new = self.from_stream(stream)?;
-        let old = self.stream.inner.into_inner().inner;
-        Ok((new, old))
-    }
-
+    
     pub fn get_available(&mut self) -> &[u8] {
         self.stream.get_available()
     }

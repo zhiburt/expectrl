@@ -10,18 +10,18 @@ use super::stream::NonBlocking;
 
 pub struct LoggedStream<'a, S> {
     stream: S,
-    logger: Box<dyn Write + 'a>,
+    logger: Box<dyn Write + Send + 'a>,
 }
 
 impl<'a, S> LoggedStream<'a, S> {
-    pub fn new<L: Write + 'a>(stream: S, logger: L) -> Self {
+    pub fn new<L: Write + Send + 'a>(stream: S, logger: L) -> Self {
         Self {
             stream,
             logger: Box::new(logger),
         }
     }
 
-    pub fn set_logger<L: Write + 'a>(&mut self, logger: L) {
+    pub fn set_logger<L: Write + Send + 'a>(&mut self, logger: L) {
         self.logger = Box::new(logger);
     }
 
@@ -87,7 +87,7 @@ impl<S: NonBlocking> NonBlocking for LoggedStream<'_, S> {
 
 impl<S: AsRawFd> AsRawFd for LoggedStream<'_, S> {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.as_raw_fd()
+        self.stream.as_raw_fd()
     }
 }
 

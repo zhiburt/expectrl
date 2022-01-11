@@ -1,5 +1,4 @@
-use expectrl::{interact::Context, session::Session};
-use expectrl::{interact::InteractOptions, spawn, Expect, Regex};
+use expectrl::{interact::InteractOptions, spawn, Regex};
 
 #[derive(Debug, Default)]
 struct State {
@@ -15,15 +14,12 @@ fn main() {
     let mut opts = InteractOptions::terminal()
         .unwrap()
         .state(State::default())
-        .on_output(
-            "Continue [y/n]:",
-            |mut ctx: Context<Session<_, expectrl::process::unix::PtyStream>, _, _, _>, _| {
-                ctx.state().wait_for_continue = Some(true);
-                Ok(())
-            },
-        )
+        .on_output("Continue [y/n]:", |mut ctx, _| {
+            ctx.state().wait_for_continue = Some(true);
+            Ok(())
+        })
         .on_input("y", |mut ctx| {
-            Expect::send(ctx.session(), "y")?;
+            ctx.session().send("y")?;
 
             if let Some(_a @ true) = ctx.state().wait_for_continue {
                 ctx.state().pressed_yes_on_continue = Some(true);
@@ -32,7 +28,7 @@ fn main() {
             Ok(())
         })
         .on_input("n", |mut ctx| {
-            Expect::send(ctx.session(), "n")?;
+            ctx.session().send("n")?;
 
             if let Some(_a @ true) = ctx.state().wait_for_continue {
                 ctx.state().pressed_yes_on_continue = Some(false);

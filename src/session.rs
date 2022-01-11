@@ -36,6 +36,12 @@ impl Session {
     
         Ok(session)
     }
+
+    /// Set logger.
+    pub fn set_log<W: io::Write + Send + 'static>(&mut self, logger: W) -> io::Result<()> {
+        self.stream.get_mut().set_logger(logger);
+        Ok(())
+    }
 }
 
 /// Session represents a spawned process and its streams.

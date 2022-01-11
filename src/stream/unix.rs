@@ -57,7 +57,7 @@ impl NonBlocking for PtyStream {
     }
 }
 
-fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
+pub fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
     let opt = fcntl(fd, FcntlArg::F_GETFL).map_err(nix_error_to_io)?;
