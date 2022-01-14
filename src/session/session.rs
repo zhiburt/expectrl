@@ -4,32 +4,40 @@ use std::{
     convert::TryInto,
     io::{self, BufRead, Read, Write},
     ops::{Deref, DerefMut},
-    process::Command,
     time::{self, Duration},
 };
-
-use ptyprocess::PtyProcess;
 
 use crate::{
     control_code::ControlCode,
     error::Error,
     needle::Needle,
-    stream::{log::LoggedStream, unix::PtyStream},
+    stream::log::LoggedStream,
     Found,
 };
 
 use super::stream::{TryStream, NonBlocking};
 
 #[cfg(unix)]
-pub type Session = PtySession<PtyProcess, LoggedStream<'static, PtyStream>>;
+pub type Session = PtySession<ptyprocess::PtyProcess, LoggedStream<'static, crate::stream::unix::PtyStream>>;
 
 #[cfg(windows)]
-pub type Session = PtySession<conpty::Process, LoggedStream<crate::stream::windows::ProcessStream>>;
+pub type Session = PtySession<conpty::Process, LoggedStream<'static, crate::stream::windows::ProcessStream>>;
 
 impl Session {
-    pub fn spawn(command: Command) -> Result<Self, Error> {
-        let process = PtyProcess::spawn(command)?;
-        let stream = PtyStream::new(process.get_pty_stream()?);
+    #[cfg(unix)]
+    pub fn spawn(command: std::process::Command) -> Result<Self, Error> {
+        let process = ptyprocess::PtyProcess::spawn(command)?;
+        let stream = crate::stream::unix::PtyStream::new(process.get_pty_stream()?);
+        let logged_stream = LoggedStream::new(stream, io::sink());
+        let session = Self::new(process, logged_stream)?;
+
+        Ok(session)
+    }
+
+    #[cfg(windows)]
+    pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
+        let process = attr.spawn()?;
+        let stream = crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
         let logged_stream = LoggedStream::new(stream, io::sink());
         let session = Self::new(process, logged_stream)?;
 

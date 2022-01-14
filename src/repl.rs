@@ -162,7 +162,7 @@ impl ReplSession {
         prompt: P,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session = PtySession::spawn_command(cmd)?;
+        let session = Session::spawn(attr)?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());
 

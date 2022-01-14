@@ -233,7 +233,7 @@ fn blocking_read_after_non_blocking() {
 
     _p_send_line(&mut proc, "123").unwrap();
 
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_millis(1500));
 
     let mut buf = [0; 1];
     _p_try_read(&mut proc, &mut buf).unwrap();
@@ -446,7 +446,7 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc = PtySession::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+    let mut proc = Session::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
 
@@ -470,7 +470,7 @@ fn try_read_to_end() {
 fn continues_try_reads() {
     let cmd = ProcAttr::default().commandline("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"".to_string());
 
-    let mut proc = PtySession::spawn(cmd).unwrap();
+    let mut proc = Session::spawn(cmd).unwrap();
 
     let mut buf = [0; 128];
     loop {

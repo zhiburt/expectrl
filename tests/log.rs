@@ -13,6 +13,29 @@ use futures_lite::AsyncReadExt;
 use expectrl::{spawn};
 
 #[test]
+#[cfg(windows)]
+fn log() {
+    let mut session = spawn("powershell -C type".to_string()).unwrap();
+    let writer = StubWriter::default();
+    session.set_log(writer.clone()).unwrap();
+
+    thread::sleep(Duration::from_millis(300));
+
+    session.send_line("Hello World").unwrap();
+
+    thread::sleep(Duration::from_millis(300));
+
+    let mut buf = vec![0; 1024];
+    let _ = session.read(&mut buf).unwrap();
+
+    let bytes = writer.inner.lock().unwrap();
+    let log_str = String::from_utf8_lossy(bytes.get_ref());
+    assert!(log_str.as_ref().contains("write"));
+    assert!(log_str.as_ref().contains("read"));
+}
+
+#[test]
+#[cfg(unix)]
 fn log() {
     let writer = StubWriter::default();
     let mut session = spawn("cat").unwrap();
@@ -66,6 +89,7 @@ fn log() {
 }
 
 #[test]
+#[cfg(unix)]
 fn log_read_line() {
     let writer = StubWriter::default();
     let mut session = spawn("cat").unwrap();

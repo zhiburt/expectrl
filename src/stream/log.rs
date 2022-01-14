@@ -3,7 +3,6 @@ use std::{
     fmt,
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
-    os::unix::prelude::AsRawFd,
 };
 
 use crate::session::stream::NonBlocking;
@@ -85,7 +84,8 @@ impl<S: NonBlocking> NonBlocking for LoggedStream<'_, S> {
     }
 }
 
-impl<S: AsRawFd> AsRawFd for LoggedStream<'_, S> {
+#[cfg(unix)]
+impl<S: std::os::unix::prelude::AsRawFd> std::os::unix::prelude::AsRawFd for LoggedStream<'_, S> {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.stream.as_raw_fd()
     }

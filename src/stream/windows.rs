@@ -8,7 +8,7 @@ use conpty::{
     ProcAttr, Process,
 };
 
-use super::{NonBlocking, Process as ProcessTrait};
+use crate::session::stream::NonBlocking;
 
 pub struct WindowsProcess(Process);
 
@@ -22,23 +22,15 @@ impl WindowsProcess {
     }
 }
 
-impl ProcessTrait for WindowsProcess {
-    type Stream = ProcessStream;
+// impl ProcessTrait for WindowsProcess {
+//     type Stream = ProcessStream;
 
-    fn stream(&mut self) -> Result<Self::Stream> {
-        let input = self.0.input().map_err(to_io_error)?;
-        let output = self.0.output().map_err(to_io_error)?;
-        Ok(Self::Stream::new(output, input))
-    }
-
-    fn get_eof_char(&mut self) -> Result<u8> {
-        Ok(0x4)
-    }
-
-    fn get_intr_char(&mut self) -> Result<u8> {
-        Ok(0x3)
-    }
-}
+//     fn stream(&mut self) -> Result<Self::Stream> {
+//         let input = self.0.input().map_err(to_io_error)?;
+//         let output = self.0.output().map_err(to_io_error)?;
+//         Ok(Self::Stream::new(output, input))
+//     }
+// }
 
 #[derive(Debug)]
 pub struct ProcessStream {
@@ -47,7 +39,7 @@ pub struct ProcessStream {
 }
 
 impl ProcessStream {
-    fn new(output: PipeReader, input: PipeWriter) -> Self {
+    pub fn new(output: PipeReader, input: PipeWriter) -> Self {
         Self { input, output }
     }
 }
@@ -81,8 +73,6 @@ impl NonBlocking for ProcessStream {
         self.output.set_blocking_mode().map_err(to_io_error)
     }
 }
-
-impl super::Stream for ProcessStream {}
 
 impl Deref for WindowsProcess {
     type Target = Process;

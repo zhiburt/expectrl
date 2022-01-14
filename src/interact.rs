@@ -329,7 +329,7 @@ where
     #[cfg(windows)]
     pub fn interact(
         &mut self,
-        session: &mut Session<crate::PlatformProcess, S>,
+        session: &mut Session,
     ) -> Result<(), Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
@@ -679,8 +679,8 @@ where
 }
 
 #[cfg(windows)]
-fn interact_in_terminal<S: Stream, R, W, C>(
-    session: &mut Session<S>,
+fn interact_in_terminal<R, W, C>(
+    session: &mut Session,
     options: &mut InteractOptions<R, W, C>,
 ) -> Result<(), Error>
 where
@@ -702,8 +702,8 @@ where
 
 // copy paste of unix version with changed return type
 #[cfg(windows)]
-fn interact<S: Stream, R, W, C>(
-    session: &mut Session<S>,
+fn interact<R, W, C>(
+    session: &mut Session,
     options: &mut InteractOptions<R, W, C>,
 ) -> Result<(), Error>
 where
