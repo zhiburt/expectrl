@@ -35,25 +35,6 @@ impl<S> Stream<S> {
     }
 }
 
-impl<S> Stream<S> {
-    fn swap_stream<NS>(self, stream: NS) -> io::Result<(Stream<NS>, S)> {
-        let old_stream = self.stream.stream;
-        let buffer = self.stream.buffer;
-        let length = self.stream.length;
-        Ok((
-            Stream {
-                stream: BufferedStream {
-                    buffer,
-                    length,
-                    stream,
-                },
-                expect_timeout: self.expect_timeout,
-            },
-            old_stream,
-        ))
-    }
-}
-
 impl<S: AsyncRead + Unpin> Stream<S> {
     pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Found, Error> {
         let expect_timeout = self.expect_timeout;
@@ -207,6 +188,10 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Stream<S> {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut *self.stream.get_mut()).poll_close(cx)
+    }
+
+    fn poll_write_vectored(mut self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[io::IoSlice<'_>]) -> Poll<io::Result<usize>> {
+        Pin::new(&mut *self.stream.get_mut()).poll_write_vectored(cx, bufs)
     }
 }
 

@@ -64,8 +64,7 @@ impl Session {
     #[cfg(unix)]
     #[cfg(not(feature = "async"))]
     pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
-        let a = crate::interact::InteractOptions::terminal()?;
-        a.interact(self)
+        crate::interact::InteractOptions::terminal()?.interact(self)
     }
 
     /// Interact gives control of the child process to the interactive user (the

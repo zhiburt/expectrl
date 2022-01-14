@@ -92,9 +92,6 @@ fn check_eof() {
 
     thread::sleep(Duration::from_millis(600));
 
-    let m = session.check(Eof).await.unwrap();
-    assert!(m.matches().is_empty());
-
     let m = session.check(Eof).unwrap();
     assert_eq!(m.before(), b"");
     #[cfg(target_os = "linux")]
@@ -259,9 +256,6 @@ fn check_macro_eof() {
         WaitStatus::Exited(session.pid(), 0),
         session.wait().unwrap()
     );
-
-    let m = session.check(Eof).await.unwrap();
-    assert!(m.matches().is_empty());
 
     expectrl::check!(
         &mut session,

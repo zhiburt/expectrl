@@ -21,9 +21,6 @@ use nix::{libc::STDIN_FILENO, sys::termios, unistd::isatty};
 #[cfg(unix)]
 use ptyprocess::set_raw;
 
-#[cfg(not(feature = "async"))]
-use std::io::Read;
-
 #[cfg(windows)]
 use conpty::console::Console;
 

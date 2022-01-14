@@ -520,6 +520,24 @@ fn spawn_after_interact() {
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
 }
 
+#[test]
+#[cfg(unix)]
+fn read_line_test() {
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
+
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(100));
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    thread::sleep(Duration::from_millis(100));
+
+    let line = _p_read_line(&mut proc).unwrap();
+    assert_eq!(&line, "123\r\n");
+
+    proc.exit(true).unwrap();
+}
+
 fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {

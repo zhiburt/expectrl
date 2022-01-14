@@ -104,6 +104,7 @@ fn is_matched_eof() {
             session.wait().unwrap()
         );
 
+        assert!(!session.is_matched(Eof).await.unwrap());
         assert!(session.is_matched(Eof).await.unwrap());
     })
 }
@@ -159,9 +160,7 @@ fn read_after_is_matched() {
 #[test]
 fn check_after_is_matched_eof() {
     let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-
     assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
-
     assert!(p.is_matched(Eof).unwrap());
 
     let m = p.check(Eof).unwrap();
@@ -179,9 +178,9 @@ fn check_after_is_matched_eof() {
 fn check_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-
         assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
 
+        assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());
 
         let m = p.check(Eof).await.unwrap();
@@ -220,6 +219,8 @@ fn expect_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
         assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
+
+        assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());
 
         let m = p.expect(Eof).await.unwrap();
