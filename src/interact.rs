@@ -341,15 +341,26 @@ where
 #[cfg(feature = "async")]
 impl<R, W, C> InteractOptions<R, W, C>
 where
-    R: futures_lite::AsyncRead + std::marker::Unpin,
+    R: Read + std::marker::Unpin,
     W: Write,
 {
     /// Runs interact interactively.
     /// See [Session::interact]
+    #[cfg(unix)]
     pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self).await,
             InputFrom::Other => interact(session, self).await,
+        }
+    }
+
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    #[cfg(windows)]
+    pub async fn interact(mut self, session: &mut Session) -> Result<(), Error> {
+        match self.input_from {
+            InputFrom::Terminal => interact_in_terminal(session, &mut self).await,
+            InputFrom::Other => interact(session, &mut self).await,
         }
     }
 }
@@ -679,6 +690,7 @@ where
 }
 
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn interact_in_terminal<R, W, C>(
     session: &mut Session,
     options: &mut InteractOptions<R, W, C>,
@@ -702,6 +714,7 @@ where
 
 // copy paste of unix version with changed return type
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn interact<R, W, C>(
     session: &mut Session,
     options: &mut InteractOptions<R, W, C>,
@@ -792,6 +805,137 @@ where
                     }
                     None => {
                         session.write_all(&buffer[..])?;
+                    }
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        options.call_idle_handler(session)?;
+    }
+}
+
+
+#[cfg(windows)]
+#[cfg(feature = "async")]
+async fn interact_in_terminal<R, W, C>(
+    session: &mut Session,
+    options: &mut InteractOptions<R, W, C>,
+) -> Result<(), Error>
+where
+    R: Read,
+    W: Write,
+{
+    use futures_lite::AsyncWriteExt;
+
+    // flush buffers
+    session.flush().await?;
+
+    let console = conpty::console::Console::current()?;
+    console.set_raw()?;
+
+    let r = interact(session, options).await;
+
+    console.reset()?;
+
+    r
+}
+
+// copy paste of unix version with changed return type
+#[cfg(all(windows, feature = "async"))]
+async fn interact<R, W, C>(
+    session: &mut Session,
+    options: &mut InteractOptions<R, W, C>,
+) -> Result<(), Error>
+where
+    R: Read,
+    W: Write,
+{
+    use futures_lite::{AsyncReadExt, AsyncWriteExt};
+
+    let options_has_input_checks = !options.input_handlers.is_empty();
+    let mut input_buffer = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
+
+    let mut output_buffer = Vec::new();
+
+    let mut buf = [0; 512];
+    loop {
+        match futures_lite::future::poll_once(session.read(&mut buf)).await {
+            Some(Ok(n)) => {
+                let eof = n == 0;
+
+                output_buffer.extend_from_slice(&buf[..n]);
+                options.check_output(session, &mut output_buffer, eof)?;
+
+                if n == 0 {
+                    return Ok(());
+                }
+
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(&buf[..n])?
+                } else {
+                    Cow::Borrowed(&buf[..n])
+                };
+
+                options.output.write_all(&bytes)?;
+                options.output.flush()?;
+            }
+            Some(Err(err)) => return Err(err.into()),
+            None => {},
+        }
+
+        // We dont't print user input back to the screen.
+        // In terminal mode it will be ECHOed back automatically.
+        // This way we preserve terminal seetings for example when user inputs password.
+        // The terminal must have been prepared before.
+        match options.input.read(&mut buf) {
+            Ok(0) => {
+                return Ok(());
+            }
+            Ok(n) => {
+                let bytes = &buf[..n];
+                let bytes = if let Some(filter) = options.input_filter.as_mut() {
+                    (filter)(bytes)?
+                } else {
+                    Cow::Borrowed(bytes)
+                };
+
+                let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
+                    check_buffer.extend_from_slice(&bytes);
+                    loop {
+                        match options.check_input(session, check_buffer)? {
+                            Match::Yes(n) => {
+                                check_buffer.drain(..n);
+                                if check_buffer.is_empty() {
+                                    break vec![];
+                                }
+                            }
+                            Match::No => {
+                                let buffer = check_buffer.to_vec();
+                                check_buffer.clear();
+                                break buffer;
+                            }
+                            Match::MaybeLater => break vec![],
+                        }
+                    }
+                } else {
+                    bytes.to_vec()
+                };
+
+                let escape_char_position =
+                    buffer.iter().position(|c| *c == options.escape_character);
+                match escape_char_position {
+                    Some(pos) => {
+                        session.write_all(&buffer[..pos]).await?;
+                        return Ok(());
+                    }
+                    None => {
+                        session.write_all(&buffer[..]).await?;
                     }
                 }
             }

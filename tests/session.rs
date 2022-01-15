@@ -51,20 +51,43 @@ fn send() {
 #[test]
 fn send() {
     let mut session = spawn("powershell -C type").unwrap();
-    session.write(b"Hello World").unwrap();
+    #[cfg(not(feature = "async"))]
+    {
+        session.write(b"Hello World").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(300));
 
-    let mut buf = vec![0; 1028];
-    let _ = session.read(&mut buf).unwrap();
-    let n = session.read(&mut buf).unwrap();
+        let mut buf = vec![0; 1028];
+        let _ = session.read(&mut buf).unwrap();
+        let n = session.read(&mut buf).unwrap();
 
-    let s = String::from_utf8_lossy(&buf[..n]);
-    if !s.contains("Hello World") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "Hello World", s
-        );
+        let s = String::from_utf8_lossy(&buf[..n]);
+        if !s.contains("Hello World") {
+            panic!(
+                "Expected to get {:?} in the output, but got {:?}",
+                "Hello World", s
+            );
+        }
+    }
+    #[cfg(feature = "async")]
+    {
+        futures_lite::future::block_on(async {
+            session.write(b"Hello World").await.unwrap();
+
+            thread::sleep(Duration::from_millis(300));
+        
+            let mut buf = vec![0; 1028];
+            let _ = session.read(&mut buf).await.unwrap();
+            let n = session.read(&mut buf).await.unwrap();
+        
+            let s = String::from_utf8_lossy(&buf[..n]);
+            if !s.contains("Hello World") {
+                panic!(
+                    "Expected to get {:?} in the output, but got {:?}",
+                    "Hello World", s
+                );
+            }
+        })
     }
 }
 
@@ -112,17 +135,39 @@ fn send_multiline() {
 #[test]
 fn send_multiline() {
     let mut session = spawn("powershell -C type").unwrap();
-    session.send("Hello World\r\n").unwrap();
+    #[cfg(not(feature = "async"))]
+    {
+        session.send("Hello World\r\n").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(300));
+    
+        let buf = session.lines().nth(2).unwrap().unwrap();
+    
+        if !buf.contains("Hello World") {
+            panic!(
+                "Expected to get {:?} in the output, but got {:?}",
+                "Hello World", buf
+            );
+        }
+    }
+    #[cfg(feature = "async")]
+    {
+        use futures_lite::{AsyncBufReadExt, StreamExt};
 
-    let buf = session.lines().nth(2).unwrap().unwrap();
+        futures_lite::future::block_on(async {
+            session.send("Hello World\r\n").await.unwrap();
 
-    if !buf.contains("Hello World") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "Hello World", buf
-        );
+            thread::sleep(Duration::from_millis(300));
+        
+            let buf = session.lines().nth(2).await.unwrap().unwrap();
+        
+            if !buf.contains("Hello World") {
+                panic!(
+                    "Expected to get {:?} in the output, but got {:?}",
+                    "Hello World", buf
+                );
+            }
+        })
     }
 }
 
@@ -176,16 +221,38 @@ fn send_line() {
 #[test]
 fn send_line() {
     let mut session = spawn("powershell -C type").unwrap();
-    session.send_line("Hello World").unwrap();
+    #[cfg(not(feature = "async"))]
+    {
+        session.send_line("Hello World").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(300));
+    
+        let buf = session.lines().nth(2).unwrap().unwrap();
+    
+        if !buf.contains("Hello World") {
+            panic!(
+                "Expected to get {:?} in the output, but got {:?}",
+                "Hello World", buf
+            );
+        }
+    }
+    #[cfg(feature = "async")]
+    {
+        use futures_lite::{AsyncBufReadExt, StreamExt};
 
-    let buf = session.lines().nth(2).unwrap().unwrap();
+        futures_lite::future::block_on(async {
+            session.send_line("Hello World").await.unwrap();
 
-    if !buf.contains("Hello World") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "Hello World", buf
-        );
+            thread::sleep(Duration::from_millis(300));
+        
+            let buf = session.lines().nth(2).await.unwrap().unwrap();
+        
+            if !buf.contains("Hello World") {
+                panic!(
+                    "Expected to get {:?} in the output, but got {:?}",
+                    "Hello World", buf
+                );
+            }
+        })
     }
 }

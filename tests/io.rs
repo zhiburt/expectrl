@@ -74,7 +74,7 @@ fn send() {
     let mut buf = vec![0; 1024];
     let n = _p_read(&mut proc, &mut buf).unwrap();
 
-    let s = String::from_utf8_lossy(&buf[..n]);
+    let s = String::from_utf8_lossy(&buf);
     if !s.contains("hello cat") {
         panic!(
             "Expected to get {:?} in the output, but got {:?}",
@@ -113,8 +113,9 @@ fn send_line() {
 
     let mut buf = vec![0; 1024];
     let n = _p_read(&mut proc, &mut buf).unwrap();
+    let n = _p_read(&mut proc, &mut buf[n..]).unwrap();
 
-    let s = String::from_utf8_lossy(&buf[..n]);
+    let s = String::from_utf8_lossy(&buf);
     if !s.contains("hello cat") {
         panic!(
             "Expected to get {:?} in the output, but got {:?}",
@@ -157,6 +158,7 @@ fn try_read_by_byte() {
 
 #[test]
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn try_read_by_byte() {
     // it shows that on windows ECHO is turned on.
     // Mustn't it be turned down?
@@ -228,12 +230,10 @@ fn blocking_read_after_non_blocking() {
         "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
 
     _p_send_line(&mut proc, "123").unwrap();
 
-    thread::sleep(Duration::from_millis(1500));
+    thread::sleep(Duration::from_millis(100));
 
     let mut buf = [0; 1];
     _p_try_read(&mut proc, &mut buf).unwrap();

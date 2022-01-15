@@ -84,13 +84,6 @@ impl<S: NonBlocking> NonBlocking for LoggedStream<'_, S> {
     }
 }
 
-#[cfg(unix)]
-impl<S: std::os::unix::prelude::AsRawFd> std::os::unix::prelude::AsRawFd for LoggedStream<'_, S> {
-    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.stream.as_raw_fd()
-    }
-}
-
 impl<S> Deref for LoggedStream<'_, S> {
     type Target = S;
 
@@ -111,6 +104,20 @@ impl<S: fmt::Debug> fmt::Debug for LoggedStream<'_, S> {
             .field("stream", &self.stream)
             // .field("logger", &self.logger)
             .finish()
+    }
+}
+
+#[cfg(unix)]
+impl<S: std::os::unix::prelude::AsRawFd> std::os::unix::prelude::AsRawFd for LoggedStream<'_, S> {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.stream.as_raw_fd()
+    }
+}
+
+#[cfg(windows)]
+impl<S: std::os::windows::io::AsRawSocket> std::os::windows::io::AsRawSocket for LoggedStream<'_, S> {
+    fn as_raw_socket(&self) -> std::os::windows::prelude::RawSocket {
+        self.stream.as_raw_socket()
     }
 }
 

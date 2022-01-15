@@ -14,6 +14,7 @@ use expectrl::{spawn};
 
 #[test]
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn log() {
     let mut session = spawn("powershell -C type".to_string()).unwrap();
     let writer = StubWriter::default();
@@ -33,6 +34,32 @@ fn log() {
     assert!(log_str.as_ref().contains("write"));
     assert!(log_str.as_ref().contains("read"));
 }
+
+#[test]
+#[cfg(windows)]
+#[cfg(feature = "async")]
+fn log() {
+    let mut session = spawn("powershell -C type".to_string()).unwrap();
+    let writer = StubWriter::default();
+    futures_lite::future::block_on(async {
+        session.set_log(writer.clone()).await.unwrap();
+
+        thread::sleep(Duration::from_millis(300));
+    
+        session.send_line("Hello World").await.unwrap();
+    
+        thread::sleep(Duration::from_millis(300));
+    
+        let mut buf = vec![0; 1024];
+        let _ = session.read(&mut buf).await.unwrap();
+    });
+
+    let bytes = writer.inner.lock().unwrap();
+    let log_str = String::from_utf8_lossy(bytes.get_ref());
+    assert!(log_str.as_ref().contains("write"));
+    assert!(log_str.as_ref().contains("read"));
+}
+
 
 #[test]
 #[cfg(unix)]

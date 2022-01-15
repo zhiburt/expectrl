@@ -87,17 +87,28 @@ pub fn spawn_python() -> Result<ReplSession, Error> {
 
 /// Spawn default python's IDLE.
 #[cfg(feature = "async")]
-#[cfg(unix)]
 pub async fn spawn_python() -> Result<ReplSession, Error> {
-    let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
-    idle._expect_prompt().await?;
-    Ok(idle)
+    #[cfg(unix)]
+    {
+        let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+        idle._expect_prompt().await?;
+        Ok(idle)
+    }
+    #[cfg(windows)]
+    {
+        // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
+        let mut idle =
+            ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
+        idle._expect_prompt().await?;
+        Ok(idle)
+    }
 }
 
 /// Spawn a powershell session.
 ///
 /// It uses a custom prompt to be able to controll the shell.
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let mut powershell = ReplSession::spawn(
@@ -117,6 +128,34 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
     // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
     powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "dumb")"#)?;
     powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "NO_COLOR")"#)?;
+
+    Ok(powershell)
+}
+
+/// Spawn a powershell session.
+///
+/// It uses a custom prompt to be able to controll the shell.
+#[cfg(windows)]
+#[cfg(feature = "async")]
+pub async fn spawn_powershell() -> Result<ReplSession, Error> {
+    const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
+    let mut powershell = ReplSession::spawn(
+        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
+        DEFAULT_PROMPT,
+        Some("exit"),
+    )?;
+    powershell.is_echo_on = true;
+
+    // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
+    powershell.execute(format!(
+        r#"function prompt {{ "{}"; return " " }}"#,
+        DEFAULT_PROMPT
+    )).await?;
+
+    // https://stackoverflow.com/questions/69063656/is-it-possible-to-stop-powershell-wrapping-output-in-ansi-sequences/69063912#69063912
+    // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "dumb")"#).await?;
+    powershell.execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "NO_COLOR")"#).await?;
 
     Ok(powershell)
 }
