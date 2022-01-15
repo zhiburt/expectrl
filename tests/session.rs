@@ -54,39 +54,15 @@ fn send() {
     #[cfg(not(feature = "async"))]
     {
         session.write(b"Hello World").unwrap();
-
         thread::sleep(Duration::from_millis(300));
-
-        let mut buf = vec![0; 1028];
-        let _ = session.read(&mut buf).unwrap();
-        let n = session.read(&mut buf).unwrap();
-
-        let s = String::from_utf8_lossy(&buf[..n]);
-        if !s.contains("Hello World") {
-            panic!(
-                "Expected to get {:?} in the output, but got {:?}",
-                "Hello World", s
-            );
-        }
+        session.expect("Hello World").unwrap();
     }
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
             session.write(b"Hello World").await.unwrap();
-
             thread::sleep(Duration::from_millis(300));
-        
-            let mut buf = vec![0; 1028];
-            let _ = session.read(&mut buf).await.unwrap();
-            let n = session.read(&mut buf).await.unwrap();
-        
-            let s = String::from_utf8_lossy(&buf[..n]);
-            if !s.contains("Hello World") {
-                panic!(
-                    "Expected to get {:?} in the output, but got {:?}",
-                    "Hello World", s
-                );
-            }
+            session.expect("Hello World").await.unwrap();
         })
     }
 }

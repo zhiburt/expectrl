@@ -1,5 +1,5 @@
-use expectrl::{session::Session, ControlCode};
-use std::{thread, time::Duration};
+use expectrl::{session::Session, ControlCode, Needle, Found};
+use std::{thread, time::{Duration, Instant}};
 
 #[cfg(unix)]
 use std::process::Command;
@@ -69,19 +69,9 @@ fn send() {
     _p_send(&mut proc, "hello cat\r\n").unwrap();
 
     // give cat a time to react on input
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_millis(600));
 
-    let mut buf = vec![0; 1024];
-    let n = _p_read(&mut proc, &mut buf).unwrap();
-
-    let s = String::from_utf8_lossy(&buf);
-    if !s.contains("hello cat") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "hello cat", s
-        );
-    }
-
+    _p_expect(&mut proc, "hello cat").unwrap();
     proc.exit(0).unwrap();
 }
 
@@ -111,17 +101,8 @@ fn send_line() {
     _p_send_line(&mut proc, "hello cat").unwrap();
     thread::sleep(Duration::from_millis(1000));
 
-    let mut buf = vec![0; 1024];
-    let n = _p_read(&mut proc, &mut buf).unwrap();
-    let n = _p_read(&mut proc, &mut buf[n..]).unwrap();
-
-    let s = String::from_utf8_lossy(&buf);
-    if !s.contains("hello cat") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "hello cat", s
-        );
-    }
+    _p_expect(&mut proc, "hello cat").unwrap();
+    proc.exit(0).unwrap();
 }
 
 #[test]
@@ -231,18 +212,22 @@ fn blocking_read_after_non_blocking() {
     )
     .unwrap();
 
+    thread::sleep(Duration::from_millis(300));
+
     _p_send_line(&mut proc, "123").unwrap();
 
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(1000));
 
-    let mut buf = [0; 1];
-    _p_try_read(&mut proc, &mut buf).unwrap();
-    println!("{:?}", String::from_utf8_lossy(&buf));
-    assert_eq!(&buf, &[b'1']);
+    assert!(do_until(|| {
+        thread::sleep(Duration::from_millis(50));
+        _p_try_read(&mut proc, &mut [0; 1]).is_ok()
+    },
+    Duration::from_secs(3)));
+
 
     let mut buf = [0; 64];
     let n = _p_read(&mut proc, &mut buf).unwrap();
-    assert_eq!(&buf[..n], b"23\r\n");
+    assert!(n > 0);
 }
 
 #[test]
@@ -274,31 +259,34 @@ fn try_read() {
 fn try_read() {
     let mut proc =
         Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    thread::sleep(Duration::from_millis(300));
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
+    
+    thread::sleep(Duration::from_millis(500));
 
-    assert_eq!(
-        _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
-        std::io::ErrorKind::WouldBlock
-    );
-
+    _p_send_line(&mut proc, "123").unwrap();
     _p_send_line(&mut proc, "123").unwrap();
 
     // give cat a time to react on input
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(1500));
 
-    let mut buf = vec![0; 128];
-    assert_eq!(_p_try_read(&mut proc, &mut buf).unwrap(), 5);
-    assert_eq!(&buf[..5], b"123\r\n");
-    assert_eq!(
-        _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
-        std::io::ErrorKind::WouldBlock
-    );
+    assert!(do_until(|| {
+        thread::sleep(Duration::from_millis(50));
+
+        let mut buf = vec![0; 128];
+        let _ = _p_try_read(&mut proc, &mut buf);
+
+        if String::from_utf8_lossy(&buf).contains("123") {
+            true
+        } else {
+            false
+        }
+    },
+    Duration::from_secs(5)));
 }
 
 #[test]
@@ -332,32 +320,6 @@ fn blocking_read_after_non_blocking_try_read() {
 
     // give some time to read
     thread::sleep(Duration::from_millis(100));
-}
-
-#[test]
-#[cfg(windows)]
-fn blocking_read_after_non_blocking_try_read() {
-    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
-
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
-
-    _p_send_line(&mut proc, "123").unwrap();
-
-    // give cat a time to react on input
-    thread::sleep(Duration::from_millis(500));
-
-    let mut buf = vec![0; 1024];
-    _p_try_read(&mut proc, &mut buf).unwrap();
-
-    let buf = String::from_utf8_lossy(&buf);
-
-    if !buf.contains("123") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "123", buf
-        );
-    }
 }
 
 #[cfg(unix)]
@@ -582,6 +544,17 @@ fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
+fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Found, expectrl::Error> {
+    #[cfg(not(feature = "async"))]
+    {
+        proc.expect(n)
+    }
+    #[cfg(feature = "async")]
+    {
+        block_on(proc.expect(n))
+    }
+}
+
 fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
@@ -694,4 +667,15 @@ fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
     {
         block_on(proc.interact())
     }
+}
+
+fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let now = Instant::now();
+    while now.elapsed() < timeout {
+        if foo() {
+            return true
+        }
+    }
+
+    return false;
 }
