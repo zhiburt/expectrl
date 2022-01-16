@@ -40,7 +40,7 @@ fn expect_str() {
         session.send_line("Hello World").unwrap();
         session.expect("Hello World").unwrap();
     }
-    
+
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
@@ -82,7 +82,6 @@ fn expect_regex() {
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
 
-
     #[cfg(not(feature = "async"))]
     {
         let m = session.expect(Regex("lo.*")).unwrap();
@@ -92,7 +91,7 @@ fn expect_regex() {
         );
         assert_eq!(m.first(), b"lo");
     }
-    
+
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
@@ -133,7 +132,7 @@ fn expect_n_bytes() {
 #[cfg(windows)]
 #[test]
 fn expect_n_bytes() {
-    use expectrl::{ProcAttr, session::Session};
+    use expectrl::{session::Session, ProcAttr};
 
     let mut session = Session::spawn(ProcAttr::cmd(r#"echo Hello World"#.to_string())).unwrap();
 
@@ -147,7 +146,7 @@ fn expect_n_bytes() {
         assert_eq!(m.first(), "\u{1b}[2J\u{1b}[m\u{1b}[HHell".as_bytes());
         assert_eq!(m.before(), b"");
     }
-    
+
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
@@ -198,7 +197,7 @@ fn expect_eof() {
         assert_eq!(m.first(), b"'Hello World'\r\n");
         assert_eq!(m.before(), b"");
     }
-    
+
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
@@ -303,7 +302,6 @@ fn expect_eof_timeout() {
     let mut p = spawn("sleep 3").expect("cannot run sleep 3");
     p.set_expect_timeout(Some(Duration::from_millis(100)));
 
-    
     #[cfg(not(feature = "async"))]
     {
         match p.expect(Eof) {
@@ -311,7 +309,7 @@ fn expect_eof_timeout() {
             r => panic!("should raise TimeOut {:?}", r),
         }
     }
-    
+
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {

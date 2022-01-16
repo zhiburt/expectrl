@@ -327,10 +327,7 @@ where
     /// Runs interact interactively.
     /// See [Session::interact]
     #[cfg(windows)]
-    pub fn interact(
-        &mut self,
-        session: &mut Session,
-    ) -> Result<(), Error> {
+    pub fn interact(&mut self, session: &mut Session) -> Result<(), Error> {
         match self.input_from {
             InputFrom::Terminal => interact_in_terminal(session, self),
             InputFrom::Other => interact(session, self),
@@ -341,7 +338,7 @@ where
 #[cfg(feature = "async")]
 impl<R, W, C> InteractOptions<R, W, C>
 where
-    R: Read + std::marker::Unpin,
+    R: futures_lite::AsyncRead + std::marker::Unpin,
     W: Write,
 {
     /// Runs interact interactively.
@@ -353,7 +350,14 @@ where
             InputFrom::Other => interact(session, self).await,
         }
     }
+}
 
+#[cfg(feature = "async")]
+impl<R, W, C> InteractOptions<R, W, C>
+where
+    R: Read + std::marker::Unpin,
+    W: Write,
+{
     /// Runs interact interactively.
     /// See [Session::interact]
     #[cfg(windows)]
@@ -816,7 +820,6 @@ where
     }
 }
 
-
 #[cfg(windows)]
 #[cfg(feature = "async")]
 async fn interact_in_terminal<R, W, C>(
@@ -886,7 +889,7 @@ where
                 options.output.flush()?;
             }
             Some(Err(err)) => return Err(err.into()),
-            None => {},
+            None => {}
         }
 
         // We dont't print user input back to the screen.

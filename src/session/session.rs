@@ -8,20 +8,18 @@ use std::{
 };
 
 use crate::{
-    control_code::ControlCode,
-    error::Error,
-    needle::Needle,
-    stream::log::LoggedStream,
-    Found,
+    control_code::ControlCode, error::Error, needle::Needle, stream::log::LoggedStream, Found,
 };
 
-use super::stream::{TryStream, NonBlocking};
+use super::stream::{NonBlocking, TryStream};
 
 #[cfg(unix)]
-pub type Session = PtySession<ptyprocess::PtyProcess, LoggedStream<'static, crate::stream::unix::PtyStream>>;
+pub type Session =
+    PtySession<ptyprocess::PtyProcess, LoggedStream<'static, crate::stream::unix::PtyStream>>;
 
 #[cfg(windows)]
-pub type Session = PtySession<conpty::Process, LoggedStream<'static, crate::stream::windows::ProcessStream>>;
+pub type Session =
+    PtySession<conpty::Process, LoggedStream<'static, crate::stream::windows::ProcessStream>>;
 
 impl Session {
     #[cfg(unix)]
@@ -37,7 +35,8 @@ impl Session {
     #[cfg(windows)]
     pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
         let process = attr.spawn()?;
-        let stream = crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
+        let stream =
+            crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
         let logged_stream = LoggedStream::new(stream, io::sink());
         let session = Self::new(process, logged_stream)?;
 

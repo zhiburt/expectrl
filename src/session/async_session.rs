@@ -3,21 +3,26 @@ use std::{
     io,
     ops::{Deref, DerefMut},
     pin::Pin,
-    process::Command,
     task::{Context, Poll},
     time::Duration,
 };
 
 use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::{stream::log::LoggedStream, ControlCode, Error, Found, Needle};
 use super::async_stream::Stream;
+use crate::{stream::log::LoggedStream, ControlCode, Error, Found, Needle};
 
 #[cfg(unix)]
-pub type Session = PtySession<ptyprocess::PtyProcess, AsyncStream<LoggedStream<'static, crate::stream::unix::PtyStream>>>;
+pub type Session = PtySession<
+    ptyprocess::PtyProcess,
+    AsyncStream<LoggedStream<'static, crate::stream::unix::PtyStream>>,
+>;
 
 #[cfg(windows)]
-pub type Session = PtySession<conpty::Process, AsyncStream<LoggedStream<'static, crate::stream::windows::ProcessStream>>>;
+pub type Session = PtySession<
+    conpty::Process,
+    AsyncStream<LoggedStream<'static, crate::stream::windows::ProcessStream>>,
+>;
 
 #[cfg(unix)]
 type AsyncStream<S> = async_io::Async<S>;
@@ -31,8 +36,8 @@ impl Session {
         let process = ptyprocess::PtyProcess::spawn(command)?;
         let stream = crate::stream::unix::PtyStream::new(process.get_pty_stream()?);
         let logged_stream = LoggedStream::new(stream, io::sink());
-        let async_logged_stream = AsyncStream::new(logged_stream);
-        let session = Self::new(process, async_logged_stream)?;
+        let async_logged_stream = AsyncStream::new(logged_stream)?;
+        let session = Self::new(process, async_logged_stream);
 
         Ok(session)
     }
@@ -40,7 +45,8 @@ impl Session {
     #[cfg(windows)]
     pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
         let process = attr.spawn()?;
-        let stream = crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
+        let stream =
+            crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
         let logged_stream = LoggedStream::new(stream, io::sink());
         let async_logged_stream = AsyncStream::new(logged_stream);
         let session = Self::new(process, async_logged_stream);
@@ -96,7 +102,10 @@ impl Session {
 
     /// Set logger.
     pub async fn set_log<W: io::Write + Send + 'static>(&mut self, logger: W) -> io::Result<()> {
+        #[cfg(windows)]
         self.stream.get_mut().get_mut().await.set_logger(logger);
+        #[cfg(unix)]
+        self.stream.get_mut().get_mut().set_logger(logger);
         Ok(())
     }
 }
@@ -112,7 +121,12 @@ pub struct PtySession<P, S> {
 // GEt back to the solution where Logger is just dyn Write instead of all these magic with type system.....
 
 impl<P, S> PtySession<P, S> {
-    pub fn new(process: P, stream: S) -> Self { Self { process, stream: Stream::new(stream) } }
+    pub fn new(process: P, stream: S) -> Self {
+        Self {
+            process,
+            stream: Stream::new(stream),
+        }
+    }
 
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
