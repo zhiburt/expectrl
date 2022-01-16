@@ -4,12 +4,10 @@ fn main() {
 
     #[cfg(feature = "async")]
     {
-        futures_lite::future::block_on( async {
+        futures_lite::future::block_on(async {
             let mut p = spawn_powershell().await.unwrap();
 
-            eprintln!(
-                "Current hostname",
-            );
+            eprintln!("Current hostname",);
 
             // case 1: execute
             let hostname = p.execute("hostname").await.unwrap();
@@ -17,9 +15,10 @@ fn main() {
                 "Current hostname: {:?}",
                 String::from_utf8(hostname).unwrap()
             );
-    
+
             // case 2: wait until done, only extract a few infos
-            p.send_line("type README.md | Measure-Object -line -word -character").await
+            p.send_line("type README.md | Measure-Object -line -word -character")
+                .await
                 .unwrap();
             let lines = p.expect(Regex("[0-9]+\\s")).await.unwrap();
             let words = p.expect(Regex("[0-9]+\\s")).await.unwrap();
@@ -32,7 +31,7 @@ fn main() {
                 String::from_utf8_lossy(words.first()),
                 String::from_utf8_lossy(bytes.matches()[1]),
             );
-    
+
             // case 3: read while program is still executing
             p.send_line("ping 8.8.8.8 -t").await.unwrap();
             for _ in 0..5 {
@@ -42,7 +41,7 @@ fn main() {
                     String::from_utf8_lossy(duration.first())
                 );
             }
-    
+
             p.send_control(ControlCode::ETX).await.unwrap();
             p.expect_prompt().await.unwrap();
         });

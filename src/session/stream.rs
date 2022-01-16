@@ -26,7 +26,7 @@ impl<S: Read> TryStream<S> {
     pub fn get_mut(&mut self) -> &mut S {
         self.stream.get_mut()
     }
-    
+
     pub fn get_available(&mut self) -> &[u8] {
         self.stream.get_available()
     }

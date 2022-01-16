@@ -190,7 +190,11 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Stream<S> {
         Pin::new(&mut *self.stream.get_mut()).poll_close(cx)
     }
 
-    fn poll_write_vectored(mut self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[io::IoSlice<'_>]) -> Poll<io::Result<usize>> {
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
         Pin::new(&mut *self.stream.get_mut()).poll_write_vectored(cx, bufs)
     }
 }

@@ -10,7 +10,7 @@ use futures_lite::AsyncBufReadExt;
 #[cfg(feature = "async")]
 use futures_lite::AsyncReadExt;
 
-use expectrl::{spawn};
+use expectrl::spawn;
 
 #[test]
 #[cfg(windows)]
@@ -45,11 +45,11 @@ fn log() {
         session.set_log(writer.clone()).await.unwrap();
 
         thread::sleep(Duration::from_millis(300));
-    
+
         session.send_line("Hello World").await.unwrap();
-    
+
         thread::sleep(Duration::from_millis(300));
-    
+
         let mut buf = vec![0; 1024];
         let _ = session.read(&mut buf).await.unwrap();
     });
@@ -60,16 +60,15 @@ fn log() {
     assert!(log_str.as_ref().contains("read"));
 }
 
-
 #[test]
 #[cfg(unix)]
 fn log() {
     let writer = StubWriter::default();
     let mut session = spawn("cat").unwrap();
-    session.set_log(writer.clone()).unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
+        session.set_log(writer.clone()).await.unwrap();
         session.send_line("Hello World").await.unwrap();
 
         // give some time to cat
@@ -93,6 +92,8 @@ fn log() {
 
     #[cfg(not(feature = "async"))]
     {
+        session.set_log(writer.clone()).unwrap();
+
         session.send_line("Hello World").unwrap();
 
         // give some time to cat
@@ -120,10 +121,10 @@ fn log() {
 fn log_read_line() {
     let writer = StubWriter::default();
     let mut session = spawn("cat").unwrap();
-    session.set_log(writer.clone()).unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
+        session.set_log(writer.clone()).await.unwrap();
         session.send_line("Hello World").await.unwrap();
 
         let mut buf = String::new();
@@ -144,6 +145,7 @@ fn log_read_line() {
 
     #[cfg(not(feature = "async"))]
     {
+        session.set_log(writer.clone()).unwrap();
         session.send_line("Hello World").unwrap();
 
         let mut buf = String::new();

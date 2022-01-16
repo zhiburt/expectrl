@@ -115,7 +115,9 @@ impl<S: std::os::unix::prelude::AsRawFd> std::os::unix::prelude::AsRawFd for Log
 }
 
 #[cfg(windows)]
-impl<S: std::os::windows::io::AsRawSocket> std::os::windows::io::AsRawSocket for LoggedStream<'_, S> {
+impl<S: std::os::windows::io::AsRawSocket> std::os::windows::io::AsRawSocket
+    for LoggedStream<'_, S>
+{
     fn as_raw_socket(&self) -> std::os::windows::prelude::RawSocket {
         self.stream.as_raw_socket()
     }

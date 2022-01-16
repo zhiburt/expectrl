@@ -1,4 +1,4 @@
-use expectrl::{spawn};
+use expectrl::spawn;
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
@@ -75,11 +75,11 @@ fn send() {
             session.write(b"Hello World").await.unwrap();
 
             thread::sleep(Duration::from_millis(300));
-        
+
             let mut buf = vec![0; 1028];
             let _ = session.read(&mut buf).await.unwrap();
             let n = session.read(&mut buf).await.unwrap();
-        
+
             let s = String::from_utf8_lossy(&buf[..n]);
             if !s.contains("Hello World") {
                 panic!(
@@ -140,9 +140,9 @@ fn send_multiline() {
         session.send("Hello World\r\n").unwrap();
 
         thread::sleep(Duration::from_millis(300));
-    
+
         let buf = session.lines().nth(2).unwrap().unwrap();
-    
+
         if !buf.contains("Hello World") {
             panic!(
                 "Expected to get {:?} in the output, but got {:?}",
@@ -158,9 +158,9 @@ fn send_multiline() {
             session.send("Hello World\r\n").await.unwrap();
 
             thread::sleep(Duration::from_millis(300));
-        
+
             let buf = session.lines().nth(2).await.unwrap().unwrap();
-        
+
             if !buf.contains("Hello World") {
                 panic!(
                     "Expected to get {:?} in the output, but got {:?}",
@@ -226,9 +226,9 @@ fn send_line() {
         session.send_line("Hello World").unwrap();
 
         thread::sleep(Duration::from_millis(300));
-    
+
         let buf = session.lines().nth(2).unwrap().unwrap();
-    
+
         if !buf.contains("Hello World") {
             panic!(
                 "Expected to get {:?} in the output, but got {:?}",
@@ -244,9 +244,9 @@ fn send_line() {
             session.send_line("Hello World").await.unwrap();
 
             thread::sleep(Duration::from_millis(300));
-        
+
             let buf = session.lines().nth(2).await.unwrap().unwrap();
-        
+
             if !buf.contains("Hello World") {
                 panic!(
                     "Expected to get {:?} in the output, but got {:?}",
