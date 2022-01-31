@@ -55,6 +55,11 @@ impl<P, S> Session<P, S> {
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
     }
+
+    /// Borrow mutably the session's stream.
+    pub fn stream_mut(&mut self) -> &mut TryStream<S> {
+        &mut self.stream
+    }
 }
 
 impl<P, S: Read + NonBlocking> Session<P, S> {
@@ -349,8 +354,10 @@ impl<P, S> DerefMut for Session<P, S> {
     }
 }
 
+/// Session represents a spawned process and its streams.
+/// It controls process and communication with it.
 #[derive(Debug)]
-struct TryStream<S> {
+pub struct TryStream<S> {
     stream: ControlledReader<S>,
 }
 
@@ -416,7 +423,10 @@ impl<R: Read + NonBlocking> TryStream<R> {
         }
     }
 
-    fn read_available(&mut self) -> std::io::Result<bool> {
+    /// Try to read in a non-blocking mode. Returns true on EOF.
+    ///
+    /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
+    pub fn read_available(&mut self) -> std::io::Result<bool> {
         self.stream.flush_in_buffer();
 
         let mut buf = [0; 248];
