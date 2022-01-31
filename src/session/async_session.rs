@@ -80,6 +80,29 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
         self.stream.expect(needle).await
     }
 
+    /// Expect waits until a pattern is matched. This continuously reads all the
+    /// available output, consumes it from the buffer and try to match on it
+    /// until a match is found.
+    ///
+    /// Typically, you'd want to use `expect_eager` over `expect` when the
+    /// command under test produces too much output to be processed lazily.
+    ///
+    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
+    ///
+    /// ```
+    /// # futures_lite::future::block_on(async {
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect_eager(expectrl::Regex("\\d+")).await.unwrap();
+    /// assert_eq!(m.first(), b"123");
+    /// # })
+    /// ```
+    ///
+    /// It return an error if timeout is reached.
+    /// You can specify a timeout value by [Session::set_expect_timeout] method.
+    pub async fn expect_eager<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+        self.stream.expect_eager(needle).await
+    }
+
     /// Check checks if a pattern is matched.
     /// Returns empty found structure if nothing found.
     ///
@@ -324,6 +347,34 @@ impl<S: AsyncRead + Unpin> Stream<S> {
             .await
         } else {
             expect_future.await
+        }
+    }
+
+    async fn expect_eager<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
+        let start = time::Instant::now();
+        loop {
+            if let Some(timeout) = self.expect_timeout {
+                if start.elapsed() > timeout {
+                    return Err(Error::ExpectTimeout);
+                }
+            }
+
+            let eof = self.stream.read_available().await?;
+            let data = self.stream.get_available();
+
+            let found = expect.check(data, eof)?;
+            if !found.is_empty() {
+                let end_index = Found::right_most_index(&found);
+                let involved_bytes = data[..end_index].to_vec();
+                self.stream.consume_from_buffer(end_index);
+                return Ok(Found::new(involved_bytes, found));
+            } else if !data.is_empty() {
+                let data_len = data.len();
+                self.stream.consume_from_buffer(data_len);
+                continue;
+            } else if eof {
+                return Err(Error::Eof);
+            }
         }
     }
 
