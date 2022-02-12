@@ -47,11 +47,13 @@ mod check_macros;
 mod control_code;
 mod error;
 mod found;
-pub mod interact;
 mod needle;
+mod process;
+mod stream;
+
+pub mod interact;
 pub mod repl;
 pub mod session;
-mod stream;
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -127,22 +129,6 @@ fn tokenize_command(program: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn test_tokenize_command() {
-        let res = tokenize_command("prog arg1 arg2");
-        assert_eq!(vec!["prog", "arg1", "arg2"], res);
-
-        let res = tokenize_command("prog -k=v");
-        assert_eq!(vec!["prog", "-k=v"], res);
-
-        let res = tokenize_command("prog 'my text'");
-        assert_eq!(vec!["prog", "'my text'"], res);
-
-        let res = tokenize_command(r#"prog "my text""#);
-        assert_eq!(vec!["prog", r#""my text""#], res);
-    }
 
     #[cfg(unix)]
     #[test]

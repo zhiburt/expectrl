@@ -8,45 +8,54 @@ use std::{
 };
 
 use crate::{
-    control_code::ControlCode, error::Error, needle::Needle, stream::log::LoggedStream, Found,
+    control_code::ControlCode,
+    error::Error,
+    needle::Needle,
+    process::{
+        unix::{PtyStream, UnixProcess},
+        Process,
+    },
+    stream::log::LoggedStream,
+    Found,
 };
 
 use super::stream::{NonBlocking, TryStream};
 
 #[cfg(unix)]
-pub type Session =
-    PtySession<ptyprocess::PtyProcess, LoggedStream<'static, crate::stream::unix::PtyStream>>;
+pub type Session = PtySession<UnixProcess, PtyStream>;
 
 #[cfg(windows)]
 pub type Session =
-    PtySession<conpty::Process, LoggedStream<'static, crate::stream::windows::ProcessStream>>;
+    PtySession<conpty::Process, LoggedStream<'static, crate::process::windows::ProcessStream>>;
 
-impl Session {
-    #[cfg(unix)]
-    pub fn spawn(command: std::process::Command) -> Result<Self, Error> {
-        let process = ptyprocess::PtyProcess::spawn(command)?;
-        let stream = crate::stream::unix::PtyStream::new(process.get_pty_stream()?);
-        let logged_stream = LoggedStream::new(stream, io::sink());
-        let session = Self::new(process, logged_stream)?;
-
-        Ok(session)
-    }
-
-    #[cfg(windows)]
-    pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
-        let process = attr.spawn()?;
-        let stream =
-            crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
-        let logged_stream = LoggedStream::new(stream, io::sink());
-        let session = Self::new(process, logged_stream)?;
+impl<P: Process> PtySession<P, P::Session>
+where
+    P::Session: Read,
+{
+    pub fn spawn(command: P::Command) -> Result<Self, Error> {
+        let mut process = P::spawn_command(command)?;
+        let stream = process.open_session()?;
+        let session = Self::new(process, stream)?;
 
         Ok(session)
     }
+}
 
+impl<P, S: Read> PtySession<P, S> {
     /// Set logger.
-    pub fn set_log<W: io::Write + Send + 'static>(&mut self, logger: W) -> io::Result<()> {
-        self.stream.get_mut().set_logger(logger);
-        Ok(())
+    pub fn with_log<W: io::Write>(
+        mut self,
+        logger: W,
+    ) -> Result<PtySession<P, LoggedStream<W, S>>, Error> {
+        self.stream.flush_in_buffer();
+        let buf = self.stream.get_available().to_owned();
+
+        let stream = self.stream.into_inner();
+        let logged_stream = LoggedStream::new(stream, logger);
+
+        let mut session = PtySession::new(self.proc, logged_stream)?;
+        session.stream.keep_in_buffer(&buf);
+        Ok(session)
     }
 }
 

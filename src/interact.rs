@@ -381,36 +381,46 @@ where
     // flush buffers
     session.flush()?;
 
-    let origin_pty_echo = session.get_echo()?;
+    let origin_pty_echo = session
+        .get_echo()
+        .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
     // tcgetattr issues error if a provided fd is not a tty,
     // but we can work with such input as it may be redirected.
     let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO);
 
     // verify: possible controlling fd can be stdout and stderr as well?
     // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-    let isatty_terminal = isatty(STDIN_FILENO)?;
+    let isatty_terminal =
+        isatty(STDIN_FILENO).map_err(|e| Error::Other(format!("failed to call isatty {}", e)))?;
 
     if isatty_terminal {
-        set_raw(STDIN_FILENO)?;
+        set_raw(STDIN_FILENO)
+            .map_err(|e| Error::Other(format!("failed to set a raw tty {}", e)))?;
     }
 
-    session.set_echo(true, None)?;
+    session
+        .set_echo(true, None)
+        .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
 
     let result = interact(session, options);
 
     if isatty_terminal {
         // it's suppose to be always OK.
         // but we don't use unwrap just in case.
-        let origin_stdin_flags = origin_stdin_flags?;
+        let origin_stdin_flags = origin_stdin_flags
+            .map_err(|e| Error::Other(format!("failed to call tcgetattr {}", e)))?;
 
         termios::tcsetattr(
             STDIN_FILENO,
             termios::SetArg::TCSAFLUSH,
             &origin_stdin_flags,
-        )?;
+        )
+        .map_err(|e| Error::Other(format!("failed to call tcsetattr {}", e)))?;
     }
 
-    session.set_echo(origin_pty_echo, None)?;
+    session
+        .set_echo(origin_pty_echo, None)
+        .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
 
     result
 }
@@ -440,7 +450,9 @@ where
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = session.status().map_err(|e| e.into());
+        let status = session
+            .status()
+            .map_err(|e| Error::Other(format!("failed to call status {}", e)));
         if !matches!(status, Ok(WaitStatus::StillAlive)) {
             exited = true;
         }
@@ -979,13 +991,13 @@ impl NonBlocking for Stdin {
     fn set_non_blocking(&mut self) -> io::Result<()> {
         use std::os::unix::io::AsRawFd;
         let fd = self.as_raw_fd();
-        crate::stream::unix::_make_non_blocking(fd, true)
+        crate::process::unix::_make_non_blocking(fd, true)
     }
 
     fn set_blocking(&mut self) -> io::Result<()> {
         use std::os::unix::io::AsRawFd;
         let fd = self.as_raw_fd();
-        crate::stream::unix::_make_non_blocking(fd, false)
+        crate::process::unix::_make_non_blocking(fd, false)
     }
 }
 

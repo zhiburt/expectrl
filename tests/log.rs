@@ -64,11 +64,11 @@ fn log() {
 #[cfg(unix)]
 fn log() {
     let writer = StubWriter::default();
-    let mut session = spawn("cat").unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        session.set_log(writer.clone()).await.unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+
         session.send_line("Hello World").await.unwrap();
 
         // give some time to cat
@@ -92,7 +92,7 @@ fn log() {
 
     #[cfg(not(feature = "async"))]
     {
-        session.set_log(writer.clone()).unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
 
         session.send_line("Hello World").unwrap();
 
@@ -120,11 +120,11 @@ fn log() {
 #[cfg(unix)]
 fn log_read_line() {
     let writer = StubWriter::default();
-    let mut session = spawn("cat").unwrap();
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        session.set_log(writer.clone()).await.unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+
         session.send_line("Hello World").await.unwrap();
 
         let mut buf = String::new();
@@ -145,7 +145,8 @@ fn log_read_line() {
 
     #[cfg(not(feature = "async"))]
     {
-        session.set_log(writer.clone()).unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+
         session.send_line("Hello World").unwrap();
 
         let mut buf = String::new();

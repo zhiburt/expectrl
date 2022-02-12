@@ -82,7 +82,7 @@ fn interact_callbacks_called_after_exit() {
 
     assert_eq!(
         opts.interact(&mut session).unwrap_err().to_string(),
-        "Nix error ECHILD: No child processes"
+        "Error failed to call status ECHILD: No child processes"
     );
 
     #[cfg(target_os = "linux")]

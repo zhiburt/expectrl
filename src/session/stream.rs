@@ -15,12 +15,22 @@ pub struct TryStream<S> {
     stream: ControlledReader<S>,
 }
 
+impl<S> TryStream<S> {
+    pub fn into_inner(self) -> S {
+        self.stream.inner.into_inner().inner
+    }
+}
+
 impl<S: Read> TryStream<S> {
     /// The function returns a new Stream from a file.
     pub fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
             stream: ControlledReader::new(stream),
         })
+    }
+
+    pub fn keep_in_buffer(&mut self, v: &[u8]) {
+        self.stream.keep_in_buffer(v);
     }
 
     pub fn get_mut(&mut self) -> &mut S {
@@ -33,6 +43,10 @@ impl<S: Read> TryStream<S> {
 
     pub fn consume_available(&mut self, n: usize) {
         self.stream.consume_available(n)
+    }
+
+    pub fn flush_in_buffer(&mut self) {
+        self.stream.flush_in_buffer();
     }
 }
 

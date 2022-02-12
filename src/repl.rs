@@ -189,7 +189,9 @@ impl ReplSession {
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
         let session = Session::spawn(cmd)?;
-        let is_echo_on = session.get_echo()?;
+        let is_echo_on = session
+            .get_echo()
+            .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());
 

@@ -1,5 +1,8 @@
-use expectrl::{session::Session, ControlCode, Needle, Found};
-use std::{thread, time::{Duration, Instant}};
+use expectrl::{session::Session, ControlCode, Found, Needle};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
 #[cfg(unix)]
 use std::process::Command;
@@ -218,12 +221,13 @@ fn blocking_read_after_non_blocking() {
 
     thread::sleep(Duration::from_millis(1000));
 
-    assert!(do_until(|| {
-        thread::sleep(Duration::from_millis(50));
-        _p_try_read(&mut proc, &mut [0; 1]).is_ok()
-    },
-    Duration::from_secs(3)));
-
+    assert!(do_until(
+        || {
+            thread::sleep(Duration::from_millis(50));
+            _p_try_read(&mut proc, &mut [0; 1]).is_ok()
+        },
+        Duration::from_secs(3)
+    ));
 
     let mut buf = [0; 64];
     let n = _p_read(&mut proc, &mut buf).unwrap();
@@ -265,7 +269,7 @@ fn try_read() {
         "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
-    
+
     thread::sleep(Duration::from_millis(500));
 
     _p_send_line(&mut proc, "123").unwrap();
@@ -274,19 +278,21 @@ fn try_read() {
     // give cat a time to react on input
     thread::sleep(Duration::from_millis(1500));
 
-    assert!(do_until(|| {
-        thread::sleep(Duration::from_millis(50));
+    assert!(do_until(
+        || {
+            thread::sleep(Duration::from_millis(50));
 
-        let mut buf = vec![0; 128];
-        let _ = _p_try_read(&mut proc, &mut buf);
+            let mut buf = vec![0; 128];
+            let _ = _p_try_read(&mut proc, &mut buf);
 
-        if String::from_utf8_lossy(&buf).contains("123") {
-            true
-        } else {
-            false
-        }
-    },
-    Duration::from_secs(5)));
+            if String::from_utf8_lossy(&buf).contains("123") {
+                true
+            } else {
+                false
+            }
+        },
+        Duration::from_secs(5)
+    ));
 }
 
 #[test]
@@ -673,7 +679,7 @@ fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
     let now = Instant::now();
     while now.elapsed() < timeout {
         if foo() {
-            return true
+            return true;
         }
     }
 

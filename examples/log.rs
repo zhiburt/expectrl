@@ -2,8 +2,7 @@ use expectrl::{spawn, Error};
 
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
-    let mut p = spawn("cat")?;
-    p.set_log(std::io::stdout())?;
+    let mut p = spawn("cat")?.with_log(std::io::stdout())?;
     p.send_line("Hello World")?;
 
     // reading doesn't apear here because
