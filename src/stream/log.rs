@@ -90,15 +90,6 @@ impl<S, W> DerefMut for LoggedStream<W, S> {
     }
 }
 
-// impl<S: fmt::Debug, W> fmt::Debug for LoggedStream<W, S> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_struct("LoggedStream")
-//             .field("stream", &self.stream)
-//             // .field("logger", &self.logger)
-//             .finish()
-//     }
-// }
-
 #[cfg(unix)]
 impl<S: std::os::unix::prelude::AsRawFd, W> std::os::unix::prelude::AsRawFd for LoggedStream<W, S> {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
@@ -107,8 +98,8 @@ impl<S: std::os::unix::prelude::AsRawFd, W> std::os::unix::prelude::AsRawFd for 
 }
 
 #[cfg(windows)]
-impl<S: std::os::windows::io::AsRawSocket> std::os::windows::io::AsRawSocket
-    for LoggedStream<'_, S>
+impl<S: std::os::windows::io::AsRawSocket, W> std::os::windows::io::AsRawSocket
+    for LoggedStream<W, S>
 {
     fn as_raw_socket(&self) -> std::os::windows::prelude::RawSocket {
         self.stream.as_raw_socket()

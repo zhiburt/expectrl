@@ -421,6 +421,8 @@ fn try_read_to_end() {
     let mut v: Vec<u8> = Vec::new();
     let mut b = [0; 1];
     loop {
+        thread::sleep(Duration::from_millis(500));
+
         match _p_try_read(&mut proc, &mut b) {
             Ok(n) => {
                 v.extend(&b[..n]);

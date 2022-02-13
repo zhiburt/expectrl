@@ -33,6 +33,18 @@ impl<S> Stream<S> {
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
     }
+
+    pub fn keep(&mut self, buf: &[u8]) {
+        self.stream.keep(buf);
+    }
+
+    pub fn get_available(&mut self) -> &[u8] {
+        self.stream.buffer()
+    }
+
+    pub fn into_inner(self) -> S {
+        self.stream.stream
+    }
 }
 
 impl<S: AsyncRead + Unpin> Stream<S> {

@@ -7,9 +7,9 @@ pub mod windows;
 
 pub trait Process: Sized {
     type Command;
-    type Session;
+    type Stream;
 
     fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self>;
     fn spawn_command(command: Self::Command) -> Result<Self>;
-    fn open_session(&mut self) -> Result<Self::Session>;
+    fn open_stream(&mut self) -> Result<Self::Stream>;
 }

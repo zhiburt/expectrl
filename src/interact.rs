@@ -716,14 +716,14 @@ where
     W: Write,
 {
     // flush buffers
-    session.flush()?;
+    session.flush().map_err(to_io_error)?;
 
-    let console = conpty::console::Console::current()?;
-    console.set_raw()?;
+    let console = conpty::console::Console::current().map_err(to_io_error)?;
+    console.set_raw().map_err(to_io_error)?;
 
     let r = interact(session, options);
 
-    console.reset()?;
+    console.reset().map_err(to_io_error)?;
 
     r
 }
@@ -847,12 +847,12 @@ where
     // flush buffers
     session.flush().await?;
 
-    let console = conpty::console::Console::current()?;
-    console.set_raw()?;
+    let console = conpty::console::Console::current().map_err(to_io_error)?;
+    console.set_raw().map_err(to_io_error)?;
 
     let r = interact(session, options).await;
 
-    console.reset()?;
+    console.reset().map_err(to_io_error)?;
 
     r
 }
@@ -1022,7 +1022,7 @@ pub struct NonBlockingStdin {
 #[cfg(windows)]
 impl NonBlockingStdin {
     fn new() -> Result<Self, Error> {
-        let console = conpty::console::Console::current()?;
+        let console = conpty::console::Console::current().map_err(to_io_error)?;
         Ok(Self {
             current_terminal: console,
         })
@@ -1074,6 +1074,10 @@ enum Match {
     Yes(usize),
     No,
     MaybeLater,
+}
+
+fn to_io_error(err: impl std::error::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, err.to_string())
 }
 
 #[cfg(test)]

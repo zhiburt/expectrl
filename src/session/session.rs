@@ -11,10 +11,7 @@ use crate::{
     control_code::ControlCode,
     error::Error,
     needle::Needle,
-    process::{
-        unix::{PtyStream, UnixProcess},
-        Process,
-    },
+    process::{self, Process},
     stream::log::LoggedStream,
     Found,
 };
@@ -22,19 +19,26 @@ use crate::{
 use super::stream::{NonBlocking, TryStream};
 
 #[cfg(unix)]
-pub type Session = PtySession<UnixProcess, PtyStream>;
+pub type Session = PtySession<process::unix::UnixProcess, process::unix::PtyStream>;
 
 #[cfg(windows)]
-pub type Session =
-    PtySession<conpty::Process, LoggedStream<'static, crate::process::windows::ProcessStream>>;
+pub type Session = PtySession<process::windows::WinProcess, process::windows::ProcessStream>;
 
-impl<P: Process> PtySession<P, P::Session>
+impl<P: Process> PtySession<P, P::Stream>
 where
-    P::Session: Read,
+    P::Stream: Read,
 {
     pub fn spawn(command: P::Command) -> Result<Self, Error> {
         let mut process = P::spawn_command(command)?;
-        let stream = process.open_session()?;
+        let stream = process.open_stream()?;
+        let session = Self::new(process, stream)?;
+
+        Ok(session)
+    }
+
+    pub(crate) fn spawn_cmd(command: impl AsRef<str>) -> Result<Self, Error> {
+        let mut process = P::spawn(command)?;
+        let stream = process.open_stream()?;
         let session = Self::new(process, stream)?;
 
         Ok(session)

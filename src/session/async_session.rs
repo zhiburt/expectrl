@@ -1,6 +1,6 @@
 use std::{
     convert::TryInto,
-    io,
+    io::{self, Read},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -10,7 +10,11 @@ use std::{
 use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::async_stream::Stream;
-use crate::{stream::log::LoggedStream, ControlCode, Error, Found, Needle};
+use crate::{
+    process::{self, Process},
+    stream::log::LoggedStream,
+    ControlCode, Error, Found, Needle,
+};
 
 #[cfg(unix)]
 pub type Session = PtySession<
@@ -19,41 +23,54 @@ pub type Session = PtySession<
 >;
 
 #[cfg(windows)]
-pub type Session = PtySession<
-    conpty::Process,
-    AsyncStream<LoggedStream<'static, crate::stream::windows::ProcessStream>>,
->;
-
-#[cfg(unix)]
-type AsyncStream<S> = async_io::Async<S>;
+pub type Session =
+    PtySession<process::windows::WinProcess, blocking::Unblock<process::windows::ProcessStream>>;
 
 #[cfg(windows)]
-type AsyncStream<S> = blocking::Unblock<S>;
+impl Session {
+    pub fn spawn(
+        command: <process::windows::WinProcess as Process>::Command,
+    ) -> Result<Self, Error> {
+        let mut process = process::windows::WinProcess::spawn_command(command)?;
+        let stream = process.open_stream()?;
+        let stream = blocking::Unblock::new(stream);
+        let session = Self::new(process, stream)?;
+
+        Ok(session)
+    }
+
+    pub fn spawn_cmd(cmd: impl AsRef<str>) -> Result<Self, Error> {
+        let mut process = process::windows::WinProcess::spawn(cmd)?;
+        let stream = process.open_stream()?;
+        let stream = blocking::Unblock::new(stream);
+        let session = Self::new(process, stream)?;
+
+        Ok(session)
+    }
+
+    /// Set logger.
+    pub async fn with_log<W: io::Write>(
+        mut self,
+        logger: W,
+    ) -> Result<
+        PtySession<
+            process::windows::WinProcess,
+            blocking::Unblock<LoggedStream<W, process::windows::ProcessStream>>,
+        >,
+        Error,
+    > {
+        let buf = self.stream.get_available().to_owned();
+        let stream = self.stream.into_inner().into_inner().await;
+        let logged_stream = LoggedStream::new(stream, logger);
+        let stream = blocking::Unblock::new(logged_stream);
+
+        let mut session = PtySession::new(self.process, stream)?;
+        session.stream.keep(&buf);
+        Ok(session)
+    }
+}
 
 impl Session {
-    #[cfg(unix)]
-    pub fn spawn(command: std::process::Command) -> Result<Self, Error> {
-        let process = ptyprocess::PtyProcess::spawn(command)?;
-        let stream = crate::stream::unix::PtyStream::new(process.get_pty_stream()?);
-        let logged_stream = LoggedStream::new(stream, io::sink());
-        let async_logged_stream = AsyncStream::new(logged_stream)?;
-        let session = Self::new(process, async_logged_stream);
-
-        Ok(session)
-    }
-
-    #[cfg(windows)]
-    pub fn spawn(attr: conpty::ProcAttr) -> Result<Self, Error> {
-        let process = attr.spawn()?;
-        let stream =
-            crate::stream::windows::ProcessStream::new(process.output()?, process.input()?);
-        let logged_stream = LoggedStream::new(stream, io::sink());
-        let async_logged_stream = AsyncStream::new(logged_stream);
-        let session = Self::new(process, async_logged_stream);
-
-        Ok(session)
-    }
-
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
     ///
@@ -99,15 +116,6 @@ impl Session {
             .interact(self)
             .await
     }
-
-    /// Set logger.
-    pub async fn set_log<W: io::Write + Send + 'static>(&mut self, logger: W) -> io::Result<()> {
-        #[cfg(windows)]
-        self.stream.get_mut().get_mut().await.set_logger(logger);
-        #[cfg(unix)]
-        self.stream.get_mut().get_mut().set_logger(logger);
-        Ok(())
-    }
 }
 
 /// Session represents a spawned process and its streams.
@@ -121,11 +129,11 @@ pub struct PtySession<P, S> {
 // GEt back to the solution where Logger is just dyn Write instead of all these magic with type system.....
 
 impl<P, S> PtySession<P, S> {
-    pub fn new(process: P, stream: S) -> Self {
-        Self {
+    pub fn new(process: P, stream: S) -> io::Result<Self> {
+        Ok(Self {
             process,
             stream: Stream::new(stream),
-        }
+        })
     }
 
     /// Set the pty session's expect timeout.

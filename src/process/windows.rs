@@ -8,29 +8,35 @@ use conpty::{
     ProcAttr, Process,
 };
 
+use super::Process as ProcessTrait;
 use crate::session::stream::NonBlocking;
 
-pub struct WindowsProcess(Process);
-
-impl WindowsProcess {
-    pub fn spawn<S: AsRef<str>>(command: S) -> Result<Self> {
-        Self::spawn_command(ProcAttr::cmd(command.as_ref().to_string()))
-    }
-
-    pub fn spawn_command(command: ProcAttr) -> Result<Self> {
-        command.spawn().map_err(to_io_error).map(WindowsProcess)
-    }
+pub struct WinProcess {
+    proc: Process,
 }
 
-// impl ProcessTrait for WindowsProcess {
-//     type Stream = ProcessStream;
+impl ProcessTrait for WinProcess {
+    type Command = ProcAttr;
 
-//     fn stream(&mut self) -> Result<Self::Stream> {
-//         let input = self.0.input().map_err(to_io_error)?;
-//         let output = self.0.output().map_err(to_io_error)?;
-//         Ok(Self::Stream::new(output, input))
-//     }
-// }
+    type Stream = ProcessStream;
+
+    fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
+        Self::spawn_command(ProcAttr::cmd(cmd.as_ref()))
+    }
+
+    fn spawn_command(command: Self::Command) -> Result<Self> {
+        command
+            .spawn()
+            .map_err(to_io_error)
+            .map(|proc| WinProcess { proc })
+    }
+
+    fn open_stream(&mut self) -> Result<Self::Stream> {
+        let input = self.proc.input().map_err(to_io_error)?;
+        let output = self.proc.output().map_err(to_io_error)?;
+        Ok(Self::Stream::new(output, input))
+    }
+}
 
 #[derive(Debug)]
 pub struct ProcessStream {
@@ -74,17 +80,17 @@ impl NonBlocking for ProcessStream {
     }
 }
 
-impl Deref for WindowsProcess {
+impl Deref for WinProcess {
     type Target = Process;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.proc
     }
 }
 
-impl DerefMut for WindowsProcess {
+impl DerefMut for WinProcess {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.proc
     }
 }
 

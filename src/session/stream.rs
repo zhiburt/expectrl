@@ -29,6 +29,12 @@ impl<S: Read> TryStream<S> {
         })
     }
 
+    pub fn flush_in_buffer(&mut self) {
+        self.stream.flush_in_buffer();
+    }
+}
+
+impl<S> TryStream<S> {
     pub fn keep_in_buffer(&mut self, v: &[u8]) {
         self.stream.keep_in_buffer(v);
     }
@@ -43,10 +49,6 @@ impl<S: Read> TryStream<S> {
 
     pub fn consume_available(&mut self, n: usize) {
         self.stream.consume_available(n)
-    }
-
-    pub fn flush_in_buffer(&mut self) {
-        self.stream.flush_in_buffer();
     }
 }
 
@@ -167,6 +169,18 @@ impl<R: Read> ControlledReader<R> {
         }
     }
 
+    pub fn flush_in_buffer(&mut self) {
+        // Because we have 2 buffered streams there might appear inconsistancy
+        // in read operations and the data which was via `keep_in_buffer` function.
+        //
+        // To eliminate it we move BufReader buffer to our buffer.
+        let b = self.inner.buffer().to_vec();
+        self.inner.consume(b.len());
+        self.keep_in_buffer(&b);
+    }
+}
+
+impl<R> ControlledReader<R> {
     pub fn keep_in_buffer(&mut self, v: &[u8]) {
         self.inner.get_mut().buffer.extend(v);
     }
@@ -181,16 +195,6 @@ impl<R: Read> ControlledReader<R> {
 
     pub fn consume_available(&mut self, n: usize) {
         self.inner.get_mut().buffer.drain(..n);
-    }
-
-    pub fn flush_in_buffer(&mut self) {
-        // Because we have 2 buffered streams there might appear inconsistancy
-        // in read operations and the data which was via `keep_in_buffer` function.
-        //
-        // To eliminate it we move BufReader buffer to our buffer.
-        let b = self.inner.buffer().to_vec();
-        self.inner.consume(b.len());
-        self.keep_in_buffer(&b);
     }
 }
 

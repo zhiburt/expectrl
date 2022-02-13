@@ -93,37 +93,7 @@ use session::Session;
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
-    #[cfg(unix)]
-    {
-        let args = tokenize_command(cmd.as_ref());
-        if args.is_empty() {
-            return Err(Error::CommandParsing);
-        }
-
-        let mut command = std::process::Command::new(&args[0]);
-        command.args(args.iter().skip(1));
-
-        Session::spawn(command)
-    }
-    #[cfg(windows)]
-    {
-        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
-    }
-}
-
-/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
-/// It takes care of single and double quotes but,
-///
-/// It doesn't cover all edge cases.
-/// So it may not be compatible with real shell arguments parsing.
-#[cfg(unix)]
-fn tokenize_command(program: &str) -> Vec<String> {
-    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
-    let mut res = vec![];
-    for cap in re.captures_iter(program) {
-        res.push(cap[0].to_string());
-    }
-    res
+    Session::spawn_cmd(cmd.as_ref())
 }
 
 #[cfg(test)]
