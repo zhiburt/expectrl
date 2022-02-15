@@ -2,66 +2,47 @@
 //! [crate::Session::interact] flow.
 
 use crate::{
-    session::{
-        stream::{NonBlocking, TryStream},
-        Session,
-    },
-    ControlCode, Error,
+    process::Healthcheck, session::sync_stream::NonBlocking, session::Session, ControlCode, Error,
 };
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{self, Read, Stdin, Write},
+    io::{self, Read, Write},
 };
 
-#[cfg(unix)]
-use crate::WaitStatus;
-#[cfg(unix)]
-use nix::{libc::STDIN_FILENO, sys::termios, unistd::isatty};
-#[cfg(unix)]
-use ptyprocess::set_raw;
-
-#[cfg(windows)]
-use conpty::console::Console;
-
 /// InteractOptions represents options of an interact session.
-pub struct InteractOptions<R, W, C> {
+pub struct InteractOptions<S, R, W, C> {
     input: R,
     output: W,
-    input_from: InputFrom,
     escape_character: u8,
     input_filter: Option<FilterFn>,
     output_filter: Option<FilterFn>,
-    input_handlers: HashMap<String, ActionFn<R, W, C>>,
+    input_handlers: HashMap<String, ActionFn<S, R, W, C>>,
     #[allow(clippy::type_complexity)]
-    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<R, W, C>)>,
-    idle_handler: Option<ActionFn<R, W, C>>,
+    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<S, R, W, C>)>,
+    idle_handler: Option<ActionFn<S, R, W, C>>,
     state: C,
 }
 
-enum InputFrom {
-    Terminal,
-    Other,
-}
+type ActionFn<S, R, W, C> = Box<dyn FnMut(Context<'_, S, R, W, C>) -> Result<(), Error>>;
 
-type ActionFn<R, W, C> = Box<dyn FnMut(Context<'_, R, W, C>) -> Result<(), Error>>;
-
-type OutputFn<R, W, C> = Box<dyn FnMut(Context<'_, R, W, C>, crate::Found) -> Result<(), Error>>;
+type OutputFn<S, R, W, C> =
+    Box<dyn FnMut(Context<'_, S, R, W, C>, crate::Found) -> Result<(), Error>>;
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
 /// Context provides an interface to use a [Session], IO streams
 /// and a state.
-pub struct Context<'a, R, W, C> {
-    session: &'a mut Session,
+pub struct Context<'a, S, R, W, C> {
+    session: &'a mut S,
     input: &'a mut R,
     output: &'a mut W,
     state: &'a mut C,
 }
 
-impl<'a, R, W, C> Context<'a, R, W, C> {
+impl<'a, S, R, W, C> Context<'a, S, R, W, C> {
     /// Get a reference to the context's session.
-    pub fn session(&mut self) -> &mut Session {
+    pub fn session(&mut self) -> &mut S {
         self.session
     }
 
@@ -81,30 +62,7 @@ impl<'a, R, W, C> Context<'a, R, W, C> {
     }
 }
 
-impl InteractOptions<NonBlockingStdin, io::Stdout, ()> {
-    /// Constructs a interact options to interact via STDIN.
-    ///
-    /// Usage [InteractOptions::streamed] directly with [std::io::stdin],
-    /// most likely will provide a correct interact processing.
-    /// It depends on terminal settings.
-    pub fn terminal() -> Result<Self, Error> {
-        let input = NonBlockingStdin::new()?;
-        Ok(Self {
-            input,
-            output: io::stdout(),
-            input_from: InputFrom::Terminal,
-            escape_character: Self::default_escape_char(),
-            input_filter: None,
-            output_filter: None,
-            idle_handler: None,
-            input_handlers: HashMap::new(),
-            output_handlers: Vec::new(),
-            state: (),
-        })
-    }
-}
-
-impl<R, W> InteractOptions<R, W, ()> {
+impl<S, R, W> InteractOptions<S, R, W, ()> {
     /// Create interact options with custom input and output streams.
     ///
     /// To construct default terminal session see [InteractOptions::terminal]
@@ -112,7 +70,6 @@ impl<R, W> InteractOptions<R, W, ()> {
         Ok(Self {
             input,
             output,
-            input_from: InputFrom::Other,
             escape_character: Self::default_escape_char(),
             idle_handler: None,
             input_handlers: HashMap::new(),
@@ -124,18 +81,17 @@ impl<R, W> InteractOptions<R, W, ()> {
     }
 }
 
-impl<R, W, C> InteractOptions<R, W, C> {
+impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// State sets state which will be available in callback calls, throught context variable.
     ///
     /// Please beware that it cleans already set list of callbacks.
     /// So you need to call this method BEFORE you specify callbacks.
     ///
     /// Default state type is a unit type `()`.
-    pub fn state<C1>(self, state: C1) -> InteractOptions<R, W, C1> {
+    pub fn state<C1>(self, state: C1) -> InteractOptions<S, R, W, C1> {
         InteractOptions {
             state,
             escape_character: self.escape_character,
-            input_from: self.input_from,
             input: self.input,
             input_filter: self.input_filter,
             output: self.output,
@@ -157,7 +113,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     }
 }
 
-impl<R, W, C> InteractOptions<R, W, C> {
+impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// Sets an escape character after seen which the interact interactions will be stopped
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
@@ -198,7 +154,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// See <https://github.com/zhiburt/expectrl/issues/16>.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
-        F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, S, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.input_handlers.insert(input.into(), Box::new(f));
         self
@@ -212,7 +168,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
         N: crate::Needle + 'static,
-        F: FnMut(Context<'_, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, S, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
     {
         self.output_handlers.push((Box::new(needle), Box::new(f)));
         self
@@ -221,7 +177,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
     /// Puts a handler which will be called on each interaction.
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
-        F: FnMut(Context<'_, R, W, C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, S, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.idle_handler = Some(Box::new(f));
         self
@@ -231,7 +187,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
         ControlCode::GroupSeparator.into() // Ctrl-]
     }
 
-    fn check_input(&mut self, session: &mut Session, bytes: &[u8]) -> Result<Match, Error> {
+    fn check_input(&mut self, session: &mut S, bytes: &[u8]) -> Result<Match, Error> {
         for (pattern, callback) in self.input_handlers.iter_mut() {
             if !pattern.is_empty() && !bytes.is_empty() {
                 match contains_in_bytes(bytes, pattern.as_bytes()) {
@@ -256,12 +212,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
         Ok(Match::No)
     }
 
-    fn check_output(
-        &mut self,
-        session: &mut Session,
-        buf: &mut Vec<u8>,
-        eof: bool,
-    ) -> Result<(), Error> {
+    fn check_output(&mut self, session: &mut S, buf: &mut Vec<u8>, eof: bool) -> Result<(), Error> {
         'checks: loop {
             for (search, callback) in self.output_handlers.iter_mut() {
                 let found = search.check(buf, eof)?;
@@ -287,7 +238,7 @@ impl<R, W, C> InteractOptions<R, W, C> {
         }
     }
 
-    fn call_idle_handler(&mut self, session: &mut Session) -> Result<(), Error> {
+    fn call_idle_handler(&mut self, session: &mut S) -> Result<(), Error> {
         let context = Context {
             input: &mut self.input,
             output: &mut self.output,
@@ -303,8 +254,10 @@ impl<R, W, C> InteractOptions<R, W, C> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<R, W, C> InteractOptions<R, W, C>
+impl<P, S, R, W, C> InteractOptions<Session<P, S>, R, W, C>
 where
+    P: Healthcheck,
+    S: NonBlocking + Read + Write,
     R: Read,
     W: Write,
 {
@@ -316,22 +269,8 @@ where
     ///
     /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
     /// (at the point of the call)
-    #[cfg(unix)]
-    pub fn interact(&mut self, session: &mut Session) -> Result<WaitStatus, Error> {
-        match self.input_from {
-            InputFrom::Terminal => interact_in_terminal(session, self),
-            InputFrom::Other => interact(session, self),
-        }
-    }
-
-    /// Runs interact interactively.
-    /// See [Session::interact]
-    #[cfg(windows)]
-    pub fn interact(&mut self, session: &mut Session) -> Result<(), Error> {
-        match self.input_from {
-            InputFrom::Terminal => interact_in_terminal(session, self),
-            InputFrom::Other => interact(session, self),
-        }
+    pub fn interact(&mut self, session: &mut Session<P, S>) -> Result<(), Error> {
+        interact(session, self)
     }
 }
 
@@ -343,12 +282,8 @@ where
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    #[cfg(unix)]
-    pub async fn interact(self, session: &mut Session) -> Result<WaitStatus, Error> {
-        match self.input_from {
-            InputFrom::Terminal => interact_in_terminal(session, self).await,
-            InputFrom::Other => interact(session, self).await,
-        }
+    pub async fn interact(self, session: &mut S) -> Result<WaitStatus, Error> {
+        interact(session, self)
     }
 }
 
@@ -369,69 +304,14 @@ where
     }
 }
 
-#[cfg(all(unix, not(feature = "async")))]
-fn interact_in_terminal<R, W, C>(
-    session: &mut Session,
-    options: &mut InteractOptions<R, W, C>,
-) -> Result<WaitStatus, Error>
-where
-    R: Read,
-    W: Write,
-{
-    // flush buffers
-    session.flush()?;
-
-    let origin_pty_echo = session
-        .get_echo()
-        .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
-    // tcgetattr issues error if a provided fd is not a tty,
-    // but we can work with such input as it may be redirected.
-    let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO);
-
-    // verify: possible controlling fd can be stdout and stderr as well?
-    // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-    let isatty_terminal =
-        isatty(STDIN_FILENO).map_err(|e| Error::Other(format!("failed to call isatty {}", e)))?;
-
-    if isatty_terminal {
-        set_raw(STDIN_FILENO)
-            .map_err(|e| Error::Other(format!("failed to set a raw tty {}", e)))?;
-    }
-
-    session
-        .set_echo(true, None)
-        .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
-
-    let result = interact(session, options);
-
-    if isatty_terminal {
-        // it's suppose to be always OK.
-        // but we don't use unwrap just in case.
-        let origin_stdin_flags = origin_stdin_flags
-            .map_err(|e| Error::Other(format!("failed to call tcgetattr {}", e)))?;
-
-        termios::tcsetattr(
-            STDIN_FILENO,
-            termios::SetArg::TCSAFLUSH,
-            &origin_stdin_flags,
-        )
-        .map_err(|e| Error::Other(format!("failed to call tcsetattr {}", e)))?;
-    }
-
-    session
-        .set_echo(origin_pty_echo, None)
-        .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
-
-    result
-}
-
-#[cfg(unix)]
 #[cfg(not(feature = "async"))]
-fn interact<R, W, C>(
-    session: &mut Session,
-    options: &mut InteractOptions<R, W, C>,
-) -> Result<WaitStatus, Error>
+fn interact<P, S, R, W, C>(
+    session: &mut Session<P, S>,
+    options: &mut InteractOptions<Session<P, S>, R, W, C>,
+) -> Result<(), Error>
 where
+    P: Healthcheck,
+    S: NonBlocking + Read + Write,
     R: Read,
     W: Write,
 {
@@ -451,9 +331,9 @@ where
         //
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = session
-            .status()
+            .is_alive()
             .map_err(|e| Error::Other(format!("failed to call status {}", e)));
-        if !matches!(status, Ok(WaitStatus::StillAlive)) {
+        if matches!(status, Ok(false)) {
             exited = true;
         }
 
@@ -481,7 +361,7 @@ where
         }
 
         if exited {
-            return status;
+            return Ok(());
         }
 
         // We dont't print user input back to the screen.
@@ -490,7 +370,7 @@ where
         // The terminal must have been prepared before.
         match options.input.read(&mut buf) {
             Ok(0) => {
-                return status;
+                return Ok(());
             }
             Ok(n) => {
                 let bytes = &buf[..n];
@@ -527,7 +407,7 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buffer[..pos])?;
-                        return status;
+                        return Ok(());
                     }
                     None => {
                         session.write_all(&buffer[..])?;
@@ -962,93 +842,6 @@ where
         }
 
         options.call_idle_handler(session)?;
-    }
-}
-
-/// A non blocking version of STDIN.
-///
-/// It's not recomended to be used directly.
-/// But we expose it because its used in [InteractOptions::terminal]
-#[cfg(unix)]
-pub struct NonBlockingStdin {
-    reader: TryStream<Stdin>,
-}
-
-#[cfg(unix)]
-impl NonBlockingStdin {
-    fn new() -> Result<Self, Error> {
-        let reader = TryStream::new(std::io::stdin())?;
-        Ok(Self { reader })
-    }
-}
-
-#[cfg(unix)]
-impl Read for NonBlockingStdin {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.try_read(buf)
-    }
-}
-
-#[cfg(unix)]
-impl NonBlocking for Stdin {
-    fn set_non_blocking(&mut self) -> io::Result<()> {
-        use std::os::unix::io::AsRawFd;
-        let fd = self.as_raw_fd();
-        crate::process::unix::_make_non_blocking(fd, true)
-    }
-
-    fn set_blocking(&mut self) -> io::Result<()> {
-        use std::os::unix::io::AsRawFd;
-        let fd = self.as_raw_fd();
-        crate::process::unix::_make_non_blocking(fd, false)
-    }
-}
-
-#[cfg(unix)]
-#[cfg(feature = "async")]
-impl futures_lite::AsyncRead for NonBlockingStdin {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        _: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<io::Result<usize>> {
-        std::task::Poll::Ready(self.read(buf))
-    }
-}
-
-/// See unix version
-#[cfg(windows)]
-pub struct NonBlockingStdin {
-    current_terminal: Console,
-}
-
-#[cfg(windows)]
-impl NonBlockingStdin {
-    fn new() -> Result<Self, Error> {
-        let console = conpty::console::Console::current().map_err(to_io_error)?;
-        Ok(Self {
-            current_terminal: console,
-        })
-    }
-}
-
-#[cfg(windows)]
-impl Read for NonBlockingStdin {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // we can't easily read in non-blocking manner,
-        // but we can check when there's something to read,
-        // which seems to be enough to not block.
-        //
-        // fixme: I am not sure why reading works on is_stdin_empty() == true
-        if self
-            .current_terminal
-            .is_stdin_empty()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-        {
-            io::stdin().read(buf)
-        } else {
-            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
-        }
     }
 }
 

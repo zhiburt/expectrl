@@ -7,24 +7,20 @@ use std::{
     time::{self, Duration},
 };
 
-use crate::{
-    control_code::ControlCode,
-    error::Error,
-    needle::Needle,
-    process::{self, Process},
-    stream::log::LoggedStream,
-    Found,
-};
+use crate::{control_code::ControlCode, error::Error, needle::Needle, Found, process::Process, stream::log::LoggedStream};
 
-use super::stream::{NonBlocking, TryStream};
+use super::sync_stream::{NonBlocking, TryStream};
 
-#[cfg(unix)]
-pub type Session = PtySession<process::unix::UnixProcess, process::unix::PtyStream>;
+/// Session represents a spawned process and its streams.
+/// It controlls process and communication with it.
+#[derive(Debug)]
+pub struct Session<P, S> {
+    proc: P,
+    stream: TryStream<S>,
+    expect_timeout: Option<Duration>,
+}
 
-#[cfg(windows)]
-pub type Session = PtySession<process::windows::WinProcess, process::windows::ProcessStream>;
-
-impl<P: Process> PtySession<P, P::Stream>
+impl<P: Process> Session<P, P::Stream>
 where
     P::Stream: Read,
 {
@@ -36,8 +32,8 @@ where
         Ok(session)
     }
 
-    pub(crate) fn spawn_cmd(command: impl AsRef<str>) -> Result<Self, Error> {
-        let mut process = P::spawn(command)?;
+    pub(crate) fn spawn_cmd(cmd: &str) -> Result<Self, Error> {
+        let mut process = P::spawn(cmd)?;
         let stream = process.open_stream()?;
         let session = Self::new(process, stream)?;
 
@@ -45,92 +41,26 @@ where
     }
 }
 
-impl<P, S: Read> PtySession<P, S> {
+impl<P, S: Read> Session<P, S> {
     /// Set logger.
     pub fn with_log<W: io::Write>(
         mut self,
         logger: W,
-    ) -> Result<PtySession<P, LoggedStream<W, S>>, Error> {
+    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
         self.stream.flush_in_buffer();
         let buf = self.stream.get_available().to_owned();
 
         let stream = self.stream.into_inner();
-        let logged_stream = LoggedStream::new(stream, logger);
+        let stream = LoggedStream::new(stream, logger);
 
-        let mut session = PtySession::new(self.proc, logged_stream)?;
+        let mut session = Session::new(self.proc, stream)?;
         session.stream.keep_in_buffer(&buf);
         Ok(session)
     }
 }
 
-impl Session {
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-
-    #[cfg(unix)]
-    #[cfg(not(feature = "async"))]
-    pub fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
-    }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    // #[cfg(unix)]
-    // #[cfg(feature = "async")]
-    // pub async fn interact(&mut self) -> Result<WaitStatus, Error> {
-    //     crate::interact::InteractOptions::terminal()?
-    //         .interact(self)
-    //         .await
-    // }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    #[cfg(windows)]
-    pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::terminal()?.interact(self)
-    }
-}
-
-/// Session represents a spawned process and its streams.
-/// It controlls process and communication with it.
-#[derive(Debug)]
-pub struct PtySession<P, S> {
-    proc: P,
-    stream: TryStream<S>,
-    expect_timeout: Option<Duration>,
-}
-
-impl<P, S: Read> PtySession<P, S> {
-    //
-    pub fn new(process: P, stream: S) -> io::Result<Self> {
+impl<P, S: Read> Session<P, S> {
+    fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
             proc: process,
@@ -140,14 +70,14 @@ impl<P, S: Read> PtySession<P, S> {
     }
 }
 
-impl<P, S> PtySession<P, S> {
+impl<P, S> Session<P, S> {
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
     }
 }
 
-impl<P, S: Read + NonBlocking> PtySession<P, S> {
+impl<P, S: Read + NonBlocking> Session<P, S> {
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
         let mut eof = false;
@@ -237,7 +167,7 @@ impl<P, S: Read + NonBlocking> PtySession<P, S> {
     }
 }
 
-impl<P, S: Write> PtySession<P, S> {
+impl<P, S: Write> Session<P, S> {
     pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         self.stream.write_all(s.as_ref().as_bytes())
     }
@@ -284,7 +214,7 @@ impl<P, S: Write> PtySession<P, S> {
     }
 }
 
-impl<P, S: Read + NonBlocking> PtySession<P, S> {
+impl<P, S: Read + NonBlocking> Session<P, S> {
     /// Try to read in a non-blocking mode.
     ///
     /// Returns `[std::io::ErrorKind::WouldBlock]`
@@ -299,7 +229,7 @@ impl<P, S: Read + NonBlocking> PtySession<P, S> {
     }
 }
 
-impl<P, S: Write> Write for PtySession<P, S> {
+impl<P, S: Write> Write for Session<P, S> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stream.write(buf)
     }
@@ -313,13 +243,13 @@ impl<P, S: Write> Write for PtySession<P, S> {
     }
 }
 
-impl<P, S: Read> Read for PtySession<P, S> {
+impl<P, S: Read> Read for Session<P, S> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.stream.read(buf)
     }
 }
 
-impl<P, S: Read> BufRead for PtySession<P, S> {
+impl<P, S: Read> BufRead for Session<P, S> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         self.stream.fill_buf()
     }
@@ -329,7 +259,7 @@ impl<P, S: Read> BufRead for PtySession<P, S> {
     }
 }
 
-impl<P, S> Deref for PtySession<P, S> {
+impl<P, S> Deref for Session<P, S> {
     type Target = P;
 
     fn deref(&self) -> &Self::Target {
@@ -337,7 +267,7 @@ impl<P, S> Deref for PtySession<P, S> {
     }
 }
 
-impl<P, S> DerefMut for PtySession<P, S> {
+impl<P, S> DerefMut for Session<P, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.proc
     }

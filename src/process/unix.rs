@@ -1,12 +1,21 @@
-use super::{IntoAsyncStream, Process};
-use crate::session::stream::NonBlocking;
+use super::{Healthcheck, Process};
+use crate::session::sync_stream::NonBlocking;
+use ptyprocess::{stream::Stream, PtyProcess, WaitStatus};
+
+#[cfg(feature = "async")]
+use super::IntoAsyncStream;
+#[cfg(feature = "async")]
 use futures_lite::{AsyncRead, AsyncWrite};
-use ptyprocess::{stream::Stream, PtyProcess};
+#[cfg(feature = "async")]
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
     os::unix::prelude::{AsRawFd, RawFd},
-    pin::Pin,
     process::Command,
 };
 
@@ -56,6 +65,31 @@ impl Process for UnixProcess {
     }
 }
 
+impl Healthcheck for UnixProcess {
+    fn is_alive(&mut self) -> Result<bool> {
+        self.proc.is_alive().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to call pty.is_alive(); {}", e),
+            )
+        })
+    }
+}
+
+impl Deref for UnixProcess {
+    type Target = PtyProcess;
+
+    fn deref(&self) -> &Self::Target {
+        &self.proc
+    }
+}
+
+impl DerefMut for UnixProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.proc
+    }
+}
+
 #[derive(Debug)]
 pub struct PtyStream {
     handle: Stream,
@@ -87,20 +121,14 @@ impl Read for PtyStream {
     }
 }
 
-impl AsRawFd for PtyStream {
-    fn as_raw_fd(&self) -> RawFd {
-        self.handle.as_raw_fd()
-    }
-}
-
 impl NonBlocking for PtyStream {
     fn set_non_blocking(&mut self) -> Result<()> {
-        let fd = self.as_raw_fd();
+        let fd = self.handle.as_raw_fd();
         _make_non_blocking(fd, true)
     }
 
     fn set_blocking(&mut self) -> Result<()> {
-        let fd = self.as_raw_fd();
+        let fd = self.handle.as_raw_fd();
         _make_non_blocking(fd, false)
     }
 }
@@ -113,76 +141,6 @@ pub fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
     opt.set(OFlag::O_NONBLOCK, blocking);
     fcntl(fd, FcntlArg::F_SETFL(opt)).map_err(nix_error_to_io)?;
     Ok(())
-}
-
-impl Deref for UnixProcess {
-    type Target = PtyProcess;
-
-    fn deref(&self) -> &Self::Target {
-        &self.proc
-    }
-}
-
-impl DerefMut for UnixProcess {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.proc
-    }
-}
-
-#[cfg(feature = "async")]
-impl IntoAsyncStream for PtyStream {
-    type AsyncsStream = AsyncPtyStream;
-
-    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
-        AsyncPtyStream::new(self)
-    }
-}
-
-#[cfg(feature = "async")]
-pub struct AsyncPtyStream {
-    stream: async_io::Async<PtyStream>,
-}
-
-#[cfg(feature = "async")]
-impl AsyncPtyStream {
-    pub fn new(stream: PtyStream) -> Result<Self> {
-        let stream = async_io::Async::new(stream)?;
-        Ok(Self { stream })
-    }
-}
-
-impl AsyncWrite for AsyncPtyStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize>> {
-        Pin::new(&mut self.stream).poll_write(cx, buf)
-    }
-
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<()>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
-    }
-
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<()>> {
-        Pin::new(&mut self.stream).poll_close(cx)
-    }
-}
-
-impl AsyncRead for AsyncPtyStream {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<Result<usize>> {
-        Pin::new(&mut self.stream).poll_read(cx, buf)
-    }
 }
 
 fn nix_error_to_io(err: nix::Error) -> io::Error {
@@ -207,6 +165,58 @@ fn tokenize_command(program: &str) -> Vec<String> {
         res.push(cap[0].to_string());
     }
     res
+}
+
+#[cfg(feature = "async")]
+impl IntoAsyncStream for PtyStream {
+    type AsyncsStream = AsyncPtyStream;
+
+    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
+        AsyncPtyStream::new(self)
+    }
+}
+
+#[cfg(feature = "async")]
+pub struct AsyncPtyStream {
+    stream: async_io::Async<PtyStream>,
+}
+
+#[cfg(feature = "async")]
+impl AsyncPtyStream {
+    pub fn new(stream: PtyStream) -> Result<Self> {
+        let stream = async_io::Async::new(stream)?;
+        Ok(Self { stream })
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncWrite for AsyncPtyStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_close(cx)
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncRead for AsyncPtyStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_read(cx, buf)
+    }
 }
 
 #[cfg(test)]

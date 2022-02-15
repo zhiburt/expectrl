@@ -2,13 +2,17 @@
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
+};
+
+use crate::session::sync_stream::NonBlocking;
+
+#[cfg(feature)]
+use futures_lite::{AsyncRead, AsyncWrite};
+#[cfg(feature = "async")]
+use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
-use futures_lite::{AsyncRead, AsyncWrite};
-
-use crate::session::stream::NonBlocking;
 
 pub struct LoggedStream<S, W> {
     stream: S,

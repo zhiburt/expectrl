@@ -36,6 +36,7 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     // fix: somehow this line causes a different behaviour in iteract method.
     //      the issue most likely that with this line in interact mode ENTER produces CTRL-M
     //      when without the line it produces \r\n
+
     bash.expect_prompt()?;
 
     Ok(bash)
@@ -183,12 +184,12 @@ pub struct ReplSession {
 
 impl ReplSession {
     #[cfg(unix)]
-    pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
+    pub fn spawn<PP: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
-        prompt: P,
+        prompt: PP,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session = Session::spawn(cmd)?;
+        let session: Session<crate::process::unix::UnixProcess, _> = Session::spawn(cmd)?;
         let is_echo_on = session
             .get_echo()
             .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
@@ -257,7 +258,7 @@ impl ReplSession {
     /// Send a command to a repl and verifies that it exited.
     /// Returning it's output.
     #[cfg(not(feature = "async"))]
-    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
+    pub fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
         self.send_line(cmd)?;
         let found = self._expect_prompt()?;
         Ok(found.before().to_vec())
@@ -265,7 +266,7 @@ impl ReplSession {
 
     /// Send a command to a repl and verifies that it exited.
     #[cfg(feature = "async")]
-    pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
+    pub async fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
         self.send_line(cmd).await?;
         let found = self._expect_prompt().await?;
         Ok(found.before().to_vec())
@@ -275,7 +276,7 @@ impl ReplSession {
     ///
     /// If echo_on=true wait for the input to appear.
     #[cfg(not(feature = "async"))]
-    pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+    pub fn send_line<SS: AsRef<str>>(&mut self, line: SS) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
             self.expect(line.as_ref())?;

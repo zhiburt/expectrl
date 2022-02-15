@@ -1,0 +1,156 @@
+use std::io::{self, Read, Stdin};
+
+use nix::{
+    libc::STDIN_FILENO,
+    sys::termios::{self, Termios},
+    unistd::isatty,
+};
+use ptyprocess::{set_raw, PtyProcess};
+
+use crate::{
+    session::sync_stream::{NonBlocking, TryStream},
+    Error,
+};
+
+/// A non blocking version of STDIN.
+///
+/// It's not recomended to be used directly.
+/// But we expose it because its used in [InteractOptions::terminal]
+#[cfg(unix)]
+pub struct NonBlockingStdin {
+    stdin: TryStream<Stdin>,
+    orig_flags: Option<Termios>,
+    orig_echo: bool,
+}
+
+#[cfg(unix)]
+impl NonBlockingStdin {
+    pub fn new() -> Result<Self, Error> {
+        let stdin = TryStream::new(std::io::stdin())?;
+        let stdin = Self {
+            stdin,
+            orig_flags: None,
+            orig_echo: false,
+        };
+
+        Ok(stdin)
+    }
+
+    pub fn prepare(&mut self, pty: &mut PtyProcess) -> Result<(), Error> {
+        // flush buffers
+        // self.stdin.flush()?;
+
+        let mut o_pty_flags = None;
+        let o_pty_echo = pty
+            .get_echo()
+            .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
+
+        // verify: possible controlling fd can be stdout and stderr as well?
+        // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
+        let isatty_terminal = isatty(STDIN_FILENO)
+            .map_err(|e| Error::Other(format!("failed to call isatty {}", e)))?;
+        if isatty_terminal {
+            // tcgetattr issues error if a provided fd is not a tty,
+            // but we can work with such input as it may be redirected.
+            o_pty_flags = termios::tcgetattr(STDIN_FILENO)
+                .map(Some)
+                .map_err(|e| Error::Other(format!("failed to call tcgetattr {}", e)))?;
+
+            set_raw(STDIN_FILENO)
+                .map_err(|e| Error::Other(format!("failed to set a raw tty {}", e)))?;
+        }
+
+        pty.set_echo(true, None)
+            .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
+
+        self.orig_echo = o_pty_echo;
+        self.orig_flags = o_pty_flags;
+
+        Ok(())
+    }
+
+    pub fn close(self, pty: &mut PtyProcess) -> Result<(), Error> {
+        if let Some(origin_stdin_flags) = self.orig_flags {
+            termios::tcsetattr(
+                STDIN_FILENO,
+                termios::SetArg::TCSAFLUSH,
+                &origin_stdin_flags,
+            )
+            .map_err(|e| Error::Other(format!("failed to call tcsetattr {}", e)))?;
+        }
+
+        pty.set_echo(self.orig_echo, None)
+            .map_err(|e| Error::Other(format!("failed to set echo {}", e)))?;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Read for NonBlockingStdin {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.stdin.try_read(buf)
+    }
+}
+
+#[cfg(unix)]
+impl NonBlocking for Stdin {
+    fn set_non_blocking(&mut self) -> io::Result<()> {
+        use std::os::unix::io::AsRawFd;
+        let fd = self.as_raw_fd();
+        crate::process::unix::_make_non_blocking(fd, true)
+    }
+
+    fn set_blocking(&mut self) -> io::Result<()> {
+        use std::os::unix::io::AsRawFd;
+        let fd = self.as_raw_fd();
+        crate::process::unix::_make_non_blocking(fd, false)
+    }
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+impl futures_lite::AsyncRead for NonBlockingStdin {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::task::Poll::Ready(self.read(buf))
+    }
+}
+
+/// See unix version
+#[cfg(windows)]
+pub struct NonBlockingStdin {
+    current_terminal: Console,
+}
+
+#[cfg(windows)]
+impl NonBlockingStdin {
+    fn new() -> Result<Self, Error> {
+        let console = conpty::console::Console::current().map_err(to_io_error)?;
+        Ok(Self {
+            current_terminal: console,
+        })
+    }
+}
+
+#[cfg(windows)]
+impl Read for NonBlockingStdin {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // we can't easily read in non-blocking manner,
+        // but we can check when there's something to read,
+        // which seems to be enough to not block.
+        //
+        // fixme: I am not sure why reading works on is_stdin_empty() == true
+        if self
+            .current_terminal
+            .is_stdin_empty()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+        {
+            io::stdin().read(buf)
+        } else {
+            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
+        }
+    }
+}

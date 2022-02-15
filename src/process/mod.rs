@@ -14,6 +14,11 @@ pub trait Process: Sized {
     fn open_stream(&mut self) -> Result<Self::Stream>;
 }
 
+pub trait Healthcheck {
+    fn is_alive(&mut self) -> Result<bool>;
+}
+
+#[cfg(feature = "async")]
 pub trait IntoAsyncStream {
     type AsyncsStream;
 
