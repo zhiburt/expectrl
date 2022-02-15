@@ -2,20 +2,26 @@
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
+    pin::Pin,
+    task::{Context, Poll},
 };
+
+use futures_lite::{AsyncRead, AsyncWrite};
 
 use crate::session::stream::NonBlocking;
 
-pub struct LoggedStream<W, S> {
+pub struct LoggedStream<S, W> {
     stream: S,
     logger: W,
 }
 
-impl<W: Write, S> LoggedStream<W, S> {
+impl<S, W> LoggedStream<S, W> {
     pub fn new(stream: S, logger: W) -> Self {
         Self { stream, logger }
     }
+}
 
+impl<S, W: Write> LoggedStream<S, W> {
     fn log_write(&mut self, buf: &[u8]) {
         log(&mut self.logger, "write", buf);
     }
@@ -25,7 +31,7 @@ impl<W: Write, S> LoggedStream<W, S> {
     }
 }
 
-impl<W: Write, S: Write> Write for LoggedStream<W, S> {
+impl<S: Write, W: Write> Write for LoggedStream<S, W> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let n = self.stream.write(buf)?;
         self.log_write(&buf[..n]);
@@ -58,7 +64,7 @@ impl<W: Write, S: Write> Write for LoggedStream<W, S> {
     }
 }
 
-impl<S: Read, W: Write> Read for LoggedStream<W, S> {
+impl<S: Read, W: Write> Read for LoggedStream<S, W> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let n = self.stream.read(buf)?;
         self.log_read(&buf[..n]);
@@ -66,7 +72,7 @@ impl<S: Read, W: Write> Read for LoggedStream<W, S> {
     }
 }
 
-impl<S: NonBlocking, W> NonBlocking for LoggedStream<W, S> {
+impl<S: NonBlocking, W> NonBlocking for LoggedStream<S, W> {
     fn set_non_blocking(&mut self) -> Result<()> {
         self.stream.set_non_blocking()
     }
@@ -76,7 +82,7 @@ impl<S: NonBlocking, W> NonBlocking for LoggedStream<W, S> {
     }
 }
 
-impl<S, W> Deref for LoggedStream<W, S> {
+impl<S, W> Deref for LoggedStream<S, W> {
     type Target = S;
 
     fn deref(&self) -> &Self::Target {
@@ -84,25 +90,53 @@ impl<S, W> Deref for LoggedStream<W, S> {
     }
 }
 
-impl<S, W> DerefMut for LoggedStream<W, S> {
+impl<S, W> DerefMut for LoggedStream<S, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
 
-#[cfg(unix)]
-impl<S: std::os::unix::prelude::AsRawFd, W> std::os::unix::prelude::AsRawFd for LoggedStream<W, S> {
-    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.stream.as_raw_fd()
+#[cfg(feature = "async")]
+impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LoggedStream<S, W> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        self.log_write(buf);
+        Pin::new(&mut self.get_mut().stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_close(cx)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.stream).poll_write_vectored(cx, bufs)
     }
 }
 
-#[cfg(windows)]
-impl<S: std::os::windows::io::AsRawSocket, W> std::os::windows::io::AsRawSocket
-    for LoggedStream<W, S>
-{
-    fn as_raw_socket(&self) -> std::os::windows::prelude::RawSocket {
-        self.stream.as_raw_socket()
+#[cfg(feature = "async")]
+impl<S: AsyncRead + Unpin, W: Write + Unpin> AsyncRead for LoggedStream<S, W> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        let result = Pin::new(&mut self.stream).poll_read(cx, buf);
+        if let Poll::Ready(Ok(n)) = &result {
+            self.log_read(&buf[..*n]);
+        }
+
+        result
     }
 }
 

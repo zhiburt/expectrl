@@ -1,10 +1,12 @@
-use super::Process;
+use super::{IntoAsyncStream, Process};
 use crate::session::stream::NonBlocking;
+use futures_lite::{AsyncRead, AsyncWrite};
 use ptyprocess::{stream::Stream, PtyProcess};
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
     os::unix::prelude::{AsRawFd, RawFd},
+    pin::Pin,
     process::Command,
 };
 
@@ -14,7 +16,7 @@ pub struct UnixProcess {
 
 impl Process for UnixProcess {
     type Command = Command;
-    type Session = PtyStream;
+    type Stream = PtyStream;
 
     fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
         let args = tokenize_command(cmd.as_ref());
@@ -42,7 +44,7 @@ impl Process for UnixProcess {
         Ok(Self { proc })
     }
 
-    fn open_session(&mut self) -> Result<Self::Session> {
+    fn open_stream(&mut self) -> Result<Self::Stream> {
         let stream = self.proc.get_pty_stream().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
@@ -127,6 +129,62 @@ impl DerefMut for UnixProcess {
     }
 }
 
+#[cfg(feature = "async")]
+impl IntoAsyncStream for PtyStream {
+    type AsyncsStream = AsyncPtyStream;
+
+    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
+        AsyncPtyStream::new(self)
+    }
+}
+
+#[cfg(feature = "async")]
+pub struct AsyncPtyStream {
+    stream: async_io::Async<PtyStream>,
+}
+
+#[cfg(feature = "async")]
+impl AsyncPtyStream {
+    pub fn new(stream: PtyStream) -> Result<Self> {
+        let stream = async_io::Async::new(stream)?;
+        Ok(Self { stream })
+    }
+}
+
+impl AsyncWrite for AsyncPtyStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_close(cx)
+    }
+}
+
+impl AsyncRead for AsyncPtyStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_read(cx, buf)
+    }
+}
+
 fn nix_error_to_io(err: nix::Error) -> io::Error {
     match err.as_errno() {
         Some(code) => io::Error::from_raw_os_error(code as _),
@@ -142,7 +200,6 @@ fn nix_error_to_io(err: nix::Error) -> io::Error {
 ///
 /// It doesn't cover all edge cases.
 /// So it may not be compatible with real shell arguments parsing.
-#[cfg(unix)]
 fn tokenize_command(program: &str) -> Vec<String> {
     let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
     let mut res = vec![];

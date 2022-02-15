@@ -1,6 +1,6 @@
 use std::{
     convert::TryInto,
-    io::{self, Read},
+    io,
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -11,38 +11,36 @@ use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::async_stream::Stream;
 use crate::{
-    process::{self, Process},
+    process::{self, IntoAsyncStream, Process},
     stream::log::LoggedStream,
     ControlCode, Error, Found, Needle,
 };
 
 #[cfg(unix)]
-pub type Session = PtySession<
-    ptyprocess::PtyProcess,
-    AsyncStream<LoggedStream<'static, crate::stream::unix::PtyStream>>,
->;
+pub type Session = PtySession<process::unix::UnixProcess, process::unix::AsyncPtyStream>;
 
 #[cfg(windows)]
 pub type Session =
     PtySession<process::windows::WinProcess, blocking::Unblock<process::windows::ProcessStream>>;
 
-#[cfg(windows)]
-impl Session {
-    pub fn spawn(
-        command: <process::windows::WinProcess as Process>::Command,
-    ) -> Result<Self, Error> {
-        let mut process = process::windows::WinProcess::spawn_command(command)?;
+impl<P> PtySession<P, <P::Stream as IntoAsyncStream>::AsyncsStream>
+where
+    P: Process,
+    P::Stream: IntoAsyncStream,
+{
+    pub fn spawn(command: P::Command) -> Result<Self, Error> {
+        let mut process = P::spawn_command(command)?;
         let stream = process.open_stream()?;
-        let stream = blocking::Unblock::new(stream);
+        let stream = stream.into_async_stream()?;
         let session = Self::new(process, stream)?;
 
         Ok(session)
     }
 
     pub fn spawn_cmd(cmd: impl AsRef<str>) -> Result<Self, Error> {
-        let mut process = process::windows::WinProcess::spawn(cmd)?;
+        let mut process = P::spawn(cmd.as_ref())?;
         let stream = process.open_stream()?;
-        let stream = blocking::Unblock::new(stream);
+        let stream = stream.into_async_stream()?;
         let session = Self::new(process, stream)?;
 
         Ok(session)
@@ -50,22 +48,13 @@ impl Session {
 
     /// Set logger.
     pub async fn with_log<W: io::Write>(
-        mut self,
+        self,
         logger: W,
-    ) -> Result<
-        PtySession<
-            process::windows::WinProcess,
-            blocking::Unblock<LoggedStream<W, process::windows::ProcessStream>>,
-        >,
-        Error,
-    > {
-        let buf = self.stream.get_available().to_owned();
-        let stream = self.stream.into_inner().into_inner().await;
-        let logged_stream = LoggedStream::new(stream, logger);
-        let stream = blocking::Unblock::new(logged_stream);
-
-        let mut session = PtySession::new(self.process, stream)?;
-        session.stream.keep(&buf);
+    ) -> Result<PtySession<P, LoggedStream<<P::Stream as IntoAsyncStream>::AsyncsStream, W>>, Error>
+    {
+        let stream = self.stream.into_inner();
+        let stream = LoggedStream::new(stream, logger);
+        let session = PtySession::new(self.process, stream)?;
         Ok(session)
     }
 }

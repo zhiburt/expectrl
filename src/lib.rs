@@ -100,10 +100,9 @@ pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn test_spawn_no_command() {
-        assert!(matches!(spawn(""), Err(Error::CommandParsing)));
+        assert!(spawn("").is_err());
     }
 
     #[test]

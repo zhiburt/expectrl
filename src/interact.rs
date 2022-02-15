@@ -557,36 +557,39 @@ where
     // flush buffers
     session.flush().await?;
 
-    let origin_pty_echo = session.get_echo()?;
+    let origin_pty_echo = session.get_echo().map_err(to_io_error)?;
     // tcgetattr issues error if a provided fd is not a tty,
     // but we can work with such input as it may be redirected.
     let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO);
 
     // verify: possible controlling fd can be stdout and stderr as well?
     // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-    let isatty_terminal = isatty(STDIN_FILENO)?;
+    let isatty_terminal = isatty(STDIN_FILENO).map_err(to_io_error)?;
 
     if isatty_terminal {
-        set_raw(STDIN_FILENO)?;
+        set_raw(STDIN_FILENO).map_err(to_io_error)?;
     }
 
-    session.set_echo(true, None)?;
+    session.set_echo(true, None).map_err(to_io_error)?;
 
     let result = interact(session, options).await;
 
     if isatty_terminal {
         // it's suppose to be always OK.
         // but we don't use unwrap just in case.
-        let origin_stdin_flags = origin_stdin_flags?;
+        let origin_stdin_flags = origin_stdin_flags.map_err(to_io_error)?;
 
         termios::tcsetattr(
             STDIN_FILENO,
             termios::SetArg::TCSAFLUSH,
             &origin_stdin_flags,
-        )?;
+        )
+        .map_err(to_io_error)?;
     }
 
-    session.set_echo(origin_pty_echo, None)?;
+    session
+        .set_echo(origin_pty_echo, None)
+        .map_err(to_io_error)?;
 
     result
 }
@@ -618,7 +621,7 @@ where
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = session.status().map_err(|e| e.into());
+        let status = session.status().map_err(to_io_error).map_err(|e| e.into());
         if !matches!(status, Ok(WaitStatus::StillAlive)) {
             exited = true;
         }

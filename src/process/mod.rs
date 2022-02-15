@@ -1,4 +1,4 @@
-use std::io::{self, Read, Result, Write};
+use std::io::{Result};
 
 #[cfg(unix)]
 pub mod unix;
@@ -12,4 +12,10 @@ pub trait Process: Sized {
     fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self>;
     fn spawn_command(command: Self::Command) -> Result<Self>;
     fn open_stream(&mut self) -> Result<Self::Stream>;
+}
+
+pub trait IntoAsyncStream {
+    type AsyncsStream;
+
+    fn into_async_stream(self) -> Result<Self::AsyncsStream>;
 }
