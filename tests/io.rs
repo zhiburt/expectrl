@@ -1,8 +1,5 @@
 use expectrl::{session::Session, ControlCode, Found, Needle};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::{thread, time::Duration};
 
 #[cfg(unix)]
 use std::process::Command;
@@ -461,22 +458,14 @@ fn continues_try_reads() {
 #[cfg(not(windows))]
 fn automatic_stop_of_interact() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
-    let status = _p_interact(&mut p).unwrap();
+    _p_interact(&mut p).unwrap();
 
     // It may be finished not only because process is done but
     // also because it reached EOF.
-    assert!(matches!(
-        status,
-        WaitStatus::Exited(_, 0) | WaitStatus::StillAlive
-    ));
 
     // check that second spawn works
     let mut p = Session::spawn(Command::new("ls")).unwrap();
-    let status = _p_interact(&mut p).unwrap();
-    assert!(matches!(
-        status,
-        WaitStatus::Exited(_, 0) | WaitStatus::StillAlive
-    ));
+    _p_interact(&mut p).unwrap();
 }
 
 #[test]
@@ -666,7 +655,7 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 }
 
 #[cfg(unix)]
-fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
+fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.interact()
@@ -675,15 +664,4 @@ fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
     {
         block_on(proc.interact())
     }
-}
-
-fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
-    let now = Instant::now();
-    while now.elapsed() < timeout {
-        if foo() {
-            return true;
-        }
-    }
-
-    return false;
 }

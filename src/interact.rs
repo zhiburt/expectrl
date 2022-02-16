@@ -2,7 +2,10 @@
 //! [crate::Session::interact] flow.
 
 use crate::{
-    process::Healthcheck, session::sync_stream::NonBlocking, session::Session, ControlCode, Error,
+    process::Healthcheck,
+    session::{sync_stream::NonBlocking, Proc},
+    session::{Session, Stream},
+    ControlCode, Error,
 };
 use std::{
     borrow::Cow,
@@ -11,16 +14,14 @@ use std::{
 };
 
 /// InteractOptions represents options of an interact session.
-pub struct InteractOptions<S, R, W, C> {
-    input: R,
-    output: W,
+pub struct InteractOptions<P, S, R, W, C> {
     escape_character: u8,
     input_filter: Option<FilterFn>,
     output_filter: Option<FilterFn>,
-    input_handlers: HashMap<String, ActionFn<S, R, W, C>>,
+    input_handlers: HashMap<String, ActionFn<Session<P, S>, R, W, C>>,
     #[allow(clippy::type_complexity)]
-    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<S, R, W, C>)>,
-    idle_handler: Option<ActionFn<S, R, W, C>>,
+    output_handlers: Vec<(Box<dyn crate::Needle>, OutputFn<Session<P, S>, R, W, C>)>,
+    idle_handler: Option<ActionFn<Session<P, S>, R, W, C>>,
     state: C,
 }
 
@@ -62,14 +63,9 @@ impl<'a, S, R, W, C> Context<'a, S, R, W, C> {
     }
 }
 
-impl<S, R, W> InteractOptions<S, R, W, ()> {
-    /// Create interact options with custom input and output streams.
-    ///
-    /// To construct default terminal session see [InteractOptions::terminal]
-    pub fn streamed(input: R, output: W) -> Result<Self, Error> {
-        Ok(Self {
-            input,
-            output,
+impl<P, S, R, W> Default for InteractOptions<P, S, R, W, ()> {
+    fn default() -> Self {
+        Self {
             escape_character: Self::default_escape_char(),
             idle_handler: None,
             input_handlers: HashMap::new(),
@@ -77,24 +73,22 @@ impl<S, R, W> InteractOptions<S, R, W, ()> {
             input_filter: None,
             output_filter: None,
             state: (),
-        })
+        }
     }
 }
 
-impl<S, R, W, C> InteractOptions<S, R, W, C> {
+impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
     /// State sets state which will be available in callback calls, throught context variable.
     ///
     /// Please beware that it cleans already set list of callbacks.
     /// So you need to call this method BEFORE you specify callbacks.
     ///
     /// Default state type is a unit type `()`.
-    pub fn state<C1>(self, state: C1) -> InteractOptions<S, R, W, C1> {
+    pub fn state<C1>(self, state: C1) -> InteractOptions<P, S, R, W, C1> {
         InteractOptions {
             state,
             escape_character: self.escape_character,
-            input: self.input,
             input_filter: self.input_filter,
-            output: self.output,
             output_filter: self.output_filter,
             idle_handler: None,
             input_handlers: HashMap::new(),
@@ -113,7 +107,7 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
     }
 }
 
-impl<S, R, W, C> InteractOptions<S, R, W, C> {
+impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
     /// Sets an escape character after seen which the interact interactions will be stopped
     /// and controll will be returned to a caller process.
     pub fn escape_character(mut self, c: u8) -> Self {
@@ -154,7 +148,7 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// See <https://github.com/zhiburt/expectrl/issues/16>.
     pub fn on_input<F>(mut self, input: impl Into<String>, f: F) -> Self
     where
-        F: FnMut(Context<'_, S, R, W, C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, Session<P, S>, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.input_handlers.insert(input.into(), Box::new(f));
         self
@@ -168,7 +162,7 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
     pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
         N: crate::Needle + 'static,
-        F: FnMut(Context<'_, S, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, Session<P, S>, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
     {
         self.output_handlers.push((Box::new(needle), Box::new(f)));
         self
@@ -177,7 +171,7 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
     /// Puts a handler which will be called on each interaction.
     pub fn on_idle<F>(mut self, f: F) -> Self
     where
-        F: FnMut(Context<'_, S, R, W, C>) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, Session<P, S>, R, W, C>) -> Result<(), Error> + 'static,
     {
         self.idle_handler = Some(Box::new(f));
         self
@@ -187,7 +181,13 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
         ControlCode::GroupSeparator.into() // Ctrl-]
     }
 
-    fn check_input(&mut self, session: &mut S, bytes: &[u8]) -> Result<Match, Error> {
+    fn check_input(
+        &mut self,
+        input: &mut R,
+        output: &mut W,
+        session: &mut Session<P, S>,
+        bytes: &[u8],
+    ) -> Result<Match, Error> {
         for (pattern, callback) in self.input_handlers.iter_mut() {
             if !pattern.is_empty() && !bytes.is_empty() {
                 match contains_in_bytes(bytes, pattern.as_bytes()) {
@@ -197,10 +197,10 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
                     }
                     Match::Yes(n) => {
                         let context = Context {
-                            input: &mut self.input,
-                            output: &mut self.output,
                             state: &mut self.state,
                             session,
+                            input,
+                            output,
                         };
                         (callback)(context)?;
                         return Ok(Match::Yes(n));
@@ -212,7 +212,14 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
         Ok(Match::No)
     }
 
-    fn check_output(&mut self, session: &mut S, buf: &mut Vec<u8>, eof: bool) -> Result<(), Error> {
+    fn check_output(
+        &mut self,
+        input: &mut R,
+        output: &mut W,
+        session: &mut Session<P, S>,
+        buf: &mut Vec<u8>,
+        eof: bool,
+    ) -> Result<(), Error> {
         'checks: loop {
             for (search, callback) in self.output_handlers.iter_mut() {
                 let found = search.check(buf, eof)?;
@@ -223,10 +230,10 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
                     buf.drain(..end_index);
 
                     let context = Context {
-                        input: &mut self.input,
-                        output: &mut self.output,
                         state: &mut self.state,
                         session,
+                        input,
+                        output,
                     };
                     (callback)(context, found)?;
 
@@ -238,12 +245,17 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
         }
     }
 
-    fn call_idle_handler(&mut self, session: &mut S) -> Result<(), Error> {
+    fn call_idle_handler(
+        &mut self,
+        input: &mut R,
+        output: &mut W,
+        session: &mut Session<P, S>,
+    ) -> Result<(), Error> {
         let context = Context {
-            input: &mut self.input,
-            output: &mut self.output,
             state: &mut self.state,
             session,
+            input,
+            output,
         };
         if let Some(callback) = self.idle_handler.as_mut() {
             (callback)(context)?;
@@ -254,7 +266,7 @@ impl<S, R, W, C> InteractOptions<S, R, W, C> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S, R, W, C> InteractOptions<Session<P, S>, R, W, C>
+impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
     P: Healthcheck,
     S: NonBlocking + Read + Write,
@@ -269,8 +281,23 @@ where
     ///
     /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
     /// (at the point of the call)
-    pub fn interact(&mut self, session: &mut Session<P, S>) -> Result<(), Error> {
-        interact(session, self)
+    pub fn interact(
+        &mut self,
+        session: &mut Session<P, S>,
+        mut input: R,
+        mut output: W,
+    ) -> Result<(), Error> {
+        interact(self, session, &mut input, &mut output)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<C> InteractOptions<Proc, Stream, crate::stream::stdin::Stdin, std::io::Stdout, C> {
+    pub fn interact_in_terminal(&mut self, session: &mut Session) -> Result<(), Error> {
+        let mut stdin = crate::stream::stdin::Stdin::new(session)?;
+        let r = interact(self, session, &mut stdin, &mut std::io::stdout());
+        stdin.close(session)?;
+        r
     }
 }
 
@@ -306,8 +333,10 @@ where
 
 #[cfg(not(feature = "async"))]
 fn interact<P, S, R, W, C>(
+    options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
-    options: &mut InteractOptions<Session<P, S>, R, W, C>,
+    input: &mut R,
+    output: &mut W,
 ) -> Result<(), Error>
 where
     P: Healthcheck,
@@ -345,7 +374,7 @@ where
                 }
 
                 output_buffer.extend_from_slice(&buf[..n]);
-                options.check_output(session, &mut output_buffer, eof)?;
+                options.check_output(input, output, session, &mut output_buffer, eof)?;
 
                 let bytes = if let Some(filter) = options.output_filter.as_mut() {
                     (filter)(&buf[..n])?
@@ -353,8 +382,8 @@ where
                     Cow::Borrowed(&buf[..n])
                 };
 
-                options.output.write_all(&bytes)?;
-                options.output.flush()?;
+                output.write_all(&bytes)?;
+                output.flush()?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
@@ -368,7 +397,7 @@ where
         // In terminal mode it will be ECHOed back automatically.
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
-        match options.input.read(&mut buf) {
+        match input.read(&mut buf) {
             Ok(0) => {
                 return Ok(());
             }
@@ -383,7 +412,7 @@ where
                 let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
                     check_buffer.extend_from_slice(&bytes);
                     loop {
-                        match options.check_input(session, check_buffer)? {
+                        match options.check_input(input, output, session, check_buffer)? {
                             Match::Yes(n) => {
                                 check_buffer.drain(..n);
                                 if check_buffer.is_empty() {
@@ -418,7 +447,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        options.call_idle_handler(session)?;
+        options.call_idle_handler(input, output, session)?;
     }
 }
 
@@ -870,10 +899,6 @@ enum Match {
     Yes(usize),
     No,
     MaybeLater,
-}
-
-fn to_io_error(err: impl std::error::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err.to_string())
 }
 
 #[cfg(test)]

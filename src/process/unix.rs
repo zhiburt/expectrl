@@ -1,6 +1,6 @@
 use super::{Healthcheck, Process};
 use crate::session::sync_stream::NonBlocking;
-use ptyprocess::{stream::Stream, PtyProcess, WaitStatus};
+use ptyprocess::{stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]
 use super::IntoAsyncStream;

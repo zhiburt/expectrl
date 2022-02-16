@@ -1,4 +1,4 @@
-use std::io::{self, Read, Stdin};
+use std::io::{self, Read};
 
 use nix::{
     libc::STDIN_FILENO,
@@ -17,26 +17,28 @@ use crate::{
 /// It's not recomended to be used directly.
 /// But we expose it because its used in [InteractOptions::terminal]
 #[cfg(unix)]
-pub struct NonBlockingStdin {
-    stdin: TryStream<Stdin>,
+pub struct Stdin {
+    stdin: TryStream<io::Stdin>,
     orig_flags: Option<Termios>,
     orig_echo: bool,
 }
 
 #[cfg(unix)]
-impl NonBlockingStdin {
-    pub fn new() -> Result<Self, Error> {
+impl Stdin {
+    pub fn new(pty: &mut PtyProcess) -> Result<Self, Error> {
         let stdin = TryStream::new(std::io::stdin())?;
-        let stdin = Self {
+        let mut stdin = Self {
             stdin,
             orig_flags: None,
             orig_echo: false,
         };
 
+        stdin.prepare(pty)?;
+
         Ok(stdin)
     }
 
-    pub fn prepare(&mut self, pty: &mut PtyProcess) -> Result<(), Error> {
+    fn prepare(&mut self, pty: &mut PtyProcess) -> Result<(), Error> {
         // flush buffers
         // self.stdin.flush()?;
 
@@ -86,14 +88,14 @@ impl NonBlockingStdin {
 }
 
 #[cfg(unix)]
-impl Read for NonBlockingStdin {
+impl Read for Stdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stdin.try_read(buf)
     }
 }
 
 #[cfg(unix)]
-impl NonBlocking for Stdin {
+impl NonBlocking for io::Stdin {
     fn set_non_blocking(&mut self) -> io::Result<()> {
         use std::os::unix::io::AsRawFd;
         let fd = self.as_raw_fd();

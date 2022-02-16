@@ -7,7 +7,9 @@ use std::{
     time::{self, Duration},
 };
 
-use crate::{control_code::ControlCode, error::Error, needle::Needle, Found, process::Process, stream::log::LoggedStream};
+use crate::{
+    control_code::ControlCode, error::Error, needle::Needle, stream::log::LoggedStream, Found,
+};
 
 use super::sync_stream::{NonBlocking, TryStream};
 
@@ -18,27 +20,6 @@ pub struct Session<P, S> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
-}
-
-impl<P: Process> Session<P, P::Stream>
-where
-    P::Stream: Read,
-{
-    pub fn spawn(command: P::Command) -> Result<Self, Error> {
-        let mut process = P::spawn_command(command)?;
-        let stream = process.open_stream()?;
-        let session = Self::new(process, stream)?;
-
-        Ok(session)
-    }
-
-    pub(crate) fn spawn_cmd(cmd: &str) -> Result<Self, Error> {
-        let mut process = P::spawn(cmd)?;
-        let stream = process.open_stream()?;
-        let session = Self::new(process, stream)?;
-
-        Ok(session)
-    }
 }
 
 impl<P, S: Read> Session<P, S> {
@@ -60,7 +41,7 @@ impl<P, S: Read> Session<P, S> {
 }
 
 impl<P, S: Read> Session<P, S> {
-    fn new(process: P, stream: S) -> io::Result<Self> {
+    pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
             proc: process,

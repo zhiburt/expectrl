@@ -49,7 +49,7 @@ mod error;
 mod found;
 mod needle;
 mod process;
-mod stream;
+pub mod stream;
 
 pub mod interact;
 pub mod repl;

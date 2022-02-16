@@ -1,4 +1,4 @@
-use std::io::{Result};
+use std::io::Result;
 
 #[cfg(unix)]
 pub mod unix;
