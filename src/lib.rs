@@ -102,7 +102,10 @@ mod tests {
 
     #[test]
     fn test_spawn_no_command() {
+        #[cfg(unix)]
         assert!(spawn("").is_err());
+        #[cfg(windows)]
+        assert!(spawn("").is_ok());
     }
 
     #[test]

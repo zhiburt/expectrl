@@ -24,8 +24,10 @@ pub(crate) type Stream = crate::process::unix::AsyncPtyStream;
 
 #[cfg(windows)]
 pub(crate) type Proc = crate::process::windows::WinProcess;
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "async")))]
 pub(crate) type Stream = crate::process::windows::ProcessStream;
+#[cfg(all(windows, feature = "async"))]
+pub(crate) type Stream = crate::process::windows::AsyncProcessStream;
 
 #[cfg(not(feature = "async"))]
 pub type Session<P = Proc, S = Stream> = sync_session::Session<P, S>;

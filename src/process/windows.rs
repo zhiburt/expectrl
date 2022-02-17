@@ -8,9 +8,18 @@ use conpty::{
     ProcAttr, Process,
 };
 
+use super::{Healthcheck, Process as ProcessTrait};
 use crate::session::sync_stream::NonBlocking;
 
-use super::{Healthcheck, Process as ProcessTrait};
+#[cfg(feature = "async")]
+use super::IntoAsyncStream;
+#[cfg(feature = "async")]
+use futures_lite::{AsyncRead, AsyncWrite};
+#[cfg(feature = "async")]
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 pub struct WinProcess {
     proc: Process,
@@ -98,6 +107,58 @@ impl NonBlocking for ProcessStream {
 
     fn set_blocking(&mut self) -> io::Result<()> {
         self.output.set_blocking_mode().map_err(to_io_error)
+    }
+}
+
+#[cfg(feature = "async")]
+impl IntoAsyncStream for ProcessStream {
+    type AsyncsStream = AsyncProcessStream;
+
+    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
+        AsyncProcessStream::new(self)
+    }
+}
+
+#[cfg(feature = "async")]
+pub struct AsyncProcessStream {
+    stream: blocking::Unblock<ProcessStream>,
+}
+
+#[cfg(feature = "async")]
+impl AsyncProcessStream {
+    pub fn new(stream: ProcessStream) -> Result<Self> {
+        let stream = blocking::Unblock::new(stream);
+        Ok(Self { stream })
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncWrite for AsyncProcessStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.stream).poll_close(cx)
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncRead for AsyncProcessStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize>> {
+        Pin::new(&mut self.stream).poll_read(cx, buf)
     }
 }
 

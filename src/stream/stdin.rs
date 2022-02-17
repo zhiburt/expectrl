@@ -172,6 +172,18 @@ impl Read for Stdin {
     }
 }
 
+#[cfg(windows)]
+#[cfg(feature = "async")]
+impl futures_lite::AsyncRead for Stdin {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::task::Poll::Ready(self.read(buf))
+    }
+}
+
 fn to_io_error(err: impl std::error::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err.to_string())
 }
