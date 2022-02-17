@@ -665,3 +665,15 @@ fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
         block_on(proc.interact())
     }
 }
+
+#[cfg(windows)]
+fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let now = std::time::Instant::now();
+    while now.elapsed() < timeout {
+        if foo() {
+            return true;
+        }
+    }
+
+    return false;
+}

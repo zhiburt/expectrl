@@ -260,7 +260,9 @@ fn interact_stream_redirection() {
         let mut session = expectrl::spawn("cat").unwrap();
         let mut opts = expectrl::interact::InteractOptions::default();
 
-        opts.interact(&mut session, reader, &mut writer).await.unwrap();
+        opts.interact(&mut session, reader, &mut writer)
+            .await
+            .unwrap();
         drop(opts);
 
         let buffer = String::from_utf8_lossy(writer.get_ref());

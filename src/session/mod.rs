@@ -4,13 +4,13 @@ mod async_session;
 mod async_stream;
 #[cfg(not(feature = "async"))]
 mod sync_session;
+// fixme: remove this.
 pub mod sync_stream;
 
-use crate::{
-    process::{IntoAsyncStream, Process},
-    stream::stdin::Stdin,
-    Error,
-};
+#[cfg(feature = "async")]
+use crate::process::IntoAsyncStream;
+
+use crate::{process::Process, stream::stdin::Stdin, Error};
 use std::io::{stdout, Read, Write};
 
 use self::sync_stream::NonBlocking;
@@ -21,8 +21,11 @@ pub(crate) type Proc = crate::process::unix::UnixProcess;
 pub(crate) type Stream = crate::process::unix::PtyStream;
 #[cfg(all(unix, feature = "async"))]
 pub(crate) type Stream = crate::process::unix::AsyncPtyStream;
+
 #[cfg(windows)]
 pub(crate) type Proc = crate::process::windows::WinProcess;
+#[cfg(windows)]
+pub(crate) type Stream = crate::process::windows::ProcessStream;
 
 #[cfg(not(feature = "async"))]
 pub type Session<P = Proc, S = Stream> = sync_session::Session<P, S>;

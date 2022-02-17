@@ -1,16 +1,19 @@
+use crate::{process::windows::WinProcess, session::Session, Error};
 use std::io::{self, Read};
 
+#[cfg(unix)]
+use crate::session::sync_stream::{NonBlocking, TryStream};
+#[cfg(unix)]
 use nix::{
     libc::STDIN_FILENO,
     sys::termios::{self, Termios},
     unistd::isatty,
 };
+#[cfg(unix)]
 use ptyprocess::{set_raw, PtyProcess};
 
-use crate::{
-    session::sync_stream::{NonBlocking, TryStream},
-    Error,
-};
+#[cfg(windows)]
+use conpty::console::Console;
 
 /// A non blocking version of STDIN.
 ///
@@ -123,22 +126,34 @@ impl futures_lite::AsyncRead for Stdin {
 
 /// See unix version
 #[cfg(windows)]
-pub struct NonBlockingStdin {
+pub struct Stdin {
     current_terminal: Console,
 }
 
 #[cfg(windows)]
-impl NonBlockingStdin {
-    fn new() -> Result<Self, Error> {
+impl Stdin {
+    pub fn new(_session: &mut WinProcess) -> Result<Self, Error> {
         let console = conpty::console::Console::current().map_err(to_io_error)?;
-        Ok(Self {
+        let mut stdin = Self {
             current_terminal: console,
-        })
+        };
+        stdin.prepare()?;
+        Ok(stdin)
+    }
+
+    fn prepare(&mut self) -> Result<(), Error> {
+        self.current_terminal.set_raw().map_err(to_io_error)?;
+        Ok(())
+    }
+
+    pub fn close(&mut self, _session: &mut WinProcess) -> Result<(), Error> {
+        self.current_terminal.reset().map_err(to_io_error)?;
+        Ok(())
     }
 }
 
 #[cfg(windows)]
-impl Read for NonBlockingStdin {
+impl Read for Stdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // we can't easily read in non-blocking manner,
         // but we can check when there's something to read,
@@ -155,4 +170,8 @@ impl Read for NonBlockingStdin {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
         }
     }
+}
+
+fn to_io_error(err: impl std::error::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, err.to_string())
 }

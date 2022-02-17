@@ -8,8 +8,9 @@ use conpty::{
     ProcAttr, Process,
 };
 
-use super::Process as ProcessTrait;
-use crate::session::stream::NonBlocking;
+use crate::session::sync_stream::NonBlocking;
+
+use super::{Healthcheck, Process as ProcessTrait};
 
 pub struct WinProcess {
     proc: Process,
@@ -35,6 +36,26 @@ impl ProcessTrait for WinProcess {
         let input = self.proc.input().map_err(to_io_error)?;
         let output = self.proc.output().map_err(to_io_error)?;
         Ok(Self::Stream::new(output, input))
+    }
+}
+
+impl Healthcheck for WinProcess {
+    fn is_alive(&mut self) -> Result<bool> {
+        Ok(self.proc.is_alive())
+    }
+}
+
+impl Deref for WinProcess {
+    type Target = Process;
+
+    fn deref(&self) -> &Self::Target {
+        &self.proc
+    }
+}
+
+impl DerefMut for WinProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.proc
     }
 }
 
@@ -77,20 +98,6 @@ impl NonBlocking for ProcessStream {
 
     fn set_blocking(&mut self) -> io::Result<()> {
         self.output.set_blocking_mode().map_err(to_io_error)
-    }
-}
-
-impl Deref for WinProcess {
-    type Target = Process;
-
-    fn deref(&self) -> &Self::Target {
-        &self.proc
-    }
-}
-
-impl DerefMut for WinProcess {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.proc
     }
 }
 
