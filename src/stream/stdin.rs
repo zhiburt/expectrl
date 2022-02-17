@@ -111,7 +111,7 @@ impl NonBlocking for io::Stdin {
 
 #[cfg(unix)]
 #[cfg(feature = "async")]
-impl futures_lite::AsyncRead for NonBlockingStdin {
+impl futures_lite::AsyncRead for Stdin {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         _: &mut std::task::Context<'_>,

@@ -6,7 +6,7 @@ use std::{
 
 use crate::session::sync_stream::NonBlocking;
 
-#[cfg(feature)]
+#[cfg(feature = "async")]
 use futures_lite::{AsyncRead, AsyncWrite};
 #[cfg(feature = "async")]
 use std::{

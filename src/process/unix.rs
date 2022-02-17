@@ -176,6 +176,12 @@ impl IntoAsyncStream for PtyStream {
     }
 }
 
+impl AsRawFd for PtyStream {
+    fn as_raw_fd(&self) -> RawFd {
+        self.handle.as_raw_fd()
+    }
+}
+
 #[cfg(feature = "async")]
 pub struct AsyncPtyStream {
     stream: async_io::Async<PtyStream>,

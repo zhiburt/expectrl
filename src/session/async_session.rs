@@ -10,114 +10,32 @@ use std::{
 use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::async_stream::Stream;
-use crate::{
-    process::{self, IntoAsyncStream, Process},
-    stream::log::LoggedStream,
-    ControlCode, Error, Found, Needle,
-};
-
-#[cfg(unix)]
-pub type Session = PtySession<process::unix::UnixProcess, process::unix::AsyncPtyStream>;
-
-#[cfg(windows)]
-pub type Session =
-    PtySession<process::windows::WinProcess, blocking::Unblock<process::windows::ProcessStream>>;
-
-impl<P> PtySession<P, <P::Stream as IntoAsyncStream>::AsyncsStream>
-where
-    P: Process,
-    P::Stream: IntoAsyncStream,
-{
-    pub fn spawn(command: P::Command) -> Result<Self, Error> {
-        let mut process = P::spawn_command(command)?;
-        let stream = process.open_stream()?;
-        let stream = stream.into_async_stream()?;
-        let session = Self::new(process, stream)?;
-
-        Ok(session)
-    }
-
-    pub fn spawn_cmd(cmd: impl AsRef<str>) -> Result<Self, Error> {
-        let mut process = P::spawn(cmd.as_ref())?;
-        let stream = process.open_stream()?;
-        let stream = stream.into_async_stream()?;
-        let session = Self::new(process, stream)?;
-
-        Ok(session)
-    }
-
-    /// Set logger.
-    pub async fn with_log<W: io::Write>(
-        self,
-        logger: W,
-    ) -> Result<PtySession<P, LoggedStream<<P::Stream as IntoAsyncStream>::AsyncsStream, W>>, Error>
-    {
-        let stream = self.stream.into_inner();
-        let stream = LoggedStream::new(stream, logger);
-        let session = PtySession::new(self.process, stream)?;
-        Ok(session)
-    }
-}
-
-impl Session {
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    #[cfg(unix)]
-    pub async fn interact(&mut self) -> Result<crate::WaitStatus, Error> {
-        crate::interact::InteractOptions::terminal()?
-            .interact(self)
-            .await
-    }
-
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Returns a status of a process ater interactions.
-    /// Why it's crusial to return a status is after check of is_alive the actuall
-    /// status might be gone.
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    #[cfg(windows)]
-    pub async fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::terminal()?
-            .interact(self)
-            .await
-    }
-}
+use crate::{stream::log::LoggedStream, ControlCode, Error, Found, Needle};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct PtySession<P, S> {
+pub struct Session<P, S> {
     process: P,
     stream: Stream<S>,
 }
 
+impl<P, S> Session<P, S> {
+    /// Set logger.
+    pub async fn with_log<W: io::Write>(
+        self,
+        logger: W,
+    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
+        let stream = self.stream.into_inner();
+        let stream = LoggedStream::new(stream, logger);
+        let session = Session::new(self.process, stream)?;
+        Ok(session)
+    }
+}
+
 // GEt back to the solution where Logger is just dyn Write instead of all these magic with type system.....
 
-impl<P, S> PtySession<P, S> {
+impl<P, S> Session<P, S> {
     pub fn new(process: P, stream: S) -> io::Result<Self> {
         Ok(Self {
             process,
@@ -131,7 +49,7 @@ impl<P, S> PtySession<P, S> {
     }
 }
 
-impl<P, S: AsyncRead + Unpin> PtySession<P, S> {
+impl<P, S: AsyncRead + Unpin> Session<P, S> {
     pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Found, Error> {
         self.stream.expect(needle).await
     }
@@ -168,7 +86,7 @@ impl<P, S: AsyncRead + Unpin> PtySession<P, S> {
     }
 }
 
-impl<P, S: AsyncWrite + Unpin> PtySession<P, S> {
+impl<P, S: AsyncWrite + Unpin> Session<P, S> {
     /// Send text to child's `STDIN`.
     ///
     /// To write bytes you can use a [std::io::Write] operations instead.
@@ -216,7 +134,7 @@ impl<P, S: AsyncWrite + Unpin> PtySession<P, S> {
     }
 }
 
-impl<P, S> Deref for PtySession<P, S> {
+impl<P, S> Deref for Session<P, S> {
     type Target = P;
 
     fn deref(&self) -> &Self::Target {
@@ -224,13 +142,13 @@ impl<P, S> Deref for PtySession<P, S> {
     }
 }
 
-impl<P, S> DerefMut for PtySession<P, S> {
+impl<P, S> DerefMut for Session<P, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.process
     }
 }
 
-impl<P: Unpin, S: AsyncWrite + Unpin> AsyncWrite for PtySession<P, S> {
+impl<P: Unpin, S: AsyncWrite + Unpin> AsyncWrite for Session<P, S> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -256,7 +174,7 @@ impl<P: Unpin, S: AsyncWrite + Unpin> AsyncWrite for PtySession<P, S> {
     }
 }
 
-impl<P: Unpin, S: AsyncRead + Unpin> AsyncRead for PtySession<P, S> {
+impl<P: Unpin, S: AsyncRead + Unpin> AsyncRead for Session<P, S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -266,7 +184,7 @@ impl<P: Unpin, S: AsyncRead + Unpin> AsyncRead for PtySession<P, S> {
     }
 }
 
-impl<P: Unpin, S: AsyncRead + Unpin> AsyncBufRead for PtySession<P, S> {
+impl<P: Unpin, S: AsyncRead + Unpin> AsyncBufRead for Session<P, S> {
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }

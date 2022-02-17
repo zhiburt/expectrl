@@ -6,21 +6,31 @@ mod async_stream;
 mod sync_session;
 pub mod sync_stream;
 
-use crate::{process::Process, stream::stdin::Stdin, Error};
+use crate::{
+    process::{IntoAsyncStream, Process},
+    stream::stdin::Stdin,
+    Error,
+};
 use std::io::{stdout, Read, Write};
 
 use self::sync_stream::NonBlocking;
 
 #[cfg(unix)]
 pub(crate) type Proc = crate::process::unix::UnixProcess;
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "async")))]
 pub(crate) type Stream = crate::process::unix::PtyStream;
+#[cfg(all(unix, feature = "async"))]
+pub(crate) type Stream = crate::process::unix::AsyncPtyStream;
 #[cfg(windows)]
 pub(crate) type Proc = crate::process::windows::WinProcess;
 
 #[cfg(not(feature = "async"))]
 pub type Session<P = Proc, S = Stream> = sync_session::Session<P, S>;
 
+#[cfg(feature = "async")]
+pub type Session<P = Proc, S = Stream> = async_session::Session<P, S>;
+
+#[cfg(not(feature = "async"))]
 impl Session {
     pub fn spawn(command: <Proc as Process>::Command) -> Result<Self, Error> {
         let mut process = Proc::spawn_command(command)?;
@@ -39,6 +49,7 @@ impl Session {
     }
 }
 
+#[cfg(not(feature = "async"))]
 impl<S> Session<Proc, S>
 where
     S: NonBlocking + Write + Read,
@@ -64,6 +75,41 @@ where
         let mut stdout = stdout();
         let result =
             crate::interact::InteractOptions::default().interact(self, &mut stdin, &mut stdout);
+        stdin.close(self)?;
+        result
+    }
+}
+
+#[cfg(feature = "async")]
+impl Session {
+    pub fn spawn(command: <Proc as Process>::Command) -> Result<Self, Error> {
+        let mut process = Proc::spawn_command(command)?;
+        let stream = process.open_stream()?.into_async_stream()?;
+        let session = Self::new(process, stream)?;
+
+        Ok(session)
+    }
+
+    pub(crate) fn spawn_cmd(cmd: &str) -> Result<Self, Error> {
+        let mut process = Proc::spawn(cmd)?;
+        let stream = process.open_stream()?.into_async_stream()?;
+        let session = Self::new(process, stream)?;
+
+        Ok(session)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<S> Session<Proc, S>
+where
+    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
+{
+    pub async fn interact(&mut self) -> Result<(), Error> {
+        let mut stdin = Stdin::new(self)?;
+        let mut stdout = stdout();
+        let result = crate::interact::InteractOptions::default()
+            .interact(self, &mut stdin, &mut stdout)
+            .await;
         stdin.close(self)?;
         result
     }

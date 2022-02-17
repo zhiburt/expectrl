@@ -302,32 +302,22 @@ impl<C> InteractOptions<Proc, Stream, crate::stream::stdin::Stdin, std::io::Stdo
 }
 
 #[cfg(feature = "async")]
-impl<R, W, C> InteractOptions<R, W, C>
+impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
-    R: futures_lite::AsyncRead + std::marker::Unpin,
+    P: Healthcheck + Unpin,
+    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
+    R: futures_lite::AsyncRead + Unpin,
     W: Write,
 {
     /// Runs interact interactively.
     /// See [Session::interact]
-    pub async fn interact(self, session: &mut S) -> Result<WaitStatus, Error> {
-        interact(session, self)
-    }
-}
-
-#[cfg(feature = "async")]
-impl<R, W, C> InteractOptions<R, W, C>
-where
-    R: Read + std::marker::Unpin,
-    W: Write,
-{
-    /// Runs interact interactively.
-    /// See [Session::interact]
-    #[cfg(windows)]
-    pub async fn interact(mut self, session: &mut Session) -> Result<(), Error> {
-        match self.input_from {
-            InputFrom::Terminal => interact_in_terminal(session, &mut self).await,
-            InputFrom::Other => interact(session, &mut self).await,
-        }
+    pub async fn interact(
+        &mut self,
+        session: &mut Session<P, S>,
+        mut input: R,
+        mut output: W,
+    ) -> Result<(), Error> {
+        interact(self, session, &mut input, &mut output).await
     }
 }
 
@@ -453,63 +443,15 @@ where
 
 // copy paste of sync version with async await syntax
 #[cfg(all(unix, feature = "async"))]
-async fn interact_in_terminal<R, W, C>(
-    session: &mut Session,
-    options: InteractOptions<R, W, C>,
-) -> Result<WaitStatus, Error>
+async fn interact<P, S, R, W, C>(
+    options: &mut InteractOptions<P, S, R, W, C>,
+    session: &mut Session<P, S>,
+    input: &mut R,
+    output: &mut W,
+) -> Result<(), Error>
 where
-    R: futures_lite::AsyncRead + std::marker::Unpin,
-    W: Write,
-{
-    use futures_lite::AsyncWriteExt;
-
-    // flush buffers
-    session.flush().await?;
-
-    let origin_pty_echo = session.get_echo().map_err(to_io_error)?;
-    // tcgetattr issues error if a provided fd is not a tty,
-    // but we can work with such input as it may be redirected.
-    let origin_stdin_flags = termios::tcgetattr(STDIN_FILENO);
-
-    // verify: possible controlling fd can be stdout and stderr as well?
-    // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-    let isatty_terminal = isatty(STDIN_FILENO).map_err(to_io_error)?;
-
-    if isatty_terminal {
-        set_raw(STDIN_FILENO).map_err(to_io_error)?;
-    }
-
-    session.set_echo(true, None).map_err(to_io_error)?;
-
-    let result = interact(session, options).await;
-
-    if isatty_terminal {
-        // it's suppose to be always OK.
-        // but we don't use unwrap just in case.
-        let origin_stdin_flags = origin_stdin_flags.map_err(to_io_error)?;
-
-        termios::tcsetattr(
-            STDIN_FILENO,
-            termios::SetArg::TCSAFLUSH,
-            &origin_stdin_flags,
-        )
-        .map_err(to_io_error)?;
-    }
-
-    session
-        .set_echo(origin_pty_echo, None)
-        .map_err(to_io_error)?;
-
-    result
-}
-
-// copy paste of sync version with async await syntax
-#[cfg(all(unix, feature = "async"))]
-async fn interact<R, W, C>(
-    session: &mut Session,
-    mut options: InteractOptions<R, W, C>,
-) -> Result<WaitStatus, Error>
-where
+    P: Healthcheck + Unpin,
+    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
     R: futures_lite::AsyncRead + Unpin,
     W: Write,
 {
@@ -530,8 +472,8 @@ where
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = session.status().map_err(to_io_error).map_err(|e| e.into());
-        if !matches!(status, Ok(WaitStatus::StillAlive)) {
+        let status = session.is_alive();
+        if matches!(status, Ok(false)) {
             exited = true;
         }
 
@@ -543,7 +485,7 @@ where
             }
 
             output_buffer.extend_from_slice(&buf[..n]);
-            options.check_output(session, &mut output_buffer, eof)?;
+            options.check_output(input, output, session, &mut output_buffer, eof)?;
 
             let bytes = if let Some(filter) = options.output_filter.as_mut() {
                 (filter)(&buf[..n])?
@@ -551,21 +493,21 @@ where
                 Cow::Borrowed(&buf[..n])
             };
 
-            options.output.write_all(&bytes)?;
-            options.output.flush()?;
+            output.write_all(&bytes)?;
+            output.flush()?;
         }
 
         if exited {
-            return status;
+            return Ok(());
         }
 
         // We dont't print user input back to the screen.
         // In terminal mode it will be ECHOed back automatically.
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
-        match options.input.read(&mut buf).await {
+        match input.read(&mut buf).await {
             Ok(0) => {
-                return status;
+                return Ok(());
             }
             Ok(n) => {
                 let bytes = &buf[..n];
@@ -578,7 +520,7 @@ where
                 let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
                     check_buffer.extend_from_slice(&bytes);
                     loop {
-                        match options.check_input(session, check_buffer)? {
+                        match options.check_input(input, output, session, check_buffer)? {
                             Match::Yes(n) => {
                                 check_buffer.drain(..n);
                                 if check_buffer.is_empty() {
@@ -602,7 +544,7 @@ where
                 match escape_char_position {
                     Some(pos) => {
                         session.write_all(&buffer[..pos]).await?;
-                        return status;
+                        return Ok(());
                     }
                     None => {
                         session.write_all(&buffer[..]).await?;
@@ -613,7 +555,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        options.call_idle_handler(session)?;
+        options.call_idle_handler(input, output, session)?;
     }
 }
 

@@ -258,9 +258,10 @@ fn interact_stream_redirection() {
         let mut writer = io::Cursor::new(vec![0; 1024]);
 
         let mut session = expectrl::spawn("cat").unwrap();
-        let opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer).unwrap();
+        let mut opts = expectrl::interact::InteractOptions::default();
 
-        opts.interact(&mut session).await.unwrap();
+        opts.interact(&mut session, reader, &mut writer).await.unwrap();
+        drop(opts);
 
         let buffer = String::from_utf8_lossy(writer.get_ref());
         let buffer = buffer.trim_end_matches(char::from(0));
