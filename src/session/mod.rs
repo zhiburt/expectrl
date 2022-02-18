@@ -10,8 +10,8 @@ pub mod sync_stream;
 #[cfg(feature = "async")]
 use crate::process::IntoAsyncStream;
 
-use crate::{process::Process, stream::stdin::Stdin, Error};
-use std::io::{stdout, Read, Write};
+use crate::{process::Process, Error};
+use std::io::{Read, Write};
 
 use self::sync_stream::NonBlocking;
 
@@ -76,12 +76,7 @@ where
     /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
     /// it echos the real `stdin` to the child `stdin`.
     pub fn interact(&mut self) -> Result<(), Error> {
-        let mut stdin = Stdin::new(self)?;
-        let mut stdout = stdout();
-        let result =
-            crate::interact::InteractOptions::default().interact(self, &mut stdin, &mut stdout);
-        stdin.close(self)?;
-        result
+        crate::interact::InteractOptions::default().interact_in_terminal(self)
     }
 }
 
@@ -110,12 +105,8 @@ where
     S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
 {
     pub async fn interact(&mut self) -> Result<(), Error> {
-        let mut stdin = Stdin::new(self)?;
-        let mut stdout = stdout();
-        let result = crate::interact::InteractOptions::default()
-            .interact(self, &mut stdin, &mut stdout)
-            .await;
-        stdin.close(self)?;
-        result
+        crate::interact::InteractOptions::default()
+            .interact_in_terminal(self)
+            .await
     }
 }

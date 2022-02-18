@@ -3,8 +3,8 @@
 
 use crate::{
     process::Healthcheck,
+    session::Session,
     session::{sync_stream::NonBlocking, Proc},
-    session::{Session, Stream},
     ControlCode, Error,
 };
 use std::{
@@ -292,8 +292,11 @@ where
 }
 
 #[cfg(not(feature = "async"))]
-impl<C> InteractOptions<Proc, Stream, crate::stream::stdin::Stdin, std::io::Stdout, C> {
-    pub fn interact_in_terminal(&mut self, session: &mut Session) -> Result<(), Error> {
+impl<S, C> InteractOptions<Proc, S, crate::stream::stdin::Stdin, std::io::Stdout, C>
+where
+    S: NonBlocking + Read + Write,
+{
+    pub fn interact_in_terminal(&mut self, session: &mut Session<Proc, S>) -> Result<(), Error> {
         let mut stdin = crate::stream::stdin::Stdin::new(session)?;
         let r = interact(self, session, &mut stdin, &mut std::io::stdout());
         stdin.close(session)?;
