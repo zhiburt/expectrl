@@ -1,5 +1,5 @@
 use super::{Healthcheck, Process};
-use crate::session::sync_stream::NonBlocking;
+use crate::{error::to_io_error, session::sync_stream::NonBlocking};
 use ptyprocess::{stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]
@@ -43,23 +43,16 @@ impl Process for UnixProcess {
     }
 
     fn spawn_command(command: Self::Command) -> Result<Self> {
-        let proc = PtyProcess::spawn(command).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to spawn a command; {}", e),
-            )
-        })?;
+        let proc = PtyProcess::spawn(command).map_err(to_io_error("Failed to spawn a command"))?;
 
         Ok(Self { proc })
     }
 
     fn open_stream(&mut self) -> Result<Self::Stream> {
-        let stream = self.proc.get_pty_stream().map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to create a stream; {}", e),
-            )
-        })?;
+        let stream = self
+            .proc
+            .get_pty_stream()
+            .map_err(to_io_error("Failed to create a stream"))?;
         let stream = PtyStream::new(stream);
         Ok(stream)
     }
@@ -67,12 +60,9 @@ impl Process for UnixProcess {
 
 impl Healthcheck for UnixProcess {
     fn is_alive(&mut self) -> Result<bool> {
-        self.proc.is_alive().map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to call pty.is_alive(); {}", e),
-            )
-        })
+        self.proc
+            .is_alive()
+            .map_err(to_io_error("Failed to call pty.is_alive()"))
     }
 }
 

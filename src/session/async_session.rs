@@ -10,7 +10,7 @@ use std::{
 use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::async_stream::Stream;
-use crate::{stream::log::LoggedStream, ControlCode, Error, Found, Needle};
+use crate::{error::to_io_error, stream::log::LoggedStream, ControlCode, Error, Found, Needle};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -127,9 +127,9 @@ impl<P, S: AsyncWrite + Unpin> Session<P, S> {
     /// # });
     /// ```
     pub async fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
-        let code = code.try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "Failed to parse a control character")
-        })?;
+        let code = code
+            .try_into()
+            .map_err(|_| to_io_error("Failed to parse a control character")(""))?;
         self.stream.write_all(&[code.into()]).await
     }
 }

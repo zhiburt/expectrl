@@ -8,7 +8,11 @@ use std::{
 };
 
 use crate::{
-    control_code::ControlCode, error::Error, needle::Needle, stream::log::LoggedStream, Found,
+    control_code::ControlCode,
+    error::{to_io_error, Error},
+    needle::Needle,
+    stream::log::LoggedStream,
+    Found,
 };
 
 use super::sync_stream::{NonBlocking, TryStream};
@@ -188,9 +192,9 @@ impl<P, S: Write> Session<P, S> {
     }
 
     pub fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
-        let code = code.try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "Failed to parse a control character")
-        })?;
+        let code = code
+            .try_into()
+            .map_err(|_| to_io_error("Failed to parse a control character")(""))?;
         self.stream.write_all(&[code.into()])
     }
 }

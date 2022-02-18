@@ -349,9 +349,7 @@ where
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = session
-            .is_alive()
-            .map_err(|e| Error::Other(format!("failed to call status {}", e)));
+        let status = session.is_alive();
         if matches!(status, Ok(false)) {
             exited = true;
         }

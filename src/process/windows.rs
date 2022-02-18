@@ -9,6 +9,7 @@ use conpty::{
 };
 
 use super::{Healthcheck, Process as ProcessTrait};
+use crate::error::to_io_error;
 use crate::session::sync_stream::NonBlocking;
 
 #[cfg(feature = "async")]
@@ -37,13 +38,13 @@ impl ProcessTrait for WinProcess {
     fn spawn_command(command: Self::Command) -> Result<Self> {
         command
             .spawn()
-            .map_err(to_io_error)
+            .map_err(to_io_error(""))
             .map(|proc| WinProcess { proc })
     }
 
     fn open_stream(&mut self) -> Result<Self::Stream> {
-        let input = self.proc.input().map_err(to_io_error)?;
-        let output = self.proc.output().map_err(to_io_error)?;
+        let input = self.proc.input().map_err(to_io_error(""))?;
+        let output = self.proc.output().map_err(to_io_error(""))?;
         Ok(Self::Stream::new(output, input))
     }
 }
@@ -102,11 +103,11 @@ impl Read for ProcessStream {
 
 impl NonBlocking for ProcessStream {
     fn set_non_blocking(&mut self) -> io::Result<()> {
-        self.output.set_non_blocking_mode().map_err(to_io_error)
+        self.output.set_non_blocking_mode().map_err(to_io_error(""))
     }
 
     fn set_blocking(&mut self) -> io::Result<()> {
-        self.output.set_blocking_mode().map_err(to_io_error)
+        self.output.set_blocking_mode().map_err(to_io_error(""))
     }
 }
 
@@ -160,8 +161,4 @@ impl AsyncRead for AsyncProcessStream {
     ) -> Poll<Result<usize>> {
         Pin::new(&mut self.stream).poll_read(cx, buf)
     }
-}
-
-fn to_io_error(err: impl std::error::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err.to_string())
 }

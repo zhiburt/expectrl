@@ -11,7 +11,16 @@ pub enum Error {
     RegexParsing,
     ExpectTimeout,
     Eof,
-    Other(String),
+    Other { message: String, origin: String },
+}
+
+impl Error {
+    pub fn unknown(message: impl Into<String>, err: impl Display) -> Error {
+        Self::Other {
+            message: message.into(),
+            origin: err.to_string(),
+        }
+    }
 }
 
 impl Display for Error {
@@ -21,7 +30,7 @@ impl Display for Error {
             Error::CommandParsing => write!(f, "Can't parse a command string, please check it out"),
             Error::RegexParsing => write!(f, "Can't parse a regex expression"),
             Error::ExpectTimeout => write!(f, "Reached a timeout for expect type of command"),
-            Error::Other(message) => write!(f, "Error {}", message),
+            Error::Other { message, origin } => write!(f, "An erorr {} while {} ", origin, message),
             Error::Eof => write!(f, "EOF was reached; the read may successed later"),
         }
     }
@@ -35,8 +44,6 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<String> for Error {
-    fn from(message: String) -> Self {
-        Self::Other(message)
-    }
+pub fn to_io_error<E: Display>(message: &'static str) -> impl FnOnce(E) -> io::Error {
+    move |e: E| io::Error::new(io::ErrorKind::Other, format!("{}; {}", message, e))
 }

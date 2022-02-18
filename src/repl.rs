@@ -192,7 +192,7 @@ impl ReplSession {
         let session: Session<crate::process::unix::UnixProcess, _> = Session::spawn(cmd)?;
         let is_echo_on = session
             .get_echo()
-            .map_err(|e| Error::Other(format!("failed to get echo {}", e)))?;
+            .map_err(|e| Error::unknown("failed to get echo", e))?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());
 
