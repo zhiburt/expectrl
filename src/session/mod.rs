@@ -1,11 +1,7 @@
 #[cfg(feature = "async")]
 mod async_session;
-#[cfg(feature = "async")]
-mod async_stream;
 #[cfg(not(feature = "async"))]
 mod sync_session;
-#[cfg(not(feature = "async"))]
-mod sync_stream;
 
 #[cfg(feature = "async")]
 use crate::process::IntoAsyncStream;
