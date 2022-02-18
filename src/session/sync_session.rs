@@ -11,11 +11,11 @@ use crate::{
     control_code::ControlCode,
     error::{to_io_error, Error},
     needle::Needle,
-    stream::log::LoggedStream,
+    process::NonBlocking,
     Found,
 };
 
-use super::sync_stream::{NonBlocking, TryStream};
+use super::sync_stream::TryStream;
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -27,24 +27,6 @@ pub struct Session<P, S> {
 }
 
 impl<P, S: Read> Session<P, S> {
-    /// Set logger.
-    pub fn with_log<W: io::Write>(
-        mut self,
-        logger: W,
-    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
-        self.stream.flush_in_buffer();
-        let buf = self.stream.get_available().to_owned();
-
-        let stream = self.stream.into_inner();
-        let stream = LoggedStream::new(stream, logger);
-
-        let mut session = Session::new(self.proc, stream)?;
-        session.stream.keep_in_buffer(&buf);
-        Ok(session)
-    }
-}
-
-impl<P, S: Read> Session<P, S> {
     pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
@@ -52,6 +34,21 @@ impl<P, S: Read> Session<P, S> {
             stream,
             expect_timeout: Some(Duration::from_millis(10000)),
         })
+    }
+
+    pub(crate) fn swap_stream<F: FnOnce(S) -> R, R: Read>(
+        mut self,
+        new_stream: F,
+    ) -> Result<Session<P, R>, Error> {
+        self.stream.flush_in_buffer();
+        let buf = self.stream.get_available().to_owned();
+
+        let stream = self.stream.into_inner();
+        let new_stream = new_stream(stream);
+
+        let mut session = Session::new(self.proc, new_stream)?;
+        session.stream.keep_in_buffer(&buf);
+        Ok(session)
     }
 }
 

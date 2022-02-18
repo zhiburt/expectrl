@@ -71,11 +71,7 @@ fn log() {
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        let mut session = spawn("cat")
-            .unwrap()
-            .with_log(writer.clone())
-            .await
-            .unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
 
         session.send_line("Hello World").await.unwrap();
 
@@ -131,11 +127,7 @@ fn log_read_line() {
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        let mut session = spawn("cat")
-            .unwrap()
-            .with_log(writer.clone())
-            .await
-            .unwrap();
+        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
 
         session.send_line("Hello World").await.unwrap();
 

@@ -8,9 +8,8 @@ use conpty::{
     ProcAttr, Process,
 };
 
-use super::{Healthcheck, Process as ProcessTrait};
+use super::{Healthcheck, NonBlocking, Process as ProcessTrait};
 use crate::error::to_io_error;
-use crate::session::sync_stream::NonBlocking;
 
 #[cfg(feature = "async")]
 use super::IntoAsyncStream;

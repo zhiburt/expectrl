@@ -20,23 +20,10 @@ pub struct Session<P, S> {
     stream: Stream<S>,
 }
 
-impl<P, S> Session<P, S> {
-    /// Set logger.
-    pub async fn with_log<W: io::Write>(
-        self,
-        logger: W,
-    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
-        let stream = self.stream.into_inner();
-        let stream = LoggedStream::new(stream, logger);
-        let session = Session::new(self.process, stream)?;
-        Ok(session)
-    }
-}
-
 // GEt back to the solution where Logger is just dyn Write instead of all these magic with type system.....
 
 impl<P, S> Session<P, S> {
-    pub fn new(process: P, stream: S) -> io::Result<Self> {
+    pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
         Ok(Self {
             process,
             stream: Stream::new(stream),
@@ -46,6 +33,19 @@ impl<P, S> Session<P, S> {
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.stream.set_expect_timeout(expect_timeout);
+    }
+
+    pub(crate) fn swap_stream<F: FnOnce(S) -> R, R>(
+        mut self,
+        new_stream: F,
+    ) -> Result<Session<P, R>, Error> {
+        let buf = self.stream.get_available().to_owned();
+
+        let stream = self.stream.into_inner();
+        let stream = new_stream(stream);
+        let mut session = Session::new(self.process, stream)?;
+        session.stream.keep(&buf);
+        Ok(session)
     }
 }
 

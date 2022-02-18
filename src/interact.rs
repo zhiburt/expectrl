@@ -2,15 +2,16 @@
 //! [crate::Session::interact] flow.
 
 use crate::{
-    process::Healthcheck,
+    process::{Healthcheck, NonBlocking},
+    session::Proc,
     session::Session,
-    session::{sync_stream::NonBlocking, Proc},
+    stream::stdin::Stdin,
     ControlCode, Error,
 };
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{self, Read, Write},
+    io::{self, Read, Stdout, Write},
 };
 
 /// InteractOptions represents options of an interact session.
@@ -292,7 +293,7 @@ where
 }
 
 #[cfg(not(feature = "async"))]
-impl<S, C> InteractOptions<Proc, S, crate::stream::stdin::Stdin, std::io::Stdout, C>
+impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: NonBlocking + Read + Write,
 {
@@ -321,6 +322,22 @@ where
         mut output: W,
     ) -> Result<(), Error> {
         interact(self, session, &mut input, &mut output).await
+    }
+}
+
+#[cfg(feature = "async")]
+impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
+where
+    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
+{
+    pub async fn interact_in_terminal(
+        &mut self,
+        session: &mut Session<Proc, S>,
+    ) -> Result<(), Error> {
+        let mut stdin = crate::stream::stdin::Stdin::new(session)?;
+        let r = interact(self, session, &mut stdin, &mut std::io::stdout()).await;
+        stdin.close(session)?;
+        r
     }
 }
 

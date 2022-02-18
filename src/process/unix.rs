@@ -1,5 +1,5 @@
-use super::{Healthcheck, Process};
-use crate::{error::to_io_error, session::sync_stream::NonBlocking};
+use super::{Healthcheck, NonBlocking, Process};
+use crate::error::to_io_error;
 use ptyprocess::{stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]

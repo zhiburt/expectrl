@@ -5,10 +5,7 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 
-pub trait NonBlocking {
-    fn set_non_blocking(&mut self) -> io::Result<()>;
-    fn set_blocking(&mut self) -> io::Result<()>;
-}
+use crate::process::NonBlocking;
 
 #[derive(Debug)]
 pub struct TryStream<S> {
@@ -37,10 +34,6 @@ impl<S: Read> TryStream<S> {
 impl<S> TryStream<S> {
     pub fn keep_in_buffer(&mut self, v: &[u8]) {
         self.stream.keep_in_buffer(v);
-    }
-
-    pub fn get_mut(&mut self) -> &mut S {
-        self.stream.get_mut()
     }
 
     pub fn get_available(&mut self) -> &[u8] {

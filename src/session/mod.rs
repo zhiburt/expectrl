@@ -4,16 +4,18 @@ mod async_session;
 mod async_stream;
 #[cfg(not(feature = "async"))]
 mod sync_session;
-// fixme: remove this.
-pub mod sync_stream;
+#[cfg(not(feature = "async"))]
+mod sync_stream;
 
 #[cfg(feature = "async")]
 use crate::process::IntoAsyncStream;
 
-use crate::{process::Process, Error};
-use std::io::{Read, Write};
-
-use self::sync_stream::NonBlocking;
+use crate::{
+    process::{NonBlocking, Process},
+    stream::log::LoggedStream,
+    Error,
+};
+use std::io::{self, Read, Write};
 
 #[cfg(unix)]
 pub(crate) type Proc = crate::process::unix::UnixProcess;
@@ -51,6 +53,28 @@ impl Session {
         let session = Self::new(process, stream)?;
 
         Ok(session)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<P, S> Session<P, S> {
+    /// Set logger.
+    pub fn with_log<W: io::Write>(
+        self,
+        logger: W,
+    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
+        self.swap_stream(|stream| LoggedStream::new(stream, logger))
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl<P, S: Read> Session<P, S> {
+    /// Set logger.
+    pub fn with_log<W: io::Write>(
+        self,
+        logger: W,
+    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
+        self.swap_stream(|stream| LoggedStream::new(stream, logger))
     }
 }
 
