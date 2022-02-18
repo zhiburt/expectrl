@@ -36,6 +36,7 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
     // fix: somehow this line causes a different behaviour in iteract method.
     //      the issue most likely that with this line in interact mode ENTER produces CTRL-M
     //      when without the line it produces \r\n
+
     bash.expect_prompt()?;
 
     Ok(bash)
@@ -87,17 +88,28 @@ pub fn spawn_python() -> Result<ReplSession, Error> {
 
 /// Spawn default python's IDLE.
 #[cfg(feature = "async")]
-#[cfg(unix)]
 pub async fn spawn_python() -> Result<ReplSession, Error> {
-    let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
-    idle._expect_prompt().await?;
-    Ok(idle)
+    #[cfg(unix)]
+    {
+        let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
+        idle._expect_prompt().await?;
+        Ok(idle)
+    }
+    #[cfg(windows)]
+    {
+        // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
+        let mut idle =
+            ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
+        idle._expect_prompt().await?;
+        Ok(idle)
+    }
 }
 
 /// Spawn a powershell session.
 ///
 /// It uses a custom prompt to be able to controll the shell.
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let mut powershell = ReplSession::spawn(
@@ -121,6 +133,40 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
     Ok(powershell)
 }
 
+/// Spawn a powershell session.
+///
+/// It uses a custom prompt to be able to controll the shell.
+#[cfg(windows)]
+#[cfg(feature = "async")]
+pub async fn spawn_powershell() -> Result<ReplSession, Error> {
+    const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
+    let mut powershell = ReplSession::spawn(
+        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
+        DEFAULT_PROMPT,
+        Some("exit"),
+    )?;
+    powershell.is_echo_on = true;
+
+    // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
+    powershell
+        .execute(format!(
+            r#"function prompt {{ "{}"; return " " }}"#,
+            DEFAULT_PROMPT
+        ))
+        .await?;
+
+    // https://stackoverflow.com/questions/69063656/is-it-possible-to-stop-powershell-wrapping-output-in-ansi-sequences/69063912#69063912
+    // https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2#disabling-ansi-output
+    powershell
+        .execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "dumb")"#)
+        .await?;
+    powershell
+        .execute(r#"[System.Environment]::SetEnvironmentVariable("TERM", "NO_COLOR")"#)
+        .await?;
+
+    Ok(powershell)
+}
+
 /// A repl session: e.g. bash or the python shell:
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
@@ -138,13 +184,15 @@ pub struct ReplSession {
 
 impl ReplSession {
     #[cfg(unix)]
-    pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
+    pub fn spawn<PP: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
-        prompt: P,
+        prompt: PP,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session = Session::spawn(cmd)?;
-        let is_echo_on = session.get_echo()?;
+        let session: Session<crate::process::unix::UnixProcess, _> = Session::spawn(cmd)?;
+        let is_echo_on = session
+            .get_echo()
+            .map_err(|e| Error::unknown("failed to get echo", e))?;
         let prompt = prompt.as_ref().to_owned();
         let quit_command = quit_command.map(|q| q.as_ref().to_owned());
 
@@ -210,7 +258,7 @@ impl ReplSession {
     /// Send a command to a repl and verifies that it exited.
     /// Returning it's output.
     #[cfg(not(feature = "async"))]
-    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
+    pub fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
         self.send_line(cmd)?;
         let found = self._expect_prompt()?;
         Ok(found.before().to_vec())
@@ -218,7 +266,7 @@ impl ReplSession {
 
     /// Send a command to a repl and verifies that it exited.
     #[cfg(feature = "async")]
-    pub async fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
+    pub async fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
         self.send_line(cmd).await?;
         let found = self._expect_prompt().await?;
         Ok(found.before().to_vec())
@@ -228,7 +276,7 @@ impl ReplSession {
     ///
     /// If echo_on=true wait for the input to appear.
     #[cfg(not(feature = "async"))]
-    pub fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+    pub fn send_line<SS: AsRef<str>>(&mut self, line: SS) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
             self.expect(line.as_ref())?;

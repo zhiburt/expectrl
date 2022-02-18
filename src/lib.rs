@@ -47,13 +47,13 @@ mod check_macros;
 mod control_code;
 mod error;
 mod found;
-pub mod interact;
-#[cfg(feature = "log")]
-mod log;
 mod needle;
+mod process;
+pub mod stream;
+
+pub mod interact;
 pub mod repl;
 pub mod session;
-mod stream;
 
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -65,12 +65,7 @@ pub use conpty::ProcAttr;
 
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
-
-#[cfg(not(feature = "log"))]
-pub use session::Session;
-
-#[cfg(feature = "log")]
-pub use log::SessionWithLog as Session;
+use session::Session;
 
 /// Spawn spawnes a new session.
 ///
@@ -98,63 +93,19 @@ pub use log::SessionWithLog as Session;
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
 pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
-    #[cfg(unix)]
-    {
-        let args = tokenize_command(cmd.as_ref());
-        if args.is_empty() {
-            return Err(Error::CommandParsing);
-        }
-
-        let mut command = std::process::Command::new(&args[0]);
-        command.args(args.iter().skip(1));
-
-        Session::spawn(command)
-    }
-    #[cfg(windows)]
-    {
-        Session::spawn(conpty::ProcAttr::cmd(cmd.as_ref().to_owned()))
-    }
-}
-
-/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
-/// It takes care of single and double quotes but,
-///
-/// It doesn't cover all edge cases.
-/// So it may not be compatible with real shell arguments parsing.
-#[cfg(unix)]
-fn tokenize_command(program: &str) -> Vec<String> {
-    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
-    let mut res = vec![];
-    for cap in re.captures_iter(program) {
-        res.push(cap[0].to_string());
-    }
-    res
+    Session::spawn_cmd(cmd.as_ref())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
-    #[test]
-    fn test_tokenize_command() {
-        let res = tokenize_command("prog arg1 arg2");
-        assert_eq!(vec!["prog", "arg1", "arg2"], res);
-
-        let res = tokenize_command("prog -k=v");
-        assert_eq!(vec!["prog", "-k=v"], res);
-
-        let res = tokenize_command("prog 'my text'");
-        assert_eq!(vec!["prog", "'my text'"], res);
-
-        let res = tokenize_command(r#"prog "my text""#);
-        assert_eq!(vec!["prog", r#""my text""#], res);
-    }
-
-    #[cfg(unix)]
     #[test]
     fn test_spawn_no_command() {
-        assert!(matches!(spawn(""), Err(Error::CommandParsing)));
+        #[cfg(unix)]
+        assert!(spawn("").is_err());
+        #[cfg(windows)]
+        assert!(spawn("").is_ok());
     }
 
     #[test]

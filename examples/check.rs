@@ -8,7 +8,7 @@ fn main() {
 
     loop {
         match check!(
-            session,
+            &mut session,
             _ = "Password: " => {
                 println!("Set password to SECURE_PASSWORD");
                 session.send_line("SECURE_PASSWORD").unwrap();
@@ -32,7 +32,7 @@ fn main() {
 
         loop {
             match check!(
-                session,
+                &mut session,
                 _ = "Password: " => {
                     println!("Set password to SECURE_PASSWORD");
                     session.send_line("SECURE_PASSWORD").await.unwrap();

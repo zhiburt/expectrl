@@ -101,7 +101,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $session.check($exp) {
+        match $crate::session::Session::check($session, $exp) {
             result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
                 let $var = result.unwrap();
                 $body;
@@ -214,7 +214,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $session.check($exp).await {
+        match $crate::session::Session::check(&mut $session, $exp).await {
             result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
                 let $var = result.unwrap();
                 $body;
@@ -259,11 +259,11 @@ mod tests {
     fn test_check() {
         let mut session = crate::spawn("").unwrap();
         crate::check! {
-            session,
+            &mut session,
             as11d = "zxc" => {},
         };
         crate::check! {
-            session,
+            &mut session,
             as11d = "zxc" => {},
             asbb = "zxc123" => {},
         };
@@ -279,12 +279,12 @@ mod tests {
 
         // trailing commas
         crate::check! {
-            session,
+            &mut session,
             as11d = "zxc" => {}
             asbb = "zxc123" => {}
         };
         crate::check! {
-            session,
+            &mut session,
             as11d = "zxc" => {}
             default => {}
         };
@@ -292,22 +292,22 @@ mod tests {
         #[cfg(not(feature = "async"))]
         {
             let _ = crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             }
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             })
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             })
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {
                     println!("asd")
                 },

@@ -31,13 +31,27 @@ fn main() {
 }
 
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn main() {
-    let mut pwsh = expectrl::spawn("cmd").expect("Error while spawning bash");
+    let mut pwsh = expectrl::spawn("pwsh").expect("Error while spawning bash");
 
     println!("Now you're in interacting mode");
     println!("To return control back to main type CTRL-]");
 
     pwsh.interact().expect("Failed to start interact");
+
+    println!("Quiting");
+}
+
+#[cfg(windows)]
+#[cfg(feature = "async")]
+fn main() {
+    let mut pwsh = expectrl::spawn("pwsh").expect("Error while spawning bash");
+
+    println!("Now you're in interacting mode");
+    println!("To return control back to main type CTRL-]");
+
+    futures_lite::future::block_on(pwsh.interact()).expect("Failed to start interact");
 
     println!("Quiting");
 }

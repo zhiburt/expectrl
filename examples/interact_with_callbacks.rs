@@ -9,16 +9,17 @@ struct State {
 
 #[cfg(not(feature = "async"))]
 fn main() {
+    use expectrl::{interact::Context, session::Session};
+
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 
-    let mut opts = InteractOptions::terminal()
-        .unwrap()
+    let mut opts = InteractOptions::default()
         .state(State::default())
         .on_output("Continue [y/n]:", |mut ctx, _| {
             ctx.state().wait_for_continue = Some(true);
             Ok(())
         })
-        .on_input("y", |mut ctx| {
+        .on_input("y", |mut ctx: Context<Session, _, _, _>| {
             ctx.session().send("y")?;
 
             if let Some(_a @ true) = ctx.state().wait_for_continue {
@@ -49,7 +50,7 @@ fn main() {
 
     #[cfg(not(feature = "async"))]
     {
-        opts.interact(&mut session).unwrap();
+        opts.interact_in_terminal(&mut session).unwrap();
     }
     #[cfg(feature = "async")]
     {

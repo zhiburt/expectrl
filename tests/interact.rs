@@ -1,3 +1,5 @@
+use expectrl::interact::InteractOptions;
+use expectrl::{interact::Context, session::Session};
 use std::{
     io::{self, Cursor, Read, Write},
     time::{Duration, Instant},
@@ -9,10 +11,8 @@ use std::{
 #[test]
 fn interact_callback() {
     let mut session = expectrl::spawn("cat").unwrap();
-
-    let mut opts = expectrl::interact::InteractOptions::terminal()
-        .unwrap()
-        .on_input("123", |mut ctx| {
+    InteractOptions::default()
+        .on_input("123", |mut ctx: Context<Session, _, _, _>| {
             ctx.session().send_line("Hello World")?;
             Ok(())
         })
@@ -20,9 +20,9 @@ fn interact_callback() {
             let line = f.before();
             println!("Line in output {:?}", String::from_utf8_lossy(line));
             Ok(())
-        });
-
-    opts.interact(&mut session).unwrap();
+        })
+        .interact_in_terminal(&mut session)
+        .unwrap();
 }
 
 #[cfg(unix)]
@@ -40,14 +40,15 @@ fn interact_callbacks_with_stream_redirection() {
     let mut writer = io::Cursor::new(vec![0; 2048]);
 
     let mut session = expectrl::spawn("cat").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
-        .unwrap()
-        .on_input("QWE", |mut ctx| {
+    let mut opts = expectrl::interact::InteractOptions::default().on_input(
+        "QWE",
+        |mut ctx: Context<Session, _, _, _>| {
             ctx.session().send_line("Hello World")?;
             Ok(())
-        });
+        },
+    );
 
-    opts.interact(&mut session).unwrap();
+    opts.interact(&mut session, reader, &mut writer).unwrap();
 
     drop(opts);
 
@@ -67,8 +68,7 @@ fn interact_callbacks_called_after_exit() {
     use expectrl::WaitStatus;
 
     let mut session = expectrl::spawn("echo 'Hello World'").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::terminal()
-        .unwrap()
+    let mut opts = expectrl::interact::InteractOptions::default()
         .state(0)
         .on_output("World", |mut ctx, _| {
             *ctx.state() += 1;
@@ -80,10 +80,7 @@ fn interact_callbacks_called_after_exit() {
         WaitStatus::Exited(session.pid(), 0)
     );
 
-    assert_eq!(
-        opts.interact(&mut session).unwrap_err().to_string(),
-        "Nix error ECHILD: No child processes"
-    );
+    opts.interact_in_terminal(&mut session).unwrap();
 
     #[cfg(target_os = "linux")]
     assert_eq!(*opts.get_state(), 1);
@@ -98,12 +95,11 @@ fn interact_callbacks_called_after_exit() {
 fn interact_filters() {
     let commands = "1009\nNO\n";
 
-    let reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
+    let mut reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
     let mut writer = io::Cursor::new(vec![0; 2048]);
 
     let mut session = expectrl::spawn("cat").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
-        .unwrap()
+    let mut opts = expectrl::interact::InteractOptions::default()
         .input_filter(|buf| {
             // ignore 0 chars
             let v = buf.iter().filter(|&&b| b != b'0').copied().collect();
@@ -123,7 +119,8 @@ fn interact_filters() {
             Ok(v)
         });
 
-    opts.interact(&mut session).unwrap();
+    opts.interact(&mut session, &mut reader, &mut writer)
+        .unwrap();
 
     drop(opts);
 
@@ -143,16 +140,14 @@ fn interact_context() {
         "QWE\n".to_string(),
     ];
 
-    let reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
+    let mut reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
     let mut writer = io::Cursor::new(vec![0; 2048]);
 
     let mut session = expectrl::spawn("cat").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
-        .unwrap()
+    let mut opts = expectrl::interact::InteractOptions::default()
         .state((0, 0))
-        .on_input("QWE\n", |mut ctx| {
-            let state = ctx.state();
-            state.0 += 1;
+        .on_input("QWE\n", |mut ctx: Context<Session, _, _, _>| {
+            ctx.state().0 += 1;
             ctx.session().send_line("123")?;
             Ok(())
         })
@@ -162,7 +157,8 @@ fn interact_context() {
             Ok(())
         });
 
-    opts.interact(&mut session).unwrap();
+    opts.interact(&mut session, &mut reader, &mut writer)
+        .unwrap();
 
     assert_eq!(opts.get_state().0, 3);
     assert_eq!(opts.get_state().1, 15);
@@ -189,12 +185,11 @@ fn interact_on_output_not_matched() {
         "WWW\n".to_string(),
     ];
 
-    let reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
+    let mut reader = ListReaderWithDelayedEof::new(commands, Duration::from_secs(3));
     let mut writer = io::Cursor::new(vec![0; 2048]);
 
     let mut session = expectrl::spawn("cat").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer)
-        .unwrap()
+    let mut opts = expectrl::interact::InteractOptions::default()
         .state((0, 0))
         .on_input("WWW\n", |mut ctx| {
             ctx.state().1 += 1;
@@ -210,7 +205,8 @@ fn interact_on_output_not_matched() {
             Ok(())
         });
 
-    opts.interact(&mut session).unwrap();
+    opts.interact(&mut session, &mut reader, &mut writer)
+        .unwrap();
 
     assert_eq!(opts.get_state().0, 1);
     assert_eq!(opts.get_state().1, 0);
@@ -234,13 +230,14 @@ fn interact_on_output_not_matched() {
 fn interact_stream_redirection() {
     let commands = "Hello World\nIt works :)\n";
 
-    let reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
+    let mut reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
     let mut writer = io::Cursor::new(vec![0; 1024]);
 
     let mut session = expectrl::spawn("cat").unwrap();
-    let mut opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer).unwrap();
+    let mut opts = expectrl::interact::InteractOptions::default();
 
-    opts.interact(&mut session).unwrap();
+    opts.interact(&mut session, &mut reader, &mut writer)
+        .unwrap();
 
     drop(opts);
 
@@ -261,9 +258,12 @@ fn interact_stream_redirection() {
         let mut writer = io::Cursor::new(vec![0; 1024]);
 
         let mut session = expectrl::spawn("cat").unwrap();
-        let opts = expectrl::interact::InteractOptions::streamed(reader, &mut writer).unwrap();
+        let mut opts = expectrl::interact::InteractOptions::default();
 
-        opts.interact(&mut session).await.unwrap();
+        opts.interact(&mut session, reader, &mut writer)
+            .await
+            .unwrap();
+        drop(opts);
 
         let buffer = String::from_utf8_lossy(writer.get_ref());
         let buffer = buffer.trim_end_matches(char::from(0));

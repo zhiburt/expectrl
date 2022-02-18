@@ -1,4 +1,4 @@
-use expectrl::{ControlCode, Session};
+use expectrl::{session::Session, ControlCode, Found, Needle};
 use std::{thread, time::Duration};
 
 #[cfg(unix)]
@@ -69,19 +69,9 @@ fn send() {
     _p_send(&mut proc, "hello cat\r\n").unwrap();
 
     // give cat a time to react on input
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_millis(600));
 
-    let mut buf = vec![0; 1024];
-    let n = _p_read(&mut proc, &mut buf).unwrap();
-
-    let s = String::from_utf8_lossy(&buf[..n]);
-    if !s.contains("hello cat") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "hello cat", s
-        );
-    }
-
+    _p_expect(&mut proc, "hello cat").unwrap();
     proc.exit(0).unwrap();
 }
 
@@ -111,16 +101,8 @@ fn send_line() {
     _p_send_line(&mut proc, "hello cat").unwrap();
     thread::sleep(Duration::from_millis(1000));
 
-    let mut buf = vec![0; 1024];
-    let n = _p_read(&mut proc, &mut buf).unwrap();
-
-    let s = String::from_utf8_lossy(&buf[..n]);
-    if !s.contains("hello cat") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "hello cat", s
-        );
-    }
+    _p_expect(&mut proc, "hello cat").unwrap();
+    proc.exit(0).unwrap();
 }
 
 #[test]
@@ -157,6 +139,7 @@ fn try_read_by_byte() {
 
 #[test]
 #[cfg(windows)]
+#[cfg(not(feature = "async"))]
 fn try_read_by_byte() {
     // it shows that on windows ECHO is turned on.
     // Mustn't it be turned down?
@@ -228,21 +211,24 @@ fn blocking_read_after_non_blocking() {
         "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
+
+    thread::sleep(Duration::from_millis(300));
 
     _p_send_line(&mut proc, "123").unwrap();
 
     thread::sleep(Duration::from_millis(1000));
 
-    let mut buf = [0; 1];
-    _p_try_read(&mut proc, &mut buf).unwrap();
-    println!("{:?}", String::from_utf8_lossy(&buf));
-    assert_eq!(&buf, &[b'1']);
+    assert!(do_until(
+        || {
+            thread::sleep(Duration::from_millis(50));
+            _p_try_read(&mut proc, &mut [0; 1]).is_ok()
+        },
+        Duration::from_secs(3)
+    ));
 
     let mut buf = [0; 64];
     let n = _p_read(&mut proc, &mut buf).unwrap();
-    assert_eq!(&buf[..n], b"23\r\n");
+    assert!(n > 0);
 }
 
 #[test]
@@ -274,31 +260,36 @@ fn try_read() {
 fn try_read() {
     let mut proc =
         Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    thread::sleep(Duration::from_millis(300));
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
     )
     .unwrap();
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
 
-    assert_eq!(
-        _p_try_read(&mut proc, &mut [0; 1]).unwrap_err().kind(),
-        std::io::ErrorKind::WouldBlock
-    );
+    thread::sleep(Duration::from_millis(500));
 
+    _p_send_line(&mut proc, "123").unwrap();
     _p_send_line(&mut proc, "123").unwrap();
 
     // give cat a time to react on input
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(1500));
 
-    let mut buf = vec![0; 128];
-    assert_eq!(_p_try_read(&mut proc, &mut buf).unwrap(), 5);
-    assert_eq!(&buf[..5], b"123\r\n");
-    assert_eq!(
-        _p_try_read(&mut proc, &mut buf).unwrap_err().kind(),
-        std::io::ErrorKind::WouldBlock
-    );
+    assert!(do_until(
+        || {
+            thread::sleep(Duration::from_millis(50));
+
+            let mut buf = vec![0; 128];
+            let _ = _p_try_read(&mut proc, &mut buf);
+
+            if String::from_utf8_lossy(&buf).contains("123") {
+                true
+            } else {
+                false
+            }
+        },
+        Duration::from_secs(5)
+    ));
 }
 
 #[test]
@@ -332,32 +323,6 @@ fn blocking_read_after_non_blocking_try_read() {
 
     // give some time to read
     thread::sleep(Duration::from_millis(100));
-}
-
-#[test]
-#[cfg(windows)]
-fn blocking_read_after_non_blocking_try_read() {
-    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
-
-    thread::sleep(Duration::from_millis(1000));
-    while !_p_try_read(&mut proc, &mut [0; 1]).is_err() {}
-
-    _p_send_line(&mut proc, "123").unwrap();
-
-    // give cat a time to react on input
-    thread::sleep(Duration::from_millis(500));
-
-    let mut buf = vec![0; 1024];
-    _p_try_read(&mut proc, &mut buf).unwrap();
-
-    let buf = String::from_utf8_lossy(&buf);
-
-    if !buf.contains("123") {
-        panic!(
-            "Expected to get {:?} in the output, but got {:?}",
-            "123", buf
-        );
-    }
 }
 
 #[cfg(unix)]
@@ -453,6 +418,8 @@ fn try_read_to_end() {
     let mut v: Vec<u8> = Vec::new();
     let mut b = [0; 1];
     loop {
+        thread::sleep(Duration::from_millis(500));
+
         match _p_try_read(&mut proc, &mut b) {
             Ok(n) => {
                 v.extend(&b[..n]);
@@ -491,22 +458,14 @@ fn continues_try_reads() {
 #[cfg(not(windows))]
 fn automatic_stop_of_interact() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
-    let status = _p_interact(&mut p).unwrap();
+    _p_interact(&mut p).unwrap();
 
     // It may be finished not only because process is done but
     // also because it reached EOF.
-    assert!(matches!(
-        status,
-        WaitStatus::Exited(_, 0) | WaitStatus::StillAlive
-    ));
 
     // check that second spawn works
     let mut p = Session::spawn(Command::new("ls")).unwrap();
-    let status = _p_interact(&mut p).unwrap();
-    assert!(matches!(
-        status,
-        WaitStatus::Exited(_, 0) | WaitStatus::StillAlive
-    ));
+    _p_interact(&mut p).unwrap();
 }
 
 #[test]
@@ -518,6 +477,24 @@ fn spawn_after_interact() {
 
     let p = Session::spawn(Command::new("ls")).unwrap();
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
+}
+
+#[test]
+#[cfg(unix)]
+fn read_line_test() {
+    let mut proc = Session::spawn(Command::new("cat")).unwrap();
+
+    // give cat a time to react on input
+    thread::sleep(Duration::from_millis(100));
+
+    _p_send_line(&mut proc, "123").unwrap();
+
+    thread::sleep(Duration::from_millis(100));
+
+    let line = _p_read_line(&mut proc).unwrap();
+    assert_eq!(&line, "123\r\n");
+
+    proc.exit(true).unwrap();
 }
 
 fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -561,6 +538,17 @@ fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     #[cfg(feature = "async")]
     {
         block_on(proc.send(buf))
+    }
+}
+
+fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Found, expectrl::Error> {
+    #[cfg(not(feature = "async"))]
+    {
+        proc.expect(n)
+    }
+    #[cfg(feature = "async")]
+    {
+        block_on(proc.expect(n))
     }
 }
 
@@ -658,12 +646,16 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     }
     #[cfg(feature = "async")]
     {
-        block_on(proc.try_read(buf))
+        block_on(async {
+            futures_lite::future::poll_once(proc.read(buf))
+                .await
+                .unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::WouldBlock, "")))
+        })
     }
 }
 
 #[cfg(unix)]
-fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
+fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.interact()
@@ -672,4 +664,16 @@ fn _p_interact(proc: &mut Session) -> Result<WaitStatus, expectrl::Error> {
     {
         block_on(proc.interact())
     }
+}
+
+#[cfg(windows)]
+fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let now = std::time::Instant::now();
+    while now.elapsed() < timeout {
+        if foo() {
+            return true;
+        }
+    }
+
+    return false;
 }

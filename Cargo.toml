@@ -13,17 +13,18 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-log = []
-async = ["futures-lite", "async-io"]
+async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 
 [dependencies]
 regex = "1.5.4"
 futures-lite = { version = "1.12.0", optional = true }
-async-io = { version = "1.6.0", optional = true }
+futures-timer = { version = "3.0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-conpty = "0.2.1"
+conpty = "0.3.0"
+blocking = { version = "1.1.0", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 ptyprocess = "0.3.0"
 nix = "0.21.0"
+async-io = { version = "1.6.0", optional = true }
