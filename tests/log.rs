@@ -46,7 +46,6 @@ fn log() {
         let mut session = spawn("powershell -C type".to_string())
             .unwrap()
             .with_log(writer.clone())
-            .await
             .unwrap();
         thread::sleep(Duration::from_millis(300));
 
