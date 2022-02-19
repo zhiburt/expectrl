@@ -1,15 +1,17 @@
+use std::ops::Index;
+
 use crate::needle::Match;
 
-/// Found is a represention of a matched pattern.
+/// Captures is a represention of matched pattern.
 ///
 /// It might represent an empty match.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Found {
+pub struct Captures {
     buf: Vec<u8>,
     matches: Vec<Match>,
 }
 
-impl Found {
+impl Captures {
     /// New returns an instance of Found.
     pub(crate) fn new(buf: Vec<u8>, matches: Vec<Match>) -> Self {
         Self { buf, matches }
@@ -20,12 +22,16 @@ impl Found {
         self.matches.is_empty()
     }
 
-    /// Matches returns a list of matches.
-    pub fn matches(&self) -> Vec<&[u8]> {
+    /// get returns a match by index.
+    pub fn get(&self, index: usize) -> Option<&[u8]> {
         self.matches
-            .iter()
+            .get(index)
             .map(|m| &self.buf[m.start()..m.end()])
-            .collect()
+    }
+
+    /// Matches returns a list of matches.
+    pub fn matches(&self) -> MatchIter<'_> {
+        MatchIter::new(self)
     }
 
     /// before returns a bytes before match.
@@ -56,25 +62,43 @@ impl Found {
     }
 }
 
-impl IntoIterator for Found {
-    type Item = Vec<u8>;
-    type IntoIter = std::vec::IntoIter<Vec<u8>>;
+impl Index<usize> for Captures {
+    type Output = [u8];
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.matches()
-            .into_iter()
-            .map(|m| m.to_vec())
-            .collect::<Vec<_>>()
-            .into_iter()
+    fn index(&self, index: usize) -> &Self::Output {
+        let m = &self.matches[index];
+        &self.buf[m.start()..m.end()]
     }
 }
 
-impl<'a> IntoIterator for &'a Found {
+impl<'a> IntoIterator for &'a Captures {
     type Item = &'a [u8];
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = MatchIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.matches().into_iter()
+        MatchIter::new(self)
+    }
+}
+
+pub struct MatchIter<'a> {
+    buf: &'a [u8],
+    matches: std::slice::Iter<'a, Match>,
+}
+
+impl<'a> MatchIter<'a> {
+    fn new(captures: &'a Captures) -> Self {
+        Self {
+            buf: &captures.buf,
+            matches: captures.matches.iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for MatchIter<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.matches.next().map(|m| &self.buf[m.start()..m.end()])
     }
 }
 
@@ -85,12 +109,12 @@ mod tests {
     #[test]
     fn test_iterator_on_found() {
         assert_eq!(
-            Found::new(
+            Captures::new(
                 b"You can use iterator".to_vec(),
                 vec![Match::new(0, 3), Match::new(4, 7)]
             )
             .into_iter()
-            .collect::<Vec<Vec<u8>>>(),
+            .collect::<Vec<&[u8]>>(),
             vec![b"You".to_vec(), b"can".to_vec()]
         );
     }

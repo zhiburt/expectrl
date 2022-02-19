@@ -66,7 +66,7 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.matches()[0], b"1");
+    /// assert_eq!(m.get(0).unwrap(), b"1");
     /// # });
     /// ```
     ///
@@ -91,7 +91,7 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.matches()[0], b"123");
+    /// assert_eq!(m.get(0).unwrap(), b"123");
     /// # });
     /// ```
     pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
@@ -356,7 +356,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.matches()[0], b"123");
+    /// assert_eq!(m.get(0).unwrap(), b"123");
     /// # });
     /// ```
     #[cfg(feature = "async")]

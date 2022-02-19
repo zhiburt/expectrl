@@ -57,7 +57,7 @@ pub mod session;
 
 pub use control_code::ControlCode;
 pub use error::Error;
-pub use found::Found;
+pub use found::Captures;
 pub use needle::{Any, Eof, NBytes, Needle, Regex};
 
 #[cfg(windows)]

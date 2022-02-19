@@ -1,6 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{error::Error, Found, Session};
+use crate::{error::Error, Captures, Session};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
@@ -244,13 +244,13 @@ impl ReplSession {
     }
 
     #[cfg(not(feature = "async"))]
-    fn _expect_prompt(&mut self) -> Result<Found, Error> {
+    fn _expect_prompt(&mut self) -> Result<Captures, Error> {
         let prompt = self.prompt.clone();
         self.expect(prompt)
     }
 
     #[cfg(feature = "async")]
-    async fn _expect_prompt(&mut self) -> Result<Found, Error> {
+    async fn _expect_prompt(&mut self) -> Result<Captures, Error> {
         let prompt = self.prompt.clone();
         self.expect(prompt).await
     }

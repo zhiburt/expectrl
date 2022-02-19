@@ -6,7 +6,7 @@ use crate::{
     session::Proc,
     session::Session,
     stream::stdin::Stdin,
-    ControlCode, Error,
+    Captures, ControlCode, Error,
 };
 use std::{
     borrow::Cow,
@@ -28,8 +28,7 @@ pub struct InteractOptions<P, S, R, W, C> {
 
 type ActionFn<S, R, W, C> = Box<dyn FnMut(Context<'_, S, R, W, C>) -> Result<(), Error>>;
 
-type OutputFn<S, R, W, C> =
-    Box<dyn FnMut(Context<'_, S, R, W, C>, crate::Found) -> Result<(), Error>>;
+type OutputFn<S, R, W, C> = Box<dyn FnMut(Context<'_, S, R, W, C>, Captures) -> Result<(), Error>>;
 
 type FilterFn = Box<dyn FnMut(&[u8]) -> Result<Cow<[u8]>, Error>>;
 
@@ -163,7 +162,7 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
     pub fn on_output<N, F>(mut self, needle: N, f: F) -> Self
     where
         N: crate::Needle + 'static,
-        F: FnMut(Context<'_, Session<P, S>, R, W, C>, crate::Found) -> Result<(), Error> + 'static,
+        F: FnMut(Context<'_, Session<P, S>, R, W, C>, Captures) -> Result<(), Error> + 'static,
     {
         self.output_handlers.push((Box::new(needle), Box::new(f)));
         self
@@ -225,9 +224,9 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
             for (search, callback) in self.output_handlers.iter_mut() {
                 let found = search.check(buf, eof)?;
                 if !found.is_empty() {
-                    let end_index = crate::Found::right_most_index(&found);
+                    let end_index = Captures::right_most_index(&found);
                     let involved_bytes = buf[..end_index].to_vec();
-                    let found = crate::Found::new(involved_bytes, found);
+                    let found = Captures::new(involved_bytes, found);
                     buf.drain(..end_index);
 
                     let context = Context {

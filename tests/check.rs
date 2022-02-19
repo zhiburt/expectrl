@@ -35,7 +35,7 @@ fn check_regex() {
 
     let m = session.check(Regex("lo.*")).unwrap();
     assert_eq!(m.before(), b"Hel");
-    assert_eq!(m.matches()[0], b"lo World\r");
+    assert_eq!(m.get(0).unwrap(), b"lo World\r");
 }
 
 #[cfg(unix)]
@@ -50,7 +50,7 @@ fn check_regex() {
 
         let m = session.check(Regex("lo.*")).await.unwrap();
         assert_eq!(m.before(), b"Hel");
-        assert_eq!(m.matches()[0], b"lo World\r");
+        assert_eq!(m.get(0).unwrap(), b"lo World\r");
     })
 }
 
@@ -64,7 +64,7 @@ fn check_n_bytes() {
     thread::sleep(Duration::from_millis(600));
 
     let m = session.check(NBytes(3)).unwrap();
-    assert_eq!(m.matches()[0], b"Hel");
+    assert_eq!(m.get(0).unwrap(), b"Hel");
     assert_eq!(m.before(), b"");
 }
 
@@ -79,7 +79,7 @@ fn check_n_bytes() {
         thread::sleep(Duration::from_millis(600));
 
         let m = session.check(NBytes(3)).await.unwrap();
-        assert_eq!(m.matches()[0], b"Hel");
+        assert_eq!(m.get(0).unwrap(), b"Hel");
         assert_eq!(m.before(), b"");
     })
 }
@@ -95,7 +95,7 @@ fn check_eof() {
     let m = session.check(Eof).unwrap();
     assert_eq!(m.before(), b"");
     #[cfg(target_os = "linux")]
-    assert_eq!(m.matches()[0], b"'Hello World'\r\n");
+    assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
     #[cfg(not(target_os = "linux"))]
     assert!(m.matches().is_empty());
 }
@@ -115,7 +115,7 @@ fn check_eof() {
         let m = session.check(Eof).await.unwrap();
         assert_eq!(m.before(), b"");
         #[cfg(target_os = "linux")]
-        assert_eq!(m.matches()[0], b"'Hello World'\r\n");
+        assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
         #[cfg(not(target_os = "linux"))]
         assert!(m.matches().is_empty());
     })
@@ -207,7 +207,7 @@ fn check_macro() {
     expectrl::check!(
         &mut session,
         world = "\r" => {
-            assert_eq!(world.matches()[0], b"\r");
+            assert_eq!(world.get(0).unwrap(), b"\r");
         },
         _ = "Hello World" => {
             panic!("Unexpected result");
@@ -232,7 +232,7 @@ fn check_macro() {
         expectrl::check!(
             session,
             // world = "\r" => {
-            //     assert_eq!(world.matches()[0], b"\r");
+            //     assert_eq!(world.get(0).unwrap(), b"\r");
             // },
             // _ = "Hello World" => {
             //     panic!("Unexpected result");
@@ -261,9 +261,9 @@ fn check_macro_eof() {
         &mut session,
         output = Eof => {
             #[cfg(target_os = "linux")]
-            assert_eq!(output.matches()[0], b"'Hello World'\r\n");
+            assert_eq!(output.get(0).unwrap(), b"'Hello World'\r\n");
             #[cfg(not(target_os = "linux"))]
-            assert_eq!(output.matches()[0], b"");
+            assert_eq!(output.get(0).unwrap(), b"");
             assert_eq!(output.before(), b"");
         },
         default => {
@@ -292,9 +292,9 @@ fn check_macro_eof() {
             session,
             output = Eof => {
                 #[cfg(target_os = "linux")]
-                assert_eq!(output.matches()[0], b"'Hello World'\r\n");
+                assert_eq!(output.get(0).unwrap(), b"'Hello World'\r\n");
                 #[cfg(not(target_os = "linux"))]
-                assert_eq!(output.matches()[0], b"");
+                assert_eq!(output.get(0).unwrap(), b"");
                 assert_eq!(output.before(), b"");
             },
             default => {
@@ -328,7 +328,7 @@ fn check_macro_doest_consume_missmatch() {
     expectrl::check!(
         &mut session,
         buffer = Eof => {
-            assert_eq!(buffer.matches()[0], b"Hello World\r\n")
+            assert_eq!(buffer.get(0).unwrap(), b"Hello World\r\n")
         },
     )
     .unwrap();
@@ -359,7 +359,7 @@ fn check_macro_doest_consume_missmatch() {
         expectrl::check!(
             session,
             buffer = Eof => {
-                assert_eq!(buffer.matches()[0], b"Hello World\r\n")
+                assert_eq!(buffer.get(0).unwrap(), b"Hello World\r\n")
             },
         )
         .await
@@ -375,7 +375,7 @@ fn check_macro_with_different_needles() {
         expectrl::check!(
             session,
             number = Any(["123", "345"]) => {
-                assert_eq!(number.matches()[0], b"345")
+                assert_eq!(number.get(0).unwrap(), b"345")
             },
             line = "\n" => {
                 assert_eq!(line.before(), b"Hello World\r")
@@ -411,7 +411,7 @@ fn check_macro_with_different_needles() {
         expectrl::check!(
             session,
             number = Any(["123", "345"]) => {
-                assert_eq!(number.matches()[0], b"345")
+                assert_eq!(number.get(0).unwrap(), b"345")
             },
             line = "\n" => {
                 assert_eq!(line.before(), b"Hello World\r")
@@ -429,7 +429,7 @@ fn check_macro_with_different_needles() {
         expectrl::check!(
             session,
             number = Any(["123", "345"]) => {
-                assert_eq!(number.matches()[0], b"345")
+                assert_eq!(number.get(0).unwrap(), b"345")
             },
             line = "\n" => {
                 assert_eq!(line.before(), b"Hello World\r")
