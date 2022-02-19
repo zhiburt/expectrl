@@ -21,13 +21,13 @@ use std::{
     task::{Context, Poll},
 };
 
+/// A windows representation of a [Process] via [conpty::Process].
 pub struct WinProcess {
     proc: Process,
 }
 
 impl ProcessTrait for WinProcess {
     type Command = ProcAttr;
-
     type Stream = ProcessStream;
 
     fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
@@ -68,6 +68,7 @@ impl DerefMut for WinProcess {
     }
 }
 
+/// An IO stream of [WinProcess].
 #[derive(Debug)]
 pub struct ProcessStream {
     pub input: PipeWriter,
@@ -119,6 +120,7 @@ impl IntoAsyncStream for ProcessStream {
     }
 }
 
+/// An async version of IO stream of [WinProcess].
 #[cfg(feature = "async")]
 pub struct AsyncProcessStream {
     stream: blocking::Unblock<ProcessStream>,

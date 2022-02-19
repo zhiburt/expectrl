@@ -15,16 +15,16 @@ fn main() {
 
         println!("{:?}", String::from_utf8_lossy(m.as_bytes()));
 
-        let is_eof = m.first().is_empty();
+        let is_eof = m.matches()[0].is_empty();
         if is_eof {
             break;
         }
 
-        if m.first() == [b'\n'] {
+        if m.matches()[0] == [b'\n'] {
             continue;
         }
 
-        println!("{:?}", String::from_utf8_lossy(m.first()));
+        println!("{:?}", String::from_utf8_lossy(m.matches()[0]));
     }
 }
 
@@ -43,16 +43,16 @@ fn main() {
                 .await
                 .expect("Expect failed");
 
-            let is_eof = m.first().is_empty();
+            let is_eof = m.matches()[0].is_empty();
             if is_eof {
                 break;
             }
 
-            if m.first() == [b'\n'] {
+            if m.matches()[0] == [b'\n'] {
                 continue;
             }
 
-            println!("{:?}", String::from_utf8_lossy(m.first()));
+            println!("{:?}", String::from_utf8_lossy(m.matches()[0]));
         }
     })
 }

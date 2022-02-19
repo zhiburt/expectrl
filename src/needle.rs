@@ -1,3 +1,5 @@
+//! A module which contains a [Needle] trait and a list of implementations.  
+
 use crate::error::Error;
 
 /// Needle an interface for search of a match in a buffer.

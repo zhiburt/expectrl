@@ -51,14 +51,31 @@ impl<P, S> Session<P, S> {
 }
 
 impl<P, S: AsyncRead + Unpin> Session<P, S> {
+    /// Expect waits until a pattern is matched.
+    ///
+    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
+    ///
+    /// This make assertions in a lazy manner. Starts from 1st byte then checks 2nd byte and goes further.
+    /// It is done intentinally to be presize.
+    /// Here's an example,
+    /// when you call this method with [crate::Regex] and output contains 123, expect will return ‘1’ as a match not ‘123’.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # futures_lite::future::block_on(async {
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
+    /// assert_eq!(m.matches()[0], b"1");
+    /// # });
+    /// ```
+    ///
+    /// This behaviour is different from [Session::check].
+    ///
+    /// It returns an error if timeout is reached.
+    /// You can specify a timeout value by [Session::set_expect_timeout] method.
     pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Found, Error> {
         self.stream.expect(needle).await
-    }
-
-    /// Is matched checks if a pattern is matched.
-    /// It doesn't consumes bytes from stream.
-    pub async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
-        self.stream.is_matched(needle).await
     }
 
     /// Check checks if a pattern is matched.
@@ -74,11 +91,17 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.first(), b"123");
+    /// assert_eq!(m.matches()[0], b"123");
     /// # });
     /// ```
     pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         self.stream.check(needle).await
+    }
+
+    /// Is matched checks if a pattern is matched.
+    /// It doesn't consumes bytes from stream.
+    pub async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+        self.stream.is_matched(needle).await
     }
 
     /// Verifyes if stream is empty or not.
@@ -333,7 +356,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.first(), b"123");
+    /// assert_eq!(m.matches()[0], b"123");
     /// # });
     /// ```
     #[cfg(feature = "async")]

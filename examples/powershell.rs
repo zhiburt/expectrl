@@ -27,8 +27,8 @@ fn main() {
             p.expect_prompt().await.unwrap();
             println!(
                 "/etc/passwd has {} lines, {} words, {} chars",
-                String::from_utf8_lossy(lines.first()),
-                String::from_utf8_lossy(words.first()),
+                String::from_utf8_lossy(lines.matches()[0]),
+                String::from_utf8_lossy(words.matches()[0]),
                 String::from_utf8_lossy(bytes.matches()[1]),
             );
 
@@ -38,7 +38,7 @@ fn main() {
                 let duration = p.expect(Regex("[0-9.]+ms")).await.unwrap();
                 println!(
                     "Roundtrip time: {}",
-                    String::from_utf8_lossy(duration.first())
+                    String::from_utf8_lossy(duration.matches()[0])
                 );
             }
 
@@ -67,8 +67,8 @@ fn main() {
         p.expect_prompt().unwrap();
         println!(
             "/etc/passwd has {} lines, {} words, {} chars",
-            String::from_utf8_lossy(lines.first()),
-            String::from_utf8_lossy(words.first()),
+            String::from_utf8_lossy(lines.matches()[0]),
+            String::from_utf8_lossy(words.matches()[0]),
             String::from_utf8_lossy(bytes.matches()[1]),
         );
 
@@ -78,7 +78,7 @@ fn main() {
             let duration = p.expect(Regex("[0-9.]+ms")).unwrap();
             println!(
                 "Roundtrip time: {}",
-                String::from_utf8_lossy(duration.first())
+                String::from_utf8_lossy(duration.matches()[0])
             );
         }
 

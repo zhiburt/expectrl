@@ -1,4 +1,6 @@
-//! A wrapper of [Session] to log a read/write operations
+//! This module container a [LoggedStream]
+//! which can wrap other streams in order to log a read/write operations.
+
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
@@ -14,12 +16,15 @@ use std::{
 
 use crate::process::NonBlocking;
 
+/// LoggedStream a IO stream wrapper,
+/// which logs each write/read operation.
 pub struct LoggedStream<S, W> {
     stream: S,
     logger: W,
 }
 
 impl<S, W> LoggedStream<S, W> {
+    /// Creates a new instance of the stream.
     pub fn new(stream: S, logger: W) -> Self {
         Self { stream, logger }
     }

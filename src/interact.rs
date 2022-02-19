@@ -14,7 +14,7 @@ use std::{
     io::{self, Read, Stdout, Write},
 };
 
-/// InteractOptions represents options of an interact session.
+/// InteractOptions represents options of an interactive session.
 pub struct InteractOptions<P, S, R, W, C> {
     escape_character: u8,
     input_filter: Option<FilterFn>,

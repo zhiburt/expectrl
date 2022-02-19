@@ -1,3 +1,5 @@
+//! The module contains a nonblocking version of [std::io::Stdin].  
+
 use crate::Error;
 use std::io::{self, Read};
 
@@ -20,7 +22,7 @@ use conpty::console::Console;
 /// A non blocking version of STDIN.
 ///
 /// It's not recomended to be used directly.
-/// But we expose it because its used in [InteractOptions::terminal]
+/// But we expose it because its used in [crate::interact::InteractOptions::interact_in_terminal].
 #[cfg(unix)]
 pub struct Stdin {
     stdin: io::Stdin,
@@ -30,6 +32,10 @@ pub struct Stdin {
 
 #[cfg(unix)]
 impl Stdin {
+    /// Creates a new instance of Stdin.
+    ///
+    /// It changes terminal's STDIN state therefore, after
+    /// it's used please call [Stdin::close].
     pub fn new(pty: &mut PtyProcess) -> Result<Self, Error> {
         let stdin = io::stdin();
         let mut stdin = Self {
@@ -75,6 +81,10 @@ impl Stdin {
         Ok(())
     }
 
+    /// Close frees a resources which were used.
+    ///
+    /// It must be called [Stdin] was used.
+    /// Otherwise the STDIN might be returned to original state.
     pub fn close(self, pty: &mut PtyProcess) -> Result<(), Error> {
         if let Some(origin_stdin_flags) = self.orig_flags {
             termios::tcsetattr(
@@ -119,7 +129,10 @@ impl futures_lite::AsyncRead for Stdin {
     }
 }
 
-/// See unix version
+/// A non blocking version of STDIN.
+///
+/// It's not recomended to be used directly.
+/// But we expose it because its used in [crate::interact::InteractOptions::interact_in_terminal].
 #[cfg(windows)]
 pub struct Stdin {
     current_terminal: Console,
@@ -127,6 +140,10 @@ pub struct Stdin {
 
 #[cfg(windows)]
 impl Stdin {
+    /// Creates a new instance of Stdin.
+    ///
+    /// It changes terminal's STDIN state therefore, after
+    /// it's used please call [Stdin::close].
     pub fn new(_session: &mut WinProcess) -> Result<Self, Error> {
         let console = conpty::console::Console::current().map_err(to_io_error)?;
         let mut stdin = Self {
@@ -141,6 +158,10 @@ impl Stdin {
         Ok(())
     }
 
+    /// Close frees a resources which were used.
+    ///
+    /// It must be called [Stdin] was used.
+    /// Otherwise the STDIN might be returned to original state.
     pub fn close(&mut self, _session: &mut WinProcess) -> Result<(), Error> {
         self.current_terminal.reset().map_err(to_io_error)?;
         Ok(())

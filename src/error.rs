@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn unknown(message: impl Into<String>, err: impl Display) -> Error {
+    pub(crate) fn unknown(message: impl Into<String>, err: impl Display) -> Error {
         Self::Other {
             message: message.into(),
             origin: err.to_string(),
@@ -44,6 +44,6 @@ impl From<io::Error> for Error {
     }
 }
 
-pub fn to_io_error<E: Display>(message: &'static str) -> impl FnOnce(E) -> io::Error {
+pub(crate) fn to_io_error<E: Display>(message: &'static str) -> impl FnOnce(E) -> io::Error {
     move |e: E| io::Error::new(io::ErrorKind::Other, format!("{}; {}", message, e))
 }

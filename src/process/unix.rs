@@ -19,6 +19,7 @@ use std::{
     process::Command,
 };
 
+/// A Unix representation of a [Process] via [PtyProcess]
 pub struct UnixProcess {
     proc: PtyProcess,
 }
@@ -80,6 +81,7 @@ impl DerefMut for UnixProcess {
     }
 }
 
+/// A IO stream (write/read) of [UnixProcess].
 #[derive(Debug)]
 pub struct PtyStream {
     handle: Stream,
@@ -172,6 +174,7 @@ impl AsRawFd for PtyStream {
     }
 }
 
+/// An async version of IO stream of [UnixProcess].
 #[cfg(feature = "async")]
 pub struct AsyncPtyStream {
     stream: async_io::Async<PtyStream>,
