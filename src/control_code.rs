@@ -1,3 +1,5 @@
+//! A module which contains [ControlCode] type.
+
 use std::convert::TryFrom;
 
 /// ControlCode represents the standard ASCII control codes [wiki]

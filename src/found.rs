@@ -20,12 +20,6 @@ impl Found {
         self.matches.is_empty()
     }
 
-    /// First returns a first match.
-    pub fn first(&self) -> &[u8] {
-        let m = &self.matches[0];
-        &self.buf[m.start()..m.end()]
-    }
-
     /// Matches returns a list of matches.
     pub fn matches(&self) -> Vec<&[u8]> {
         self.matches

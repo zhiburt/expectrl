@@ -58,6 +58,27 @@ impl<P, S> Session<P, S> {
 }
 
 impl<P, S: Read + NonBlocking> Session<P, S> {
+    /// Expect waits until a pattern is matched.
+    ///
+    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
+    ///
+    /// This make assertions in a lazy manner. Starts from 1st byte then checks 2nd byte and goes further.
+    /// It is done intentinally to be presize.
+    /// Here's an example,
+    /// when you call this method with [crate::Regex] and output contains 123, expect will return ‘1’ as a match not ‘123’.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m.matches()[0], b"1");
+    /// ```
+    ///
+    /// This behaviour is different from [Session::check].
+    ///
+    /// It returns an error if timeout is reached.
+    /// You can specify a timeout value by [Session::set_expect_timeout] method.
     pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
         let mut checking_data_length = 0;
         let mut eof = false;
@@ -111,6 +132,22 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
         }
     }
 
+    /// Check verifies if a pattern is matched.
+    /// Returns empty found structure if nothing found.
+    ///
+    /// Is a non blocking version of [Session::expect].
+    /// But its strategy of matching is different from it.
+    /// It makes search against all bytes available.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// // wait to guarantee that check will successed (most likely)
+    /// std::thread::sleep(std::time::Duration::from_secs(1));
+    /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m.matches()[0], b"123");
+    /// ```
     pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
@@ -130,6 +167,33 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
         Ok(Found::new(Vec::new(), Vec::new()))
     }
 
+    /// The functions checks if a pattern is matched.
+    /// It doesn’t consumes bytes from stream.
+    ///
+    /// Its strategy of matching is different from the one in [Session::expect].
+    /// It makes search agains all bytes available.
+    ///
+    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option.
+    /// Because it is not guaranteed that [Session::check] or [Session::expect] with the same parameters:
+    ///     - will successed even right after Session::is_matched call.
+    ///     - will operate on the same bytes.
+    ///
+    /// IMPORTANT:
+    ///  
+    /// If you call this method with [crate::Eof] pattern be aware that eof
+    /// indication MAY be lost on the next interactions.
+    /// It depends from a process you spawn.
+    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// // wait to guarantee that check will successed (most likely)
+    /// std::thread::sleep(std::time::Duration::from_secs(1));
+    /// let m = p.is_matched(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m, true);
+    /// ```
     pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
@@ -148,11 +212,16 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
 }
 
 impl<P, S: Write> Session<P, S> {
+    /// Send text to child’s STDIN.
+    ///
+    /// You can also use methods from [std::io::Write] instead.
     pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
         self.stream.write_all(s.as_ref().as_bytes())
     }
 
+    /// Send a line to child’s STDIN.
     pub fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
+        // fixme: move it to a processes stream function.
         #[cfg(windows)]
         {
             // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
@@ -186,6 +255,24 @@ impl<P, S: Write> Session<P, S> {
         }
     }
 
+    /// Sends controll character to a child process.
+    ///
+    /// You must be carefull passing a char or &str as an argument.
+    /// If you pass an unexpected controll you’ll get a error.
+    /// So it may be better to use [ControlCode].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use expectrl::{spawn, ControlCode};
+    /// use std::process::Command;
+    ///
+    /// let mut process = spawn("cat").unwrap();
+    ///
+    /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
+    /// process.send_control('C'); // sends CTRL^C
+    /// process.send_control("^C"); // sends CTRL^C
+    /// ```
     pub fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
         let code = code
             .try_into()
@@ -254,39 +341,39 @@ impl<P, S> DerefMut for Session<P, S> {
 }
 
 #[derive(Debug)]
-pub struct TryStream<S> {
+struct TryStream<S> {
     stream: ControlledReader<S>,
 }
 
 impl<S> TryStream<S> {
-    pub fn into_inner(self) -> S {
+    fn into_inner(self) -> S {
         self.stream.inner.into_inner().inner
     }
 }
 
 impl<S: Read> TryStream<S> {
     /// The function returns a new Stream from a file.
-    pub fn new(stream: S) -> io::Result<Self> {
+    fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
             stream: ControlledReader::new(stream),
         })
     }
 
-    pub fn flush_in_buffer(&mut self) {
+    fn flush_in_buffer(&mut self) {
         self.stream.flush_in_buffer();
     }
 }
 
 impl<S> TryStream<S> {
-    pub fn keep_in_buffer(&mut self, v: &[u8]) {
+    fn keep_in_buffer(&mut self, v: &[u8]) {
         self.stream.keep_in_buffer(v);
     }
 
-    pub fn get_available(&mut self) -> &[u8] {
+    fn get_available(&mut self) -> &[u8] {
         self.stream.get_available()
     }
 
-    pub fn consume_available(&mut self, n: usize) {
+    fn consume_available(&mut self, n: usize) {
         self.stream.consume_available(n)
     }
 }
@@ -295,7 +382,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
     /// Try to read in a non-blocking mode.
     ///
     /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
-    pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.get_mut().set_non_blocking()?;
 
         let result = match self.stream.inner.read(buf) {
@@ -310,7 +397,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
         result
     }
 
-    pub fn is_empty(&mut self) -> io::Result<bool> {
+    fn is_empty(&mut self) -> io::Result<bool> {
         match self.try_read(&mut []) {
             Ok(0) => Ok(true),
             Ok(_) => Ok(false),
@@ -319,7 +406,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
         }
     }
 
-    pub fn read_available(&mut self) -> std::io::Result<bool> {
+    fn read_available(&mut self) -> std::io::Result<bool> {
         self.stream.flush_in_buffer();
 
         let mut buf = [0; 248];
@@ -335,7 +422,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
         }
     }
 
-    pub fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
+    fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
         self.stream.flush_in_buffer();
 
         match self.try_read_inner(buf) {
@@ -397,18 +484,18 @@ impl<R: Read> BufRead for TryStream<R> {
 }
 
 #[derive(Debug)]
-pub struct ControlledReader<R> {
+struct ControlledReader<R> {
     inner: BufReader<BufferedReader<R>>,
 }
 
 impl<R: Read> ControlledReader<R> {
-    pub fn new(reader: R) -> Self {
+    fn new(reader: R) -> Self {
         Self {
             inner: BufReader::new(BufferedReader::new(reader)),
         }
     }
 
-    pub fn flush_in_buffer(&mut self) {
+    fn flush_in_buffer(&mut self) {
         // Because we have 2 buffered streams there might appear inconsistancy
         // in read operations and the data which was via `keep_in_buffer` function.
         //
@@ -420,19 +507,19 @@ impl<R: Read> ControlledReader<R> {
 }
 
 impl<R> ControlledReader<R> {
-    pub fn keep_in_buffer(&mut self, v: &[u8]) {
+    fn keep_in_buffer(&mut self, v: &[u8]) {
         self.inner.get_mut().buffer.extend(v);
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
+    fn get_mut(&mut self) -> &mut R {
         &mut self.inner.get_mut().inner
     }
 
-    pub fn get_available(&mut self) -> &[u8] {
+    fn get_available(&mut self) -> &[u8] {
         &self.inner.get_ref().buffer
     }
 
-    pub fn consume_available(&mut self, n: usize) {
+    fn consume_available(&mut self, n: usize) {
         self.inner.get_mut().buffer.drain(..n);
     }
 }

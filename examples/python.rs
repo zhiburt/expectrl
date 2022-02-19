@@ -9,7 +9,7 @@ fn main() {
 
     let found = p.expect(Regex(r"'.*'")).unwrap();
 
-    println!("Platform {}", String::from_utf8_lossy(found.first()));
+    println!("Platform {}", String::from_utf8_lossy(found.matches()[0]));
 }
 
 #[cfg(feature = "async")]
@@ -22,6 +22,6 @@ fn main() {
 
         let found = p.expect(Regex(r"'.*'")).await.unwrap();
 
-        println!("Platform {}", String::from_utf8_lossy(found.first()));
+        println!("Platform {}", String::from_utf8_lossy(found.matches()[0]));
     })
 }
