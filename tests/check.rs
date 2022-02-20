@@ -110,7 +110,7 @@ fn check_eof() {
         thread::sleep(Duration::from_millis(600));
 
         let m = session.check(Eof).await.unwrap();
-        assert!(m.matches().is_empty());
+        assert!(m.matches().count() == 0);
 
         let m = session.check(Eof).await.unwrap();
         assert_eq!(m.before(), b"");
@@ -286,7 +286,7 @@ fn check_macro_eof() {
 
     futures_lite::future::block_on(async {
         let m = session.check(Eof).await.unwrap();
-        assert!(m.matches().is_empty());
+        assert!(m.matches().next().is_none());
 
         expectrl::check!(
             session,

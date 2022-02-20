@@ -11,7 +11,7 @@ use futures_lite::{
     ready, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
 };
 
-use crate::{error::to_io_error, stream::log::LoggedStream, ControlCode, Error, Found, Needle};
+use crate::{error::to_io_error, Captures, ControlCode, Error, Needle};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -74,7 +74,7 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     ///
     /// It returns an error if timeout is reached.
     /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Found, Error> {
+    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         self.stream.expect(needle).await
     }
 
@@ -94,7 +94,7 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// # });
     /// ```
-    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
         self.stream.check(needle).await
     }
 
@@ -257,7 +257,7 @@ impl<S> Stream<S> {
 }
 
 impl<S: AsyncRead + Unpin> Stream<S> {
-    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Found, Error> {
+    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         let expect_timeout = self.expect_timeout;
         let expect_future = async {
             // We read by byte to make things as lazy as possible.
@@ -295,10 +295,10 @@ impl<S: AsyncRead + Unpin> Stream<S> {
                 let data = &available[..checked_length];
                 let found = Needle::check(&needle, data, eof)?;
                 if !found.is_empty() {
-                    let end_index = Found::right_most_index(&found);
+                    let end_index = Captures::right_most_index(&found);
                     let involved_bytes = data[..end_index].to_vec();
                     self.stream.consume(end_index);
-                    return Ok(Found::new(involved_bytes, found));
+                    return Ok(Captures::new(involved_bytes, found));
                 }
 
                 if eof {
@@ -360,7 +360,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     /// # });
     /// ```
     #[cfg(feature = "async")]
-    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
         let eof = match futures_lite::future::poll_once(self.stream.fill()).await {
             Some(Ok(n)) => n == 0,
             Some(Err(err)) => return Err(err.into()),
@@ -370,17 +370,17 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         let buf = self.stream.buffer();
         let found = needle.check(buf, eof)?;
         if !found.is_empty() {
-            let end_index = Found::right_most_index(&found);
+            let end_index = Captures::right_most_index(&found);
             let involved_bytes = buf[..end_index].to_vec();
             self.stream.consume(end_index);
-            return Ok(Found::new(involved_bytes, found));
+            return Ok(Captures::new(involved_bytes, found));
         }
 
         if eof {
             return Err(Error::Eof);
         }
 
-        Ok(Found::new(Vec::new(), Vec::new()))
+        Ok(Captures::new(Vec::new(), Vec::new()))
     }
 
     /// Verifyes if stream is empty or not.
@@ -540,7 +540,7 @@ mod tests {
         futures_lite::future::block_on(async {
             let found = stream.expect("World").await.unwrap();
             assert_eq!(b"Hello ", found.before());
-            assert_eq!(vec![b"World"], found.matches());
+            assert_eq!(vec![b"World"], found.matches().collect::<Vec<_>>());
         });
     }
 
@@ -553,7 +553,7 @@ mod tests {
         futures_lite::future::block_on(async {
             let found = stream.expect(Eof).await.unwrap();
             assert_eq!(b"", found.before());
-            assert_eq!(vec![b"Hello World"], found.matches());
+            assert_eq!(vec![b"Hello World"], found.matches().collect::<Vec<_>>());
         });
 
         let cursor = futures_lite::io::Cursor::new(Vec::new());
@@ -579,7 +579,7 @@ mod tests {
             stream.write_all(b" World").await.unwrap();
             let found = stream.expect("World").await.unwrap();
             assert_eq!(b"Hello ", found.before());
-            assert_eq!(vec![b"World"], found.matches());
+            assert_eq!(vec![b"World"], found.matches().collect::<Vec<_>>());
         });
     }
 
@@ -592,7 +592,7 @@ mod tests {
         futures_lite::future::block_on(async {
             let found = stream.check("World").await.unwrap();
             assert_eq!(b"Hello ", found.before());
-            assert_eq!(vec![b"World"], found.matches());
+            assert_eq!(vec![b"World"], found.matches().collect::<Vec<_>>());
         });
     }
 
@@ -606,7 +606,7 @@ mod tests {
 
             let found = stream.check("World").await.unwrap();
             assert_eq!(b"Hello ", found.before());
-            assert_eq!(vec![b"World"], found.matches());
+            assert_eq!(vec![b"World"], found.matches().collect::<Vec<_>>());
         });
     }
 
