@@ -107,7 +107,111 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_iterator_on_found() {
+    fn test_captures_get() {
+        let m = Captures::new(
+            b"You can use iterator".to_vec(),
+            vec![Match::new(0, 3), Match::new(4, 7)],
+        );
+
+        assert_eq!(m.get(0), Some(b"You".as_ref()));
+        assert_eq!(m.get(1), Some(b"can".as_ref()));
+        assert_eq!(m.get(2), None);
+
+        let m = Captures::new(b"You can use iterator".to_vec(), vec![]);
+        assert_eq!(m.get(0), None);
+        assert_eq!(m.get(1), None);
+        assert_eq!(m.get(2), None);
+
+        let m = Captures::new(vec![], vec![]);
+        assert_eq!(m.get(0), None);
+        assert_eq!(m.get(1), None);
+        assert_eq!(m.get(2), None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_get_panics_on_invalid_match() {
+        let m = Captures::new(b"Hello World".to_vec(), vec![Match::new(0, 100)]);
+        let _ = m.get(0);
+    }
+
+    #[test]
+    fn test_captures_index() {
+        let m = Captures::new(
+            b"You can use iterator".to_vec(),
+            vec![Match::new(0, 3), Match::new(4, 7)],
+        );
+
+        assert_eq!(&m[0], b"You".as_ref());
+        assert_eq!(&m[1], b"can".as_ref());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_index_panics_on_invalid_match() {
+        let m = Captures::new(b"Hello World".to_vec(), vec![Match::new(0, 100)]);
+        let _ = &m[0];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_index_panics_on_invalid_index() {
+        let m = Captures::new(b"Hello World".to_vec(), vec![Match::new(0, 3)]);
+        let _ = &m[10];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_index_panics_on_empty_match() {
+        let m = Captures::new(b"Hello World".to_vec(), vec![]);
+        let _ = &m[0];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_index_panics_on_empty_captures() {
+        let m = Captures::new(Vec::new(), Vec::new());
+        let _ = &m[0];
+    }
+
+    #[test]
+    fn test_before() {
+        let m = Captures::new(b"You can use iterator".to_vec(), vec![Match::new(4, 7)]);
+        assert_eq!(m.before(), b"You ".as_ref());
+
+        let m = Captures::new(
+            b"You can use iterator".to_vec(),
+            vec![Match::new(0, 3), Match::new(4, 7)],
+        );
+        assert_eq!(m.before(), b"".as_ref());
+
+        let m = Captures::new(b"You can use iterator".to_vec(), vec![]);
+        assert_eq!(m.before(), b"".as_ref());
+
+        let m = Captures::new(vec![], vec![]);
+        assert_eq!(m.before(), b"".as_ref());
+    }
+
+    #[test]
+    fn test_matches() {
+        let m = Captures::new(b"You can use iterator".to_vec(), vec![Match::new(4, 7)]);
+        assert_eq!(m.before(), b"You ".as_ref());
+
+        let m = Captures::new(
+            b"You can use iterator".to_vec(),
+            vec![Match::new(0, 3), Match::new(4, 7)],
+        );
+        assert_eq!(m.before(), b"".as_ref());
+
+        let m = Captures::new(b"You can use iterator".to_vec(), vec![]);
+        assert_eq!(m.before(), b"".as_ref());
+
+        let m = Captures::new(vec![], vec![]);
+        assert_eq!(m.before(), b"".as_ref());
+    }
+
+    #[test]
+    fn test_captures_into_iter() {
         assert_eq!(
             Captures::new(
                 b"You can use iterator".to_vec(),
@@ -115,7 +219,56 @@ mod tests {
             )
             .into_iter()
             .collect::<Vec<&[u8]>>(),
-            vec![b"You".to_vec(), b"can".to_vec()]
+            vec![b"You", b"can"]
         );
+
+        assert_eq!(
+            Captures::new(b"You can use iterator".to_vec(), vec![Match::new(4, 20)])
+                .into_iter()
+                .collect::<Vec<&[u8]>>(),
+            vec![b"can use iterator"]
+        );
+
+        assert_eq!(
+            Captures::new(b"You can use iterator".to_vec(), vec![])
+                .into_iter()
+                .collect::<Vec<&[u8]>>(),
+            Vec::<&[u8]>::new()
+        );
+    }
+
+    #[test]
+    fn test_captures_matches() {
+        assert_eq!(
+            Captures::new(
+                b"You can use iterator".to_vec(),
+                vec![Match::new(0, 3), Match::new(4, 7)]
+            )
+            .matches()
+            .collect::<Vec<_>>(),
+            vec![b"You", b"can"]
+        );
+
+        assert_eq!(
+            Captures::new(b"You can use iterator".to_vec(), vec![Match::new(4, 20)])
+                .matches()
+                .collect::<Vec<_>>(),
+            vec![b"can use iterator"]
+        );
+
+        assert_eq!(
+            Captures::new(b"You can use iterator".to_vec(), vec![])
+                .matches()
+                .collect::<Vec<_>>(),
+            Vec::<&[u8]>::new()
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_captures_into_iter_panics_on_invalid_match() {
+        Captures::new(b"Hello World".to_vec(), vec![Match::new(0, 100)])
+            .into_iter()
+            .for_each(|_| {});
     }
 }
