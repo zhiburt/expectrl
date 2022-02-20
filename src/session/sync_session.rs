@@ -12,7 +12,7 @@ use crate::{
     error::{to_io_error, Error},
     needle::Needle,
     process::NonBlocking,
-    Found,
+    Captures,
 };
 
 /// Session represents a spawned process and its streams.
@@ -72,14 +72,14 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// ```
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.matches()[0], b"1");
+    /// assert_eq!(m.get(0).unwrap(), b"1");
     /// ```
     ///
     /// This behaviour is different from [Session::check].
     ///
     /// It returns an error if timeout is reached.
     /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Found, Error> {
+    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Captures, Error> {
         let mut checking_data_length = 0;
         let mut eof = false;
         let start = time::Instant::now();
@@ -114,10 +114,10 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
 
             let found = expect.check(data, eof)?;
             if !found.is_empty() {
-                let end_index = Found::right_most_index(&found);
+                let end_index = Captures::right_most_index(&found);
                 let involved_bytes = data[..end_index].to_vec();
                 self.stream.consume_available(end_index);
-                return Ok(Found::new(involved_bytes, found));
+                return Ok(Captures::new(involved_bytes, found));
             }
 
             if eof {
@@ -146,25 +146,25 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.matches()[0], b"123");
+    /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
-    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Found, Error> {
+    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
         let found = needle.check(buf, eof)?;
         if !found.is_empty() {
-            let end_index = Found::right_most_index(&found);
+            let end_index = Captures::right_most_index(&found);
             let involved_bytes = buf[..end_index].to_vec();
             self.stream.consume_available(end_index);
-            return Ok(Found::new(involved_bytes, found));
+            return Ok(Captures::new(involved_bytes, found));
         }
 
         if eof {
             return Err(Error::Eof);
         }
 
-        Ok(Found::new(Vec::new(), Vec::new()))
+        Ok(Captures::new(Vec::new(), Vec::new()))
     }
 
     /// The functions checks if a pattern is matched.

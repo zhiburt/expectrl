@@ -1,4 +1,4 @@
-use expectrl::{session::Session, ControlCode, Found, Needle};
+use expectrl::{session::Session, Captures, ControlCode, Needle};
 use std::{thread, time::Duration};
 
 #[cfg(unix)]
@@ -541,7 +541,7 @@ fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Found, expectrl::Error> {
+fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Captures, expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.expect(n)

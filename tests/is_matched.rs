@@ -166,10 +166,10 @@ fn check_after_is_matched_eof() {
     let m = p.check(Eof).unwrap();
 
     #[cfg(target_os = "linux")]
-    assert_eq!(m.matches()[0], b"AfterSleep\r\n");
+    assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
     #[cfg(not(target_os = "linux"))]
-    assert_eq!(m.matches()[0], b"");
+    assert_eq!(m.get(0).unwrap(), b"");
 }
 
 #[cfg(unix)]
@@ -186,7 +186,7 @@ fn check_after_is_matched_eof() {
         let m = p.check(Eof).await.unwrap();
 
         #[cfg(target_os = "linux")]
-        assert_eq!(m.matches()[0], b"AfterSleep\r\n");
+        assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
         #[cfg(not(target_os = "linux"))]
         assert!(m.matches().is_empty());
@@ -204,10 +204,10 @@ fn expect_after_is_matched_eof() {
     let m = p.expect(Eof).unwrap();
 
     #[cfg(target_os = "linux")]
-    assert_eq!(m.matches()[0], b"AfterSleep\r\n");
+    assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
     #[cfg(not(target_os = "linux"))]
-    assert_eq!(m.matches()[0], b"");
+    assert_eq!(m.get(0).unwrap(), b"");
 
     assert!(matches!(p.expect("").unwrap_err(), expectrl::Error::Eof));
 }
@@ -226,7 +226,7 @@ fn expect_after_is_matched_eof() {
         let m = p.expect(Eof).await.unwrap();
 
         #[cfg(target_os = "linux")]
-        assert_eq!(m.matches()[0], b"AfterSleep\r\n");
+        assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
         #[cfg(not(target_os = "linux"))]
         assert!(m.matches().is_empty());

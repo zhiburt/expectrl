@@ -24,9 +24,9 @@ fn main() {
     p.expect_prompt().unwrap(); // go sure `wc` is really done
     println!(
         "/etc/passwd has {} lines, {} words, {} chars",
-        String::from_utf8_lossy(lines.matches()[0]),
-        String::from_utf8_lossy(words.matches()[0]),
-        String::from_utf8_lossy(bytes.matches()[0]),
+        String::from_utf8_lossy(&lines[0]),
+        String::from_utf8_lossy(&words[0]),
+        String::from_utf8_lossy(&bytes[0]),
     );
 
     // case 3: read while program is still executing
@@ -34,10 +34,7 @@ fn main() {
     for _ in 0..5 {
         // times out if one ping takes longer than 2s
         let duration = p.expect(Regex("[0-9. ]+ ms")).unwrap();
-        println!(
-            "Roundtrip time: {}",
-            String::from_utf8_lossy(duration.matches()[0])
-        );
+        println!("Roundtrip time: {}", String::from_utf8_lossy(&duration[0]));
     }
 
     p.send_control(ControlCode::EOT).unwrap();
@@ -67,9 +64,9 @@ fn main() {
         p.expect_prompt().await.unwrap(); // go sure `wc` is really done
         println!(
             "/etc/passwd has {} lines, {} words, {} chars",
-            String::from_utf8_lossy(lines.matches()[0]),
-            String::from_utf8_lossy(words.matches()[0]),
-            String::from_utf8_lossy(bytes.matches()[0]),
+            String::from_utf8_lossy(lines.get(0).unwrap()),
+            String::from_utf8_lossy(words.get(0).unwrap()),
+            String::from_utf8_lossy(bytes.get(0).unwrap()),
         );
 
         // case 3: read while program is still executing
@@ -79,7 +76,7 @@ fn main() {
             let duration = p.expect(Regex("[0-9. ]+ ms")).await.unwrap();
             println!(
                 "Roundtrip time: {}",
-                String::from_utf8_lossy(duration.matches()[0])
+                String::from_utf8_lossy(duration.get(0).unwrap())
             );
         }
 
