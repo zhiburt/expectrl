@@ -42,11 +42,11 @@
 //! - It supports interact function.
 //! - It has a Windows support.
 
+mod captures;
 #[cfg(unix)]
 mod check_macros;
 mod control_code;
 mod error;
-mod found;
 mod needle;
 mod process;
 pub mod stream;
@@ -55,9 +55,9 @@ pub mod interact;
 pub mod repl;
 pub mod session;
 
+pub use captures::Captures;
 pub use control_code::ControlCode;
 pub use error::Error;
-pub use found::Captures;
 pub use needle::{Any, Eof, NBytes, Needle, Regex};
 
 #[cfg(windows)]
