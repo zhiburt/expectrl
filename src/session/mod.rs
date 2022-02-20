@@ -157,6 +157,8 @@ where
     /// let mut p = expectrl::spawn("cat").unwrap();
     /// p.interact().unwrap();
     /// ```
+    ///
+    /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
     pub fn interact(&mut self) -> Result<(), Error> {
         crate::interact::InteractOptions::default().interact_in_terminal(self)
     }
@@ -191,6 +193,8 @@ where
     /// p.interact().await.unwrap();
     /// # });
     /// ```
+    ///
+    /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
     pub async fn interact(&mut self) -> Result<(), Error> {
         crate::interact::InteractOptions::default()
             .interact_in_terminal(self)

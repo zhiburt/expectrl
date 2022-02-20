@@ -1,4 +1,7 @@
-//! A module which contains a [Needle] trait and a list of implementations.  
+//! A module which contains a [Needle] trait and a list of implementations.
+//! [Needle] is used for seach in a byte stream.
+//!
+//! The list of provided implementations can be found in the documentation.
 
 use crate::error::Error;
 
@@ -38,7 +41,7 @@ impl From<regex::bytes::Match<'_>> for Match {
     }
 }
 
-/// Regex checks a match by regex.
+/// Regex tries to look up a match by a regex.
 pub struct Regex<Re: AsRef<str>>(pub Re);
 
 impl<Re: AsRef<str>> Needle for Regex<Re> {
@@ -53,7 +56,7 @@ impl<Re: AsRef<str>> Needle for Regex<Re> {
     }
 }
 
-/// Eof consider a match when it's reached a EOF.
+/// Eof consider a match when an EOF is reached.
 pub struct Eof;
 
 impl Needle for Eof {
@@ -65,7 +68,7 @@ impl Needle for Eof {
     }
 }
 
-/// NBytes matches N bytes.
+/// NBytes matches N bytes from the stream.
 pub struct NBytes(pub usize);
 
 impl NBytes {
@@ -140,13 +143,16 @@ impl Needle for char {
     }
 }
 
-/// Any matches first Needle which returns a match.
+/// Any matches uses all provided lookups and returns a match
+/// from a first successfull match.
+///
+/// It does checks lookups in order they were provided.
 ///
 /// ```no_run,ignore
 /// Any(["we", "are", "here"])
 /// ```
 ///
-/// To be able to use a different type of needles you can call [Any::boxed].
+/// To be able to combine different types of lookups you can call [Any::boxed].
 ///
 /// ```no_run,ignore
 /// Any::boxed(vec![Box::new("we"), Box::new(NBytes(3))])
@@ -154,6 +160,7 @@ impl Needle for char {
 pub struct Any<I>(pub I);
 
 impl Any<Vec<Box<dyn Needle>>> {
+    /// Boxed expectes a list of [Box]ed lookups.
     pub fn boxed(v: Vec<Box<dyn Needle>>) -> Self {
         Self(v)
     }

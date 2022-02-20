@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! # A tool for automating terminal applications on Unix and on Windows.
 //!
 //! Using the library you can:
@@ -55,6 +57,8 @@ pub mod interact;
 pub mod repl;
 pub mod session;
 
+use session::Session;
+
 pub use captures::Captures;
 pub use control_code::ControlCode;
 pub use error::Error;
@@ -65,7 +69,6 @@ pub use conpty::ProcAttr;
 
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
-use session::Session;
 
 /// Spawn spawnes a new session.
 ///

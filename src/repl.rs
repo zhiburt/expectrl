@@ -183,13 +183,14 @@ pub struct ReplSession {
 }
 
 impl ReplSession {
+    /// Spawn function spawns a repl session.
     #[cfg(unix)]
     pub fn spawn<PP: AsRef<str>, Q: AsRef<str>>(
         cmd: Command,
         prompt: PP,
         quit_command: Option<Q>,
     ) -> Result<Self, Error> {
-        let session: Session<crate::process::unix::UnixProcess, _> = Session::spawn(cmd)?;
+        let session = Session::spawn(cmd)?;
         let is_echo_on = session
             .get_echo()
             .map_err(|e| Error::unknown("failed to get echo", e))?;
@@ -204,6 +205,7 @@ impl ReplSession {
         })
     }
 
+    /// Spawn function spawns a repl session.
     #[cfg(windows)]
     pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
         attr: crate::ProcAttr,

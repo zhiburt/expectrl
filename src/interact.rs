@@ -296,6 +296,9 @@ impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: NonBlocking + Read + Write,
 {
+    /// This function runs an interact loop with a terminal, using the provided settings.
+    ///
+    /// If you don't use any settings you can use [Session::interact].
     pub fn interact_in_terminal(&mut self, session: &mut Session<Proc, S>) -> Result<(), Error> {
         let mut stdin = crate::stream::stdin::Stdin::new(session)?;
         let r = interact(self, session, &mut stdin, &mut std::io::stdout());
@@ -329,6 +332,9 @@ impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
 {
+    /// This function runs an interact loop with a terminal, using the provided settings.
+    ///
+    /// If you don't use any settings you can use [Session::interact].
     pub async fn interact_in_terminal(
         &mut self,
         session: &mut Session<Proc, S>,

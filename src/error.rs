@@ -6,12 +6,23 @@ use std::io;
 /// An main error type used in [crate].
 #[derive(Debug)]
 pub enum Error {
+    /// An Error in IO operation.
     IO(io::Error),
+    /// An Error in command line parsing.
     CommandParsing,
+    /// An Error in regex parsing.
     RegexParsing,
+    /// An timeout was reached while waiting in expect call.
     ExpectTimeout,
+    /// Unhandled EOF error.
     Eof,
-    Other { message: String, origin: String },
+    /// It maybe OS specific error or a general erorr.
+    Other {
+        /// It's a custom error message
+        message: String,
+        /// It's an original error message (if present)
+        origin: String,
+    },
 }
 
 impl Error {

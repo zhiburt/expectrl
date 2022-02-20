@@ -87,39 +87,73 @@ pub enum ControlCode {
 }
 
 impl ControlCode {
+    /// See [ControlCode::Null]
     pub const NUL: ControlCode = ControlCode::Null;
+    /// See [ControlCode::StartOfHeading]
     pub const SOH: ControlCode = ControlCode::StartOfHeading;
+    /// See [ControlCode::StartOfText]
     pub const STX: ControlCode = ControlCode::StartOfText;
+    /// See [ControlCode::EndOfText]
     pub const ETX: ControlCode = ControlCode::EndOfText;
+    /// See [ControlCode::EndOfTransmission]
     pub const EOT: ControlCode = ControlCode::EndOfTransmission;
+    /// See [ControlCode::Enquiry]
     pub const ENQ: ControlCode = ControlCode::Enquiry;
+    /// See [ControlCode::Acknowledge]
     pub const ACK: ControlCode = ControlCode::Acknowledge;
+    /// See [ControlCode::Bell]
     pub const BEL: ControlCode = ControlCode::Bell;
+    /// See [ControlCode::Backspace]
     pub const BS: ControlCode = ControlCode::Backspace;
+    /// See [ControlCode::HorizontalTabulation]
     pub const HT: ControlCode = ControlCode::HorizontalTabulation;
+    /// See [ControlCode::LineFeed]
     pub const LF: ControlCode = ControlCode::LineFeed;
+    /// See [ControlCode::VerticalTabulation]
     pub const VT: ControlCode = ControlCode::VerticalTabulation;
+    /// See [ControlCode::FormFeed]
     pub const FF: ControlCode = ControlCode::FormFeed;
+    /// See [ControlCode::CarriageReturn]
     pub const CR: ControlCode = ControlCode::CarriageReturn;
+    /// See [ControlCode::ShiftOut]
     pub const SO: ControlCode = ControlCode::ShiftOut;
+    /// See [ControlCode::ShiftIn]
     pub const SI: ControlCode = ControlCode::ShiftIn;
+    /// See [ControlCode::DataLinkEscape]
     pub const DLE: ControlCode = ControlCode::DataLinkEscape;
+    /// See [ControlCode::DeviceControl1]
     pub const DC1: ControlCode = ControlCode::DeviceControl1;
+    /// See [ControlCode::DeviceControl2]
     pub const DC2: ControlCode = ControlCode::DeviceControl2;
+    /// See [ControlCode::DeviceControl3]
     pub const DC3: ControlCode = ControlCode::DeviceControl3;
+    /// See [ControlCode::DeviceControl4]
     pub const DC4: ControlCode = ControlCode::DeviceControl4;
+    /// See [ControlCode::NegativeAcknowledge]
     pub const NAK: ControlCode = ControlCode::NegativeAcknowledge;
+    /// See [ControlCode::SynchronousIdle]
     pub const SYN: ControlCode = ControlCode::SynchronousIdle;
+    /// See [ControlCode::EndOfTransmissionBlock]
     pub const ETB: ControlCode = ControlCode::EndOfTransmissionBlock;
+    /// See [ControlCode::Cancel]
     pub const CAN: ControlCode = ControlCode::Cancel;
+    /// See [ControlCode::EndOfMedium]
     pub const EM: ControlCode = ControlCode::EndOfMedium;
+    /// See [ControlCode::Substitute]
     pub const SUB: ControlCode = ControlCode::Substitute;
+    /// See [ControlCode::Escape]
     pub const ESC: ControlCode = ControlCode::Escape;
+    /// See [ControlCode::FileSeparator]
     pub const FS: ControlCode = ControlCode::FileSeparator;
+    /// See [ControlCode::GroupSeparator]
     pub const GS: ControlCode = ControlCode::GroupSeparator;
+    /// See [ControlCode::RecordSeparator]
     pub const RS: ControlCode = ControlCode::RecordSeparator;
+    /// See [ControlCode::UnitSeparator]
     pub const US: ControlCode = ControlCode::UnitSeparator;
+    /// See [ControlCode::Space]
     pub const SP: ControlCode = ControlCode::Space;
+    /// See [ControlCode::Delete]
     pub const DEL: ControlCode = ControlCode::Delete;
 }
 
