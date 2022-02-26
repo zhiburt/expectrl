@@ -16,9 +16,6 @@ use std::process::Command;
 
 use crate::spawn;
 
-#[cfg(windows)]
-use conpty::ProcAttr;
-
 #[cfg(feature = "async")]
 use futures_lite::{AsyncRead, AsyncWrite};
 
@@ -129,12 +126,13 @@ pub async fn spawn_python() -> Result<ReplSession, Error> {
 #[cfg(not(feature = "async"))]
 pub fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
-    let mut powershell = ReplSession::spawn(
-        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
-        DEFAULT_PROMPT,
-        Some("exit"),
-    )?;
-    powershell.is_echo_on = true;
+    let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
+    let mut powershell = ReplSession::new(
+        session,
+        DEFAULT_PROMPT.to_owned(),
+        Some("exit".to_owned()),
+        true
+    );
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
     powershell.execute(format!(
@@ -157,12 +155,13 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
 #[cfg(feature = "async")]
 pub async fn spawn_powershell() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
-    let mut powershell = ReplSession::spawn(
-        ProcAttr::default().commandline(r"pwsh -NoProfile -NonInteractive -NoLogo".to_string()),
-        DEFAULT_PROMPT,
-        Some("exit"),
-    )?;
-    powershell.is_echo_on = true;
+    let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
+    let mut powershell = ReplSession::new(
+        session,
+        DEFAULT_PROMPT.to_owned(),
+        Some("exit".to_owned()),
+        true
+    );
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
     powershell
