@@ -26,6 +26,25 @@ fn bash() {
     assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 }
 
+#[cfg(not(feature = "async"))]
+#[test]
+fn bash_with_log() {
+    let mut p = spawn_bash()
+        .unwrap()
+        .upgrade_session(|s| s.with_log(std::io::stderr()))
+        .unwrap();
+
+    p.send_line("echo Hello World").unwrap();
+    let mut msg = String::new();
+    p.read_line(&mut msg).unwrap();
+    assert!(msg.ends_with("Hello World\r\n"));
+
+    thread::sleep(Duration::from_millis(300));
+    p.send_control(ControlCode::EOT).unwrap();
+
+    assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+}
+
 #[cfg(feature = "async")]
 #[test]
 fn bash() {
@@ -33,6 +52,30 @@ fn bash() {
 
     futures_lite::future::block_on(async {
         let mut p = spawn_bash().await.unwrap();
+
+        p.send_line("echo Hello World").await.unwrap();
+        let mut msg = String::new();
+        p.read_line(&mut msg).await.unwrap();
+        assert!(msg.ends_with("Hello World\r\n"));
+
+        thread::sleep(Duration::from_millis(300));
+        p.send_control(ControlCode::EOT).await.unwrap();
+
+        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+    })
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn bash_with_log() {
+    use futures_lite::AsyncReadExt;
+
+    futures_lite::future::block_on(async {
+        let mut p = spawn_bash()
+            .await
+            .unwrap()
+            .upgrade_session(|s| s.with_log(std::io::stderr()))
+            .unwrap();
 
         p.send_line("echo Hello World").await.unwrap();
         let mut msg = String::new();

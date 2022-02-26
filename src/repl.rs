@@ -1,13 +1,26 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{error::Error, Captures, Session};
-use std::ops::{Deref, DerefMut};
+use crate::{
+    error::Error,
+    process::NonBlocking,
+    session::{Proc, Stream},
+    Captures, Session,
+};
+use std::{
+    io::{Read, Write},
+    ops::{Deref, DerefMut},
+};
 
 #[cfg(unix)]
 use std::process::Command;
 
+use crate::spawn;
+
 #[cfg(windows)]
 use conpty::ProcAttr;
+
+#[cfg(feature = "async")]
+use futures_lite::{AsyncRead, AsyncWrite};
 
 /// Spawn a bash session.
 ///
@@ -29,7 +42,15 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
-    let mut bash = ReplSession::spawn(cmd, DEFAULT_PROMPT, Some("quit"))?;
+
+    let session = crate::session::Session::spawn(cmd)?;
+
+    let mut bash = ReplSession::new(
+        session,
+        DEFAULT_PROMPT.to_string(),
+        Some("quit".to_string()),
+        false,
+    );
 
     // read a prompt to make it not available on next read.
     //
@@ -59,7 +80,15 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
-    let mut bash = ReplSession::spawn(cmd, DEFAULT_PROMPT, Some("quit"))?;
+
+    let session = crate::session::Session::spawn(cmd)?;
+
+    let mut bash = ReplSession::new(
+        session,
+        DEFAULT_PROMPT.to_string(),
+        Some("quit".to_string()),
+        false,
+    );
 
     // read a prompt to make it not available on next read.
     bash.expect_prompt().await?;
@@ -70,39 +99,27 @@ pub async fn spawn_bash() -> Result<ReplSession, Error> {
 /// Spawn default python's IDLE.
 #[cfg(not(feature = "async"))]
 pub fn spawn_python() -> Result<ReplSession, Error> {
-    #[cfg(unix)]
-    {
-        let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
-        idle._expect_prompt()?;
-        Ok(idle)
-    }
-    #[cfg(windows)]
-    {
-        // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
-        let mut idle =
-            ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
-        idle._expect_prompt()?;
-        Ok(idle)
-    }
+    // todo: check windows here
+    // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
+
+    let session = spawn("python")?;
+
+    let mut idle = ReplSession::new(session, ">>> ".to_owned(), Some("quit()".to_owned()), false);
+    idle.expect_prompt()?;
+    Ok(idle)
 }
 
 /// Spawn default python's IDLE.
 #[cfg(feature = "async")]
 pub async fn spawn_python() -> Result<ReplSession, Error> {
-    #[cfg(unix)]
-    {
-        let mut idle = ReplSession::spawn(Command::new("python"), ">>> ", Some("quit()"))?;
-        idle._expect_prompt().await?;
-        Ok(idle)
-    }
-    #[cfg(windows)]
-    {
-        // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
-        let mut idle =
-            ReplSession::spawn(ProcAttr::cmd("python".to_string()), ">>> ", Some("quit()"))?;
-        idle._expect_prompt().await?;
-        Ok(idle)
-    }
+    // todo: check windows here
+    // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
+
+    let session = spawn("python")?;
+
+    let mut idle = ReplSession::new(session, ">>> ".to_owned(), Some("quit()".to_owned()), false);
+    idle.expect_prompt().await?;
+    Ok(idle)
 }
 
 /// Spawn a powershell session.
@@ -170,58 +187,48 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
 /// A repl session: e.g. bash or the python shell:
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
-pub struct ReplSession {
+pub struct ReplSession<P = Proc, S = Stream> {
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.
     prompt: String,
     /// A pseudo-teletype session with a spawned process.
-    session: Session,
+    session: Session<P, S>,
     /// A command which will be called before termination.
     quit_command: Option<String>,
     /// Flag to see if a echo is turned on.
     is_echo_on: bool,
 }
 
-impl ReplSession {
+impl<P, S> ReplSession<P, S> {
     /// Spawn function spawns a repl session.
-    #[cfg(unix)]
-    pub fn spawn<PP: AsRef<str>, Q: AsRef<str>>(
-        cmd: Command,
-        prompt: PP,
-        quit_command: Option<Q>,
-    ) -> Result<Self, Error> {
-        let session = Session::spawn(cmd)?;
-        let is_echo_on = session
-            .get_echo()
-            .map_err(|e| Error::unknown("failed to get echo", e))?;
-        let prompt = prompt.as_ref().to_owned();
-        let quit_command = quit_command.map(|q| q.as_ref().to_owned());
-
-        Ok(Self {
-            prompt,
+    fn new(
+        session: Session<P, S>,
+        prompt: String,
+        quit_command: Option<String>,
+        is_echo_on: bool,
+    ) -> Self {
+        Self {
             session,
+            prompt,
             quit_command,
             is_echo_on,
-        })
+        }
     }
 
-    /// Spawn function spawns a repl session.
-    #[cfg(windows)]
-    pub fn spawn<P: AsRef<str>, Q: AsRef<str>>(
-        attr: crate::ProcAttr,
-        prompt: P,
-        quit_command: Option<Q>,
-    ) -> Result<Self, Error> {
-        let session = Session::spawn(attr)?;
-        let prompt = prompt.as_ref().to_owned();
-        let quit_command = quit_command.map(|q| q.as_ref().to_owned());
-
-        Ok(Self {
-            prompt,
+    /// Update an underlying session.
+    ///
+    /// Can be used to set a logger for example.
+    pub fn upgrade_session<NP, NS, F>(self, build_session: F) -> Result<ReplSession<NP, NS>, Error>
+    where
+        F: FnOnce(Session<P, S>) -> Result<Session<NP, NS>, Error>,
+    {
+        let session = build_session(self.session)?;
+        Ok(ReplSession::new(
             session,
-            quit_command,
-            is_echo_on: false,
-        })
+            self.prompt,
+            self.quit_command,
+            self.is_echo_on,
+        ))
     }
 
     /// Get a size in bytes of a prompt, may be usefull for triming it.
@@ -230,47 +237,41 @@ impl ReplSession {
     }
 }
 
-impl ReplSession {
+#[cfg(not(feature = "async"))]
+impl<P, S: Read + NonBlocking> ReplSession<P, S> {
     /// Block until prompt is found
-    #[cfg(not(feature = "async"))]
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
         self._expect_prompt()?;
         Ok(())
     }
 
+    fn _expect_prompt(&mut self) -> Result<Captures, Error> {
+        let prompt = self.prompt.clone();
+        self.expect(prompt)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
     /// Block until prompt is found
-    #[cfg(feature = "async")]
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
         self._expect_prompt().await?;
         Ok(())
     }
 
-    #[cfg(not(feature = "async"))]
-    fn _expect_prompt(&mut self) -> Result<Captures, Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt)
-    }
-
-    #[cfg(feature = "async")]
     async fn _expect_prompt(&mut self) -> Result<Captures, Error> {
         let prompt = self.prompt.clone();
         self.expect(prompt).await
     }
+}
 
+#[cfg(not(feature = "async"))]
+impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
     /// Send a command to a repl and verifies that it exited.
     /// Returning it's output.
-    #[cfg(not(feature = "async"))]
     pub fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
         self.send_line(cmd)?;
         let found = self._expect_prompt()?;
-        Ok(found.before().to_vec())
-    }
-
-    /// Send a command to a repl and verifies that it exited.
-    #[cfg(feature = "async")]
-    pub async fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
-        self.send_line(cmd).await?;
-        let found = self._expect_prompt().await?;
         Ok(found.before().to_vec())
     }
 
@@ -286,11 +287,32 @@ impl ReplSession {
         Ok(())
     }
 
+    /// Send a quit command.
+    ///
+    /// In async version we it won't be send on Drop so,
+    /// If you wan't it to be send you must do it yourself.
+    pub fn exit(&mut self) -> Result<(), Error> {
+        if let Some(quit_command) = self.quit_command.clone() {
+            self.session.send_line(quit_command)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "async")]
+impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
+    /// Send a command to a repl and verifies that it exited.
+    pub async fn execute(&mut self, cmd: impl AsRef<str>) -> Result<Vec<u8>, Error> {
+        self.send_line(cmd).await?;
+        let found = self._expect_prompt().await?;
+        Ok(found.before().to_vec())
+    }
+
     /// Sends line to repl (and flush the output).
     ///
     /// If echo_on=true wait for the input to appear.
-    #[cfg(feature = "async")]
-    pub async fn send_line<S: AsRef<str>>(&mut self, line: S) -> Result<(), Error> {
+    pub async fn send_line(&mut self, line: impl AsRef<str>) -> Result<(), Error> {
         self.session.send_line(line.as_ref()).await?;
         if self.is_echo_on {
             self.expect(line.as_ref()).await?;
@@ -302,7 +324,6 @@ impl ReplSession {
     ///
     /// In async version we it won't be send on Drop so,
     /// If you wan't it to be send you must do it yourself.
-    #[cfg(feature = "async")]
     pub async fn exit(&mut self) -> Result<(), Error> {
         if let Some(quit_command) = self.quit_command.clone() {
             self.session.send_line(quit_command).await?;
@@ -312,24 +333,15 @@ impl ReplSession {
     }
 }
 
-#[cfg(not(feature = "async"))]
-impl Drop for ReplSession {
-    fn drop(&mut self) {
-        if let Some(quit_command) = self.quit_command.clone() {
-            self.send_line(&quit_command).unwrap()
-        }
-    }
-}
-
-impl Deref for ReplSession {
-    type Target = Session;
+impl<P, S> Deref for ReplSession<P, S> {
+    type Target = Session<P, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.session
     }
 }
 
-impl DerefMut for ReplSession {
+impl<P, S> DerefMut for ReplSession<P, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.session
     }
