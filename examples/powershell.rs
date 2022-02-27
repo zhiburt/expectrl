@@ -27,9 +27,9 @@ fn main() {
             p.expect_prompt().await.unwrap();
             println!(
                 "/etc/passwd has {} lines, {} words, {} chars",
-                String::from_utf8_lossy(lines.get(0).unwrap()),
-                String::from_utf8_lossy(words.get(0).unwrap()),
-                String::from_utf8_lossy(bytes.matches()[1]),
+                String::from_utf8_lossy(&lines[0]),
+                String::from_utf8_lossy(&words[0]),
+                String::from_utf8_lossy(&bytes[1]),
             );
 
             // case 3: read while program is still executing
@@ -67,9 +67,9 @@ fn main() {
         p.expect_prompt().unwrap();
         println!(
             "/etc/passwd has {} lines, {} words, {} chars",
-            String::from_utf8_lossy(lines.get(0).unwrap()),
-            String::from_utf8_lossy(words.get(0).unwrap()),
-            String::from_utf8_lossy(bytes.matches()[1]),
+            String::from_utf8_lossy(&lines[0]),
+            String::from_utf8_lossy(&words[0]),
+            String::from_utf8_lossy(&bytes[1]),
         );
 
         // case 3: read while program is still executing
