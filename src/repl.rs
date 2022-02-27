@@ -131,7 +131,7 @@ pub fn spawn_powershell() -> Result<ReplSession, Error> {
         session,
         DEFAULT_PROMPT.to_owned(),
         Some("exit".to_owned()),
-        true
+        true,
     );
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
@@ -160,7 +160,7 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
         session,
         DEFAULT_PROMPT.to_owned(),
         Some("exit".to_owned()),
-        true
+        true,
     );
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt

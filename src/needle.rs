@@ -49,8 +49,7 @@ impl<Re: AsRef<str>> Needle for Regex<Re> {
         let regex = regex::bytes::Regex::new(self.0.as_ref()).map_err(|_| Error::RegexParsing)?;
         let matches = regex
             .captures_iter(buf)
-            .map(|c| c.iter().flatten().map(|m| m.into()).collect::<Vec<Match>>())
-            .flatten()
+            .flat_map(|c| c.iter().flatten().map(|m| m.into()).collect::<Vec<Match>>())
             .collect();
         Ok(matches)
     }
