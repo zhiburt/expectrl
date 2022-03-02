@@ -189,7 +189,7 @@ fn check_after_is_matched_eof() {
         assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
         #[cfg(not(target_os = "linux"))]
-        assert!(m.matches().is_empty());
+        assert!(m.matches().len() == 0);
     })
 }
 
@@ -229,7 +229,7 @@ fn expect_after_is_matched_eof() {
         assert_eq!(m.get(0).unwrap(), b"AfterSleep\r\n");
 
         #[cfg(not(target_os = "linux"))]
-        assert!(m.matches().is_empty());
+        assert!(m.matches().len() == 0);
 
         assert!(matches!(
             p.expect("").await.unwrap_err(),

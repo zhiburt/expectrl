@@ -100,7 +100,13 @@ impl<'a> Iterator for MatchIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.matches.next().map(|m| &self.buf[m.start()..m.end()])
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.matches.size_hint()
+    }
 }
+
+impl<'a> ExactSizeIterator for MatchIter<'a> {}
 
 #[cfg(test)]
 mod tests {

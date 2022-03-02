@@ -97,7 +97,7 @@ fn check_eof() {
     #[cfg(target_os = "linux")]
     assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
     #[cfg(not(target_os = "linux"))]
-    assert!(m.matches().is_empty());
+    assert!(m.matches().len() == 0);
 }
 
 #[cfg(unix)]
@@ -117,7 +117,7 @@ fn check_eof() {
         #[cfg(target_os = "linux")]
         assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
         #[cfg(not(target_os = "linux"))]
-        assert!(m.matches().is_empty());
+        assert!(m.matches().len() == 0);
     })
 }
 
