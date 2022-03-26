@@ -58,10 +58,10 @@
 //! - It has a Windows support.
 
 mod captures;
+mod check_macros;
 mod control_code;
 mod error;
 mod needle;
-mod check_macros;
 
 pub mod interact;
 pub mod process;
