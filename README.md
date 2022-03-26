@@ -15,7 +15,7 @@ Using the library you can:
 - Control process
 - Interact with process's IO(input/output).
 
-`expectrl` like original `expect` it may shine when you're working with interactive applications.
+`expectrl` like original `expect` may shine when you're working with interactive applications.
 If your application is not interactive you may not find the library the best choise.
 
 ## Usage
