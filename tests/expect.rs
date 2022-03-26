@@ -132,7 +132,7 @@ fn expect_n_bytes() {
 #[cfg(windows)]
 #[test]
 fn expect_n_bytes() {
-    use expectrl::{session::Session, ProcAttr};
+    use expectrl::{process::windows::ProcAttr, session::Session};
 
     let mut session = Session::spawn(ProcAttr::cmd(r#"echo Hello World"#.to_string())).unwrap();
 

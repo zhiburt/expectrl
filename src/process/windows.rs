@@ -7,7 +7,7 @@ use std::{
 
 use conpty::{
     io::{PipeReader, PipeWriter},
-    ProcAttr, Process,
+    Process,
 };
 
 use super::{Healthcheck, NonBlocking, Process as ProcessTrait};
@@ -22,6 +22,8 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+pub use conpty::ProcAttr;
 
 /// A windows representation of a [Process] via [conpty::Process].
 pub struct WinProcess {
@@ -104,11 +106,11 @@ impl Read for ProcessStream {
 }
 
 impl NonBlocking for ProcessStream {
-    fn set_non_blocking(&mut self) -> io::Result<()> {
+    fn set_non_blocking(&mut self) -> Result<()> {
         self.output.set_non_blocking_mode().map_err(to_io_error(""))
     }
 
-    fn set_blocking(&mut self) -> io::Result<()> {
+    fn set_blocking(&mut self) -> Result<()> {
         self.output.set_blocking_mode().map_err(to_io_error(""))
     }
 }

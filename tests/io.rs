@@ -8,7 +8,7 @@ use std::process::Command;
 use expectrl::WaitStatus;
 
 #[cfg(windows)]
-use expectrl::ProcAttr;
+use expectrl::process::windows::ProcAttr;
 
 #[cfg(feature = "async")]
 use futures_lite::{
