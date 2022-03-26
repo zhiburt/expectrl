@@ -5,7 +5,9 @@
 
 # expectrl
 
-A tool for automating terminal applications on Unix and on Windows.
+Expectrl is a tool for automating terminal applications.
+
+Expectrl is a rust module for spawning child applications and controlling them and responding to expected patterns in process's output. Expectrl works like Don Libes' Expect. Expectrl allows your script to spawn a child application and control it as if a human were typing commands.
 
 Using the library you can:
 
@@ -13,7 +15,7 @@ Using the library you can:
 - Control process
 - Interact with process's IO(input/output).
 
-`expectrl` like original `expect` may shine when you're working with interactive applications.
+`expectrl` like original `expect` it may shine when you're working with interactive applications.
 If your application is not interactive you may not find the library the best choise.
 
 ## Usage
@@ -49,7 +51,7 @@ fn main() -> Result<(), Error> {
 - It has an `async` support (To enable them you must turn on an `async` feature).
 - It supports logging.
 - It supports interact function.
-- It has a Windows support.
+- It works on windows.
 
 ## Notes
 
