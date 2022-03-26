@@ -1,4 +1,4 @@
-use expectrl::spawn;
+use expectrl::{session::Session, spawn};
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
@@ -230,5 +230,43 @@ fn send_line() {
                 );
             }
         })
+    }
+}
+
+#[test]
+fn test_spawn_no_command() {
+    #[cfg(unix)]
+    assert!(spawn("").is_err());
+    #[cfg(windows)]
+    assert!(spawn("").is_ok());
+}
+
+#[test]
+#[ignore = "it's a compile time check"]
+fn test_session_as_writer() {
+    #[cfg(not(feature = "async"))]
+    {
+        let _: Box<dyn std::io::Write> = Box::new(spawn("ls").unwrap());
+        let _: Box<dyn std::io::Read> = Box::new(spawn("ls").unwrap());
+        let _: Box<dyn std::io::BufRead> = Box::new(spawn("ls").unwrap());
+
+        fn _io_copy(mut session: Session) {
+            let _ = std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+        }
+    }
+    #[cfg(feature = "async")]
+    {
+        let _: Box<dyn futures_lite::AsyncWrite> =
+            Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncWrite>;
+        let _: Box<dyn futures_lite::AsyncRead> =
+            Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncRead>;
+        let _: Box<dyn futures_lite::AsyncBufRead> =
+            Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
+
+        async fn _io_copy(mut session: Session) {
+            futures_lite::io::copy(futures_lite::io::empty(), &mut session)
+                .await
+                .unwrap();
+        }
     }
 }
