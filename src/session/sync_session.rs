@@ -142,10 +142,15 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// # Example
     ///
     /// ```
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.check(expectrl::Regex("\\d+")).unwrap();
+    /// use expectrl::{spawn, Regex};
+    /// use std::time::Duration;
+    ///
+    /// let mut p = spawn("echo 123").unwrap();
+    ///
+    /// // wait to guarantee that check echo worked out (most likely)
+    /// std::thread::sleep(Duration::from_secs(1));
+    ///
+    /// let m = p.check(Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
     pub fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
@@ -188,10 +193,15 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// # Example
     ///
     /// ```
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.is_matched(expectrl::Regex("\\d+")).unwrap();
+    /// use expectrl::{spawn, Regex};
+    /// use std::time::Duration;
+    ///
+    /// let mut p = spawn("echo 123").unwrap();
+    ///
+    /// // wait to guarantee that check echo worked out (most likely)
+    /// std::thread::sleep(Duration::from_secs(1));
+    ///
+    /// let m = p.is_matched(Regex("\\d+")).unwrap();
     /// assert_eq!(m, true);
     /// ```
     pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
@@ -265,7 +275,6 @@ impl<P, S: Write> Session<P, S> {
     ///
     /// ```
     /// use expectrl::{spawn, ControlCode};
-    /// use std::process::Command;
     ///
     /// let mut process = spawn("cat").unwrap();
     ///

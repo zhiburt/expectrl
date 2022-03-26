@@ -138,13 +138,7 @@ pub(crate) fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
 }
 
 fn nix_error_to_io(err: nix::Error) -> io::Error {
-    match err.as_errno() {
-        Some(code) => io::Error::from_raw_os_error(code as _),
-        None => io::Error::new(
-            io::ErrorKind::Other,
-            "Unexpected error type conversion from nix to io",
-        ),
-    }
+    io::Error::from_raw_os_error(err as _)
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
@@ -184,7 +178,7 @@ pub struct AsyncPtyStream {
 
 #[cfg(feature = "async")]
 impl AsyncPtyStream {
-    pub fn new(stream: PtyStream) -> Result<Self> {
+    fn new(stream: PtyStream) -> Result<Self> {
         let stream = async_io::Async::new(stream)?;
         Ok(Self { stream })
     }

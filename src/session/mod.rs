@@ -51,19 +51,33 @@ pub type Session<P = Proc, S = Stream> = async_session::Session<P, S>;
 impl Session {
     /// Spawns a session on a platform process.
     ///
+    /// # Example
+    ///
+    /// On unix
+    ///
     /// ```no_run
-    /// use expectrl::session::Session;
     /// # #[cfg(unix)]
     /// # {
-    /// // on unix
+    /// #
+    /// use expectrl::session::Session;
     /// use std::process::Command;
+    ///
     /// let p = Session::spawn(Command::new("cat"));
+    /// #
     /// # }
+    /// ```
+    ///
+    /// On windows
+    ///
+    /// ```no_run
     /// # #[cfg(windows)]
     /// # {
-    /// // on windows
+    /// #
+    /// use expectrl::session::Session;
     /// use expectrl::process::windows::ProcAttr;
+    ///
     /// let p = Session::spawn(ProcAttr::default().commandline(r"pwsh".to_string()));
+    /// #
     /// # }
     /// ```
     pub fn spawn(command: <Proc as Process>::Command) -> Result<Self, Error> {

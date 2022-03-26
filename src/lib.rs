@@ -13,7 +13,7 @@
     variant_size_differences
 )]
 
-//! # A tool for automating terminal applications on Unix and on Windows.
+//! # A tool for automating terminal applications on alike original expect.
 //!
 //! Using the library you can:
 //!
@@ -58,11 +58,12 @@
 //! - It has a Windows support.
 
 mod captures;
-#[cfg(unix)]
-mod check_macros;
 mod control_code;
 mod error;
 mod needle;
+
+#[cfg(unix)]
+mod check_macros;
 
 pub mod interact;
 pub mod process;
