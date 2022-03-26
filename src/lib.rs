@@ -61,8 +61,6 @@ mod captures;
 mod control_code;
 mod error;
 mod needle;
-
-#[cfg(unix)]
 mod check_macros;
 
 pub mod interact;
