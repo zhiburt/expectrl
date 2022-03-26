@@ -1,3 +1,5 @@
+//! Module contains an async version of Session structure.
+
 use std::{
     convert::TryInto,
     io::{self, IoSliceMut},
@@ -221,43 +223,49 @@ impl<P: Unpin, S: AsyncRead + Unpin> AsyncBufRead for Session<P, S> {
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Stream<S> {
+struct Stream<S> {
     stream: BufferedStream<S>,
     expect_timeout: Option<Duration>,
 }
 
 impl<S> Stream<S> {
-    pub fn new(stream: S) -> Self {
+    /// Creates an async IO stream.
+    fn new(stream: S) -> Self {
         Self {
             stream: BufferedStream::new(stream),
             expect_timeout: Some(Duration::from_millis(10000)),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut S {
+    /// Returns a mut ref to original stream.
+    fn get_mut(&mut self) -> &mut S {
         &mut self.stream.stream
     }
 
     /// Set the pty session's expect timeout.
-    pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
+    fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
     }
 
-    pub fn keep(&mut self, buf: &[u8]) {
+    /// Save a bytes in inner buffer.
+    /// They'll be pushed to the end of the buffer.
+    fn keep(&mut self, buf: &[u8]) {
         self.stream.keep(buf);
     }
 
-    pub fn get_available(&mut self) -> &[u8] {
+    /// Get an inner buffer.
+    fn get_available(&mut self) -> &[u8] {
         self.stream.buffer()
     }
 
-    pub fn into_inner(self) -> S {
+    /// Returns an inner IO stream.
+    fn into_inner(self) -> S {
         self.stream.stream
     }
 }
 
 impl<S: AsyncRead + Unpin> Stream<S> {
-    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
+    async fn expect<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         let expect_timeout = self.expect_timeout;
         let expect_future = async {
             // We read by byte to make things as lazy as possible.
@@ -321,8 +329,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
 
     /// Is matched checks if a pattern is matched.
     /// It doesn't consumes bytes from stream.
-    #[cfg(feature = "async")]
-    pub async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+    async fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
         let eof = match futures_lite::future::poll_once(self.stream.fill()).await {
             Some(Ok(n)) => n == 0,
             Some(Err(err)) => return Err(err.into()),
@@ -352,15 +359,16 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     ///
     /// ```
     /// # futures_lite::future::block_on(async {
+    /// #
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// // wait to guarantee that check will successed (most likely)
     /// std::thread::sleep(std::time::Duration::from_secs(1));
     /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
+    /// #
     /// # });
     /// ```
-    #[cfg(feature = "async")]
-    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
+    async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
         let eof = match futures_lite::future::poll_once(self.stream.fill()).await {
             Some(Ok(n)) => n == 0,
             Some(Err(err)) => return Err(err.into()),
@@ -384,7 +392,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     }
 
     /// Verifyes if stream is empty or not.
-    pub async fn is_empty(&mut self) -> io::Result<bool> {
+    async fn is_empty(&mut self) -> io::Result<bool> {
         match futures_lite::future::poll_once(self.read(&mut [])).await {
             Some(Ok(0)) => Ok(true),
             Some(Ok(_)) => Ok(false),
@@ -431,7 +439,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for Stream<S> {
 }
 
 impl<S: AsyncRead + Unpin> AsyncBufRead for Stream<S> {
-    fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }
 
@@ -443,14 +451,14 @@ impl<S: AsyncRead + Unpin> AsyncBufRead for Stream<S> {
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct BufferedStream<S> {
+struct BufferedStream<S> {
     stream: S,
     buffer: Vec<u8>,
     length: usize,
 }
 
 impl<S> BufferedStream<S> {
-    pub fn new(stream: S) -> Self {
+    fn new(stream: S) -> Self {
         Self {
             stream,
             buffer: Vec::new(),
@@ -458,22 +466,22 @@ impl<S> BufferedStream<S> {
         }
     }
 
-    pub fn keep(&mut self, buf: &[u8]) {
+    fn keep(&mut self, buf: &[u8]) {
         self.buffer.extend(buf);
         self.length += buf.len();
     }
 
-    pub fn buffer(&self) -> &[u8] {
+    fn buffer(&self) -> &[u8] {
         &self.buffer[..self.length]
     }
 
-    pub fn get_mut(&mut self) -> &mut S {
+    fn get_mut(&mut self) -> &mut S {
         &mut self.stream
     }
 }
 
 impl<S: AsyncRead + Unpin> BufferedStream<S> {
-    pub async fn fill(&mut self) -> io::Result<usize> {
+    async fn fill(&mut self) -> io::Result<usize> {
         let mut buf = [0; 128];
         let n = self.stream.read(&mut buf).await?;
         self.keep(&buf[..n]);

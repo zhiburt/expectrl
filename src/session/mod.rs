@@ -9,15 +9,16 @@ pub mod async_session;
 #[cfg(not(feature = "async"))]
 pub mod sync_session;
 
-#[cfg(feature = "async")]
-use crate::process::IntoAsyncStream;
+use std::io::{Read, Write};
 
 use crate::{
     process::{NonBlocking, Process},
     stream::log::LoggedStream,
     Error,
 };
-use std::io::{self, Read, Write};
+
+#[cfg(feature = "async")]
+use crate::process::IntoAsyncStream;
 
 #[cfg(unix)]
 pub(crate) type Proc = crate::process::unix::UnixProcess;
@@ -102,10 +103,7 @@ impl<P, S: Read> Session<P, S> {
     ///     .with_log(std::io::stdout())
     ///     .unwrap();
     /// ```
-    pub fn with_log<W: io::Write>(
-        self,
-        logger: W,
-    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
+    pub fn with_log<W: Write>(self, logger: W) -> Result<Session<P, LoggedStream<S, W>>, Error> {
         self.swap_stream(|stream| LoggedStream::new(stream, logger))
     }
 }
@@ -122,10 +120,7 @@ impl<P, S> Session<P, S> {
     ///     .with_log(std::io::stdout())
     ///     .unwrap();
     /// ```
-    pub fn with_log<W: io::Write>(
-        self,
-        logger: W,
-    ) -> Result<Session<P, LoggedStream<S, W>>, Error> {
+    pub fn with_log<W: Write>(self, logger: W) -> Result<Session<P, LoggedStream<S, W>>, Error> {
         self.swap_stream(|stream| LoggedStream::new(stream, logger))
     }
 }

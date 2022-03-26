@@ -30,12 +30,12 @@ use futures_lite::{AsyncRead, AsyncWrite};
 pub fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
-    cmd.env("PS1", DEFAULT_PROMPT);
+    let _ = cmd.env("PS1", DEFAULT_PROMPT);
     // bind 'set enable-bracketed-paste off' turns off paste mode,
     // without it each command in bash starts and ends with an invisible sequence.
     //
     // We might need to turn it off optionally?
-    cmd.env(
+    let _ = cmd.env(
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
@@ -240,7 +240,7 @@ impl<P, S> ReplSession<P, S> {
 impl<P, S: Read + NonBlocking> ReplSession<P, S> {
     /// Block until prompt is found
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
-        self._expect_prompt()?;
+        let _ = self._expect_prompt()?;
         Ok(())
     }
 
@@ -281,7 +281,7 @@ impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
     pub fn send_line<SS: AsRef<str>>(&mut self, line: SS) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
-            self.expect(line.as_ref())?;
+            let _ = self.expect(line.as_ref())?;
         }
         Ok(())
     }

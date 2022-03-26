@@ -73,12 +73,12 @@ macro_rules! check {
     (@case $session:expr, (default => $body:tt $($tail:tt)*), ($($head:tt)*), ()) => {
         // A default branch
         // allow missed comma `,`
-        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unused_qualifications)] Result::<(), $crate::Error>::Ok(()) } ))
     };
     (@case $session:expr, (), ($($head:tt)*), ()) => {
         // there's no default branch
         // so we make up our own.
-        $crate::check!(@case $session, (), ($($head)*), ( { Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, (), ($($head)*), ( { #[allow(unused_qualifications)] Result::<(), $crate::Error>::Ok(()) } ))
     };
     (@case $session:expr, (), ($($tail:tt)*), ($($default:tt)*)) => {
         // last point of @case

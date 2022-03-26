@@ -109,11 +109,10 @@ fn interact_filters() {
             // Make NO -> YES
             let v = buf
                 .chunks(2)
-                .map(|s| match s {
+                .flat_map(|s| match s {
                     &[b'N', b'O'] => &[b'Y', b'E', b'S'],
                     other => other,
                 })
-                .flatten()
                 .copied()
                 .collect();
             Ok(v)

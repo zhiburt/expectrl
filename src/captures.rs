@@ -106,7 +106,7 @@ impl<'a> Iterator for MatchIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for MatchIter<'a> {}
+impl ExactSizeIterator for MatchIter<'_> {}
 
 #[cfg(test)]
 mod tests {

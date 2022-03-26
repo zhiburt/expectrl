@@ -520,7 +520,7 @@ impl<R> ControlledReader<R> {
     }
 
     fn consume_available(&mut self, n: usize) {
-        self.inner.get_mut().buffer.drain(..n);
+        let _ = self.inner.get_mut().buffer.drain(..n);
     }
 }
 
@@ -545,7 +545,7 @@ impl<R: Read> Read for BufferedReader<R> {
             self.inner.read(buf)
         } else {
             let n = buf.write(&self.buffer)?;
-            self.buffer.drain(..n);
+            let _ = self.buffer.drain(..n);
             Ok(n)
         }
     }

@@ -199,7 +199,7 @@ where
     }
 }
 
-impl<'a, T, const N: usize> Needle for Any<&'a [T; N]>
+impl<T, const N: usize> Needle for Any<&'_ [T; N]>
 where
     T: Needle,
 {
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn test_any() {
         assert_eq!(
-            Any(vec![Box::new("we") as Box<dyn Needle>, Box::new(NBytes(3)),])
+            Any::<Vec<Box<dyn Needle>>>(vec![Box::new("we"), Box::new(NBytes(3))])
                 .check(b"qwerty", false)
                 .unwrap(),
             vec![Match::new(1, 3)]

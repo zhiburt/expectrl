@@ -1,57 +1,22 @@
 /// To run an example run the following command
 /// `cargo run --example interact`.
+use expectrl::spawn;
 
 #[cfg(unix)]
-use expectrl::repl::spawn_bash;
-
-#[cfg(unix)]
-#[cfg(not(feature = "async"))]
-fn main() {
-    let mut bash = spawn_bash().expect("Error while spawning bash");
-
-    println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-]");
-
-    let status = bash.interact().expect("Failed to start interact");
-
-    println!("Quiting status {:?}", status);
-}
-
-#[cfg(unix)]
-#[cfg(feature = "async")]
-fn main() {
-    let mut bash = futures_lite::future::block_on(spawn_bash()).expect("Error while spawning bash");
-
-    println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-]");
-
-    let status = futures_lite::future::block_on(bash.interact()).expect("Failed to start interact");
-
-    println!("Quiting status {:?}", status);
-}
+const SHELL: &str = "sh";
 
 #[cfg(windows)]
-#[cfg(not(feature = "async"))]
+const SHELL: &str = "pwsh";
+
 fn main() {
-    let mut pwsh = expectrl::spawn("pwsh").expect("Error while spawning bash");
+    let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
     println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-]");
+    println!("To return control back to main type CTRL-] combination");
 
-    pwsh.interact().expect("Failed to start interact");
+    #[cfg(not(feature = "async"))]
+    sh.interact().expect("Failed to start interact");
 
-    println!("Quiting");
-}
-
-#[cfg(windows)]
-#[cfg(feature = "async")]
-fn main() {
-    let mut pwsh = expectrl::spawn("pwsh").expect("Error while spawning bash");
-
-    println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-]");
-
-    futures_lite::future::block_on(pwsh.interact()).expect("Failed to start interact");
-
-    println!("Quiting");
+    #[cfg(feature = "async")]
+    futures_lite::future::block_on(sh.interact()).expect("Failed to start interact");
 }

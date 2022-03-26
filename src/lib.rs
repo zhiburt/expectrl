@@ -1,4 +1,17 @@
-#![warn(missing_docs)]
+#![warn(
+    missing_docs,
+    future_incompatible,
+    single_use_lifetimes,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_extern_crates,
+    unused_import_braces,
+    unused_qualifications,
+    unused_results,
+    unused_variables,
+    variant_size_differences
+)]
 
 //! # A tool for automating terminal applications on Unix and on Windows.
 //!
@@ -50,25 +63,22 @@ mod check_macros;
 mod control_code;
 mod error;
 mod needle;
-mod process;
-pub mod stream;
 
 pub mod interact;
+pub mod process;
 pub mod repl;
 pub mod session;
-
-use session::Session;
+pub mod stream;
 
 pub use captures::Captures;
 pub use control_code::ControlCode;
 pub use error::Error;
 pub use needle::{Any, Eof, NBytes, Needle, Regex};
 
-#[cfg(windows)]
-pub use conpty::ProcAttr;
-
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
+
+use session::Session;
 
 /// Spawn spawnes a new session.
 ///
@@ -116,15 +126,12 @@ mod tests {
     fn session_as_writer() {
         #[cfg(not(feature = "async"))]
         {
-            let _: Box<dyn std::io::Write> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Write>;
-            let _: Box<dyn std::io::Read> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::Read>;
-            let _: Box<dyn std::io::BufRead> =
-                Box::new(spawn("ls").unwrap()) as Box<dyn std::io::BufRead>;
+            let _: Box<dyn std::io::Write> = Box::new(spawn("ls").unwrap());
+            let _: Box<dyn std::io::Read> = Box::new(spawn("ls").unwrap());
+            let _: Box<dyn std::io::BufRead> = Box::new(spawn("ls").unwrap());
 
             fn _io_copy(mut session: Session) {
-                std::io::copy(&mut std::io::empty(), &mut session).unwrap();
+                let _ = std::io::copy(&mut std::io::empty(), &mut session).unwrap();
             }
         }
         #[cfg(feature = "async")]

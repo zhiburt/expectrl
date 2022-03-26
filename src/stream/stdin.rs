@@ -72,7 +72,8 @@ impl Stdin {
             set_raw(STDIN_FILENO).map_err(|e| Error::unknown("failed to set a raw tty", e))?;
         }
 
-        pty.set_echo(true, None)
+        let _ = pty
+            .set_echo(true, None)
             .map_err(|e| Error::unknown("failed to set echo", e))?;
 
         self.orig_echo = o_pty_echo;
@@ -95,8 +96,10 @@ impl Stdin {
             .map_err(|e| Error::unknown("failed to call tcsetattr", e))?;
         }
 
-        pty.set_echo(self.orig_echo, None)
+        let _ = pty
+            .set_echo(self.orig_echo, None)
             .map_err(|e| Error::unknown("failed to set echo", e))?;
+
         Ok(())
     }
 }

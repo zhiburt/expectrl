@@ -41,7 +41,7 @@ pub struct Context<'a, S, R, W, C> {
     state: &'a mut C,
 }
 
-impl<'a, S, R, W, C> Context<'a, S, R, W, C> {
+impl<S, R, W, C> Context<'_, S, R, W, C> {
     /// Get a reference to the context's session.
     pub fn session(&mut self) -> &mut S {
         self.session
@@ -150,7 +150,7 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
     where
         F: FnMut(Context<'_, Session<P, S>, R, W, C>) -> Result<(), Error> + 'static,
     {
-        self.input_handlers.insert(input.into(), Box::new(f));
+        let _ = self.input_handlers.insert(input.into(), Box::new(f));
         self
     }
 
@@ -227,7 +227,7 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
                     let end_index = Captures::right_most_index(&found);
                     let involved_bytes = buf[..end_index].to_vec();
                     let found = Captures::new(involved_bytes, found);
-                    buf.drain(..end_index);
+                    let _ = buf.drain(..end_index);
 
                     let context = Context {
                         state: &mut self.state,
@@ -427,7 +427,7 @@ where
                     loop {
                         match options.check_input(input, output, session, check_buffer)? {
                             Match::Yes(n) => {
-                                check_buffer.drain(..n);
+                                let _ = check_buffer.drain(..n);
                                 if check_buffer.is_empty() {
                                     break vec![];
                                 }

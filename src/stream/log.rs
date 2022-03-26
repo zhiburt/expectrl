@@ -111,16 +111,16 @@ impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LoggedStream<S, W> 
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         self.log_write(buf);
         Pin::new(&mut self.get_mut().stream).poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.stream).poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.stream).poll_close(cx)
     }
 
@@ -128,7 +128,7 @@ impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LoggedStream<S, W> 
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[io::IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         Pin::new(&mut self.stream).poll_write_vectored(cx, bufs)
     }
 }
@@ -139,7 +139,7 @@ impl<S: AsyncRead + Unpin, W: Write + Unpin> AsyncRead for LoggedStream<S, W> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         let result = Pin::new(&mut self.stream).poll_read(cx, buf);
         if let Poll::Ready(Ok(n)) = &result {
             self.log_read(&buf[..*n]);
