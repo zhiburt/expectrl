@@ -1,3 +1,5 @@
+//! This module contains a Windows implementation of [crate::process::Process].
+
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
@@ -71,12 +73,12 @@ impl DerefMut for WinProcess {
 /// An IO stream of [WinProcess].
 #[derive(Debug)]
 pub struct ProcessStream {
-    pub input: PipeWriter,
-    pub output: PipeReader,
+    input: PipeWriter,
+    output: PipeReader,
 }
 
 impl ProcessStream {
-    pub fn new(output: PipeReader, input: PipeWriter) -> Self {
+    fn new(output: PipeReader, input: PipeWriter) -> Self {
         Self { input, output }
     }
 }
@@ -128,7 +130,7 @@ pub struct AsyncProcessStream {
 
 #[cfg(feature = "async")]
 impl AsyncProcessStream {
-    pub fn new(stream: ProcessStream) -> Result<Self> {
+    fn new(stream: ProcessStream) -> Result<Self> {
         let stream = blocking::Unblock::new(stream);
         Ok(Self { stream })
     }

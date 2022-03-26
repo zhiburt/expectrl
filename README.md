@@ -21,22 +21,22 @@ If your application is not interactive you may not find the library the best cho
 A general example where the program simulates a used interacting with `ftp`.
 
 ```rust
-use expectrl::{spawn, Regex, Eof, WaitStatus};
+use expectrl::{spawn, Regex, Eof, WaitStatus, Error};
 
-fn main() {
-    let mut p = spawn("ftp speedtest.tele2.net").unwrap();
-    p.expect(Regex("Name \\(.*\\):")).unwrap();
-    p.send_line("anonymous").unwrap();
-    p.expect("Password").unwrap();
-    p.send_line("test").unwrap();
-    p.expect("ftp>").unwrap();
-    p.send_line("cd upload").unwrap();
-    p.expect("successfully changed.\r\nftp>").unwrap();
-    p.send_line("pwd").unwrap();
-    p.expect(Regex("[0-9]+ \"/upload\"")).unwrap();
-    p.send_line("exit").unwrap();
-    p.expect(Eof).unwrap();
-    assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+fn main() -> Result<(), Error> {
+    let mut p = spawn("ftp speedtest.tele2.net")?;
+    p.expect(Regex("Name \\(.*\\):"))?;
+    p.send_line("anonymous")?;
+    p.expect("Password")?;
+    p.send_line("test")?;
+    p.expect("ftp>")?;
+    p.send_line("cd upload")?;
+    p.expect("successfully changed.\r\nftp>")?;
+    p.send_line("pwd")?;
+    p.expect(Regex("[0-9]+ \"/upload\""))?;
+    p.send_line("exit")?;
+    p.expect(Eof)?;
+    assert_eq!(p.wait()?, WaitStatus::Exited(p.pid(), 0));
 }
 ```
 

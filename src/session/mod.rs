@@ -56,12 +56,14 @@ impl Session {
     /// # #[cfg(unix)]
     /// # {
     /// // on unix
-    /// let p = Session::spawn(std::process::Command::new("cat"));
+    /// use std::process::Command;
+    /// let p = Session::spawn(Command::new("cat"));
     /// # }
     /// # #[cfg(windows)]
     /// # {
     /// // on windows
-    /// let p = Session::spawn(conpty::ProcAttr::default().commandline(r"pwsh".to_string()));
+    /// use expectrl::process::windows::ProcAttr;
+    /// let p = Session::spawn(ProcAttr::default().commandline(r"pwsh".to_string()));
     /// # }
     /// ```
     pub fn spawn(command: <Proc as Process>::Command) -> Result<Self, Error> {

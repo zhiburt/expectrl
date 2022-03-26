@@ -3,9 +3,9 @@
 use std::io::Result;
 
 #[cfg(unix)]
-pub(crate) mod unix;
+pub mod unix;
 #[cfg(windows)]
-pub(crate) mod windows;
+pub mod windows;
 
 /// This trait represents a platform independent process which runs a program.
 pub trait Process: Sized {

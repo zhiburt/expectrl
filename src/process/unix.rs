@@ -1,3 +1,5 @@
+//! This module contains a Unix implementation of [crate::process::Process].
+
 use super::{Healthcheck, NonBlocking, Process};
 use crate::error::to_io_error;
 use ptyprocess::{stream::Stream, PtyProcess};
@@ -88,7 +90,7 @@ pub struct PtyStream {
 }
 
 impl PtyStream {
-    pub fn new(stream: Stream) -> Self {
+    fn new(stream: Stream) -> Self {
         Self { handle: stream }
     }
 }
