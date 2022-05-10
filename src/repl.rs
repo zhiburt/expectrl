@@ -201,8 +201,14 @@ pub struct ReplSession<P = Proc, S = Stream> {
 }
 
 impl<P, S> ReplSession<P, S> {
-    /// Spawn function spawns a repl session.
-    fn new(
+    /// Spawn function creates a repl session.
+    /// 
+    /// The argument list is:
+    ///     - session; a spawned session which repl will wrap.
+    ///     - prompt; a string which will identify that the command was run.
+    ///     - quit_command; a command which will be called when [ReplSession] instance is dropped.
+    ///     - is_echo_on; determines whether the prompt check will be done twice.
+    pub fn new(
         session: Session<P, S>,
         prompt: String,
         quit_command: Option<String>,
