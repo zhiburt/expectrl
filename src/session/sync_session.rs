@@ -406,6 +406,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
         result
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn is_empty(&mut self) -> io::Result<bool> {
         match self.try_read(&mut []) {
             Ok(0) => Ok(true),

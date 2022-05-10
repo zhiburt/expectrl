@@ -202,7 +202,7 @@ pub struct ReplSession<P = Proc, S = Stream> {
 
 impl<P, S> ReplSession<P, S> {
     /// Spawn function creates a repl session.
-    /// 
+    ///
     /// The argument list is:
     ///     - session; a spawned session which repl will wrap.
     ///     - prompt; a string which will identify that the command was run.
@@ -236,11 +236,6 @@ impl<P, S> ReplSession<P, S> {
             self.quit_command,
             self.is_echo_on,
         ))
-    }
-
-    /// Get a size in bytes of a prompt, may be usefull for triming it.
-    pub fn prompt_len(&self) -> usize {
-        self.prompt.as_bytes().len()
     }
 }
 

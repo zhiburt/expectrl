@@ -22,6 +22,7 @@ pub trait Process: Sized {
     fn open_stream(&mut self) -> Result<Self::Stream>;
 }
 
+#[allow(clippy::wrong_self_convention)]
 /// Healthcheck represents a check by which we can determine if a spawned process is still alive.
 pub trait Healthcheck {
     /// The function returns a status of a process if it still alive and it can operate.
