@@ -132,9 +132,10 @@ fn expect_n_bytes() {
 #[cfg(windows)]
 #[test]
 fn expect_n_bytes() {
-    use expectrl::{process::windows::ProcAttr, session::Session};
+    use expectrl::session::Session;
+    use std::process::Command;
 
-    let mut session = Session::spawn(ProcAttr::cmd(r#"echo Hello World"#.to_string())).unwrap();
+    let mut session = Session::spawn(Command::new("echo Hello World")).unwrap();
 
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
