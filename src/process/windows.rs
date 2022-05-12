@@ -1,13 +1,17 @@
 //! This module contains a Windows implementation of [crate::process::Process].
 
 use std::{
+    collections::HashMap,
+    ffi::OsStr,
     io::{self, Read, Result, Write},
+    iter::FromIterator,
     ops::{Deref, DerefMut},
+    process::Command,
 };
 
 use conpty::{
     io::{PipeReader, PipeWriter},
-    Process,
+    ProcAttr, Process,
 };
 
 use super::{Healthcheck, NonBlocking, Process as ProcessTrait};
@@ -23,24 +27,23 @@ use std::{
     task::{Context, Poll},
 };
 
-pub use conpty::ProcAttr;
-
 /// A windows representation of a [Process] via [conpty::Process].
 pub struct WinProcess {
     proc: Process,
 }
 
 impl ProcessTrait for WinProcess {
-    type Command = ProcAttr;
+    type Command = Command;
     type Stream = ProcessStream;
 
     fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
-        Self::spawn_command(ProcAttr::cmd(cmd.as_ref()))
+        Self::spawn_command(Command::new(cmd.as_ref()))
     }
 
     fn spawn_command(command: Self::Command) -> Result<Self> {
-        command
-            .spawn()
+        let attr = command_to_proc_attr(command)
+            .ok_or_else(|| to_io_error("command parsing error")(""))?;
+        attr.spawn()
             .map_err(to_io_error(""))
             .map(|proc| WinProcess { proc })
     }
@@ -166,4 +169,45 @@ impl AsyncRead for AsyncProcessStream {
     ) -> Poll<Result<usize>> {
         Pin::new(&mut self.stream).poll_read(cx, buf)
     }
+}
+
+fn command_to_proc_attr(cmd: Command) -> Option<ProcAttr> {
+    let program = cmd.get_program().to_str()?;
+    let mut attr = ProcAttr::cmd(program);
+
+    if let Some(dir) = cmd.get_current_dir() {
+        let dir = dir.to_str()?;
+
+        attr = attr.current_dir(dir);
+    }
+
+    if cmd.get_args().len() > 0 {
+        let args = cmd
+            .get_args()
+            .into_iter()
+            .map(os_str_to_string)
+            .collect::<Option<Vec<String>>>()?;
+
+        attr = attr.args(args);
+    }
+
+    if cmd.get_envs().len() > 0 {
+        let envs = cmd
+            .get_envs()
+            .into_iter()
+            .filter(|(_, v)| v.is_some())
+            .map(|(k, v)| {
+                os_str_to_string(k).and_then(|k| os_str_to_string(v.unwrap()).map(|v| (k, v)))
+            })
+            .collect::<Option<Vec<(String, String)>>>()?;
+        let envs = HashMap::from_iter(envs);
+
+        attr = attr.envs(envs);
+    }
+
+    Some(attr)
+}
+
+fn os_str_to_string(s: &OsStr) -> Option<String> {
+    s.to_str().map(|s| s.to_owned())
 }

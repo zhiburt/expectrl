@@ -1,14 +1,8 @@
 use expectrl::{session::Session, Captures, ControlCode, Needle};
-use std::{thread, time::Duration};
-
-#[cfg(unix)]
-use std::process::Command;
+use std::{process::Command, thread, time::Duration};
 
 #[cfg(unix)]
 use expectrl::WaitStatus;
-
-#[cfg(windows)]
-use expectrl::process::windows::ProcAttr;
 
 #[cfg(feature = "async")]
 use futures_lite::{
@@ -30,8 +24,7 @@ fn send_controll() {
 #[test]
 #[cfg(windows)]
 fn send_controll() {
-    let mut proc =
-        Session::spawn(ProcAttr::cmd("powershell -C ping localhost".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell -C ping localhost")).unwrap();
 
     // give powershell a bit time
     thread::sleep(Duration::from_millis(100));
@@ -62,8 +55,7 @@ fn send() {
 #[test]
 #[cfg(windows)]
 fn send() {
-    let mut proc =
-        Session::spawn(ProcAttr::default().commandline("powershell -C type".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell -C type")).unwrap();
     thread::sleep(Duration::from_millis(1000));
 
     _p_send(&mut proc, "hello cat\r\n").unwrap();
@@ -95,7 +87,7 @@ fn send_line() {
 #[test]
 #[cfg(windows)]
 fn send_line() {
-    let mut proc = Session::spawn(ProcAttr::cmd("powershell -C type".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell -C type")).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
     _p_send_line(&mut proc, "hello cat").unwrap();
@@ -144,8 +136,7 @@ fn try_read_by_byte() {
     // it shows that on windows ECHO is turned on.
     // Mustn't it be turned down?
 
-    let mut proc =
-        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell")).unwrap();
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
@@ -204,8 +195,7 @@ fn blocking_read_after_non_blocking() {
 #[test]
 #[cfg(windows)]
 fn blocking_read_after_non_blocking() {
-    let mut proc =
-        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell")).unwrap();
     _p_send_line(
         &mut proc,
         "while (1) { read-host | set r; if (!$r) { break }}",
@@ -258,8 +248,7 @@ fn try_read() {
 #[test]
 #[cfg(windows)]
 fn try_read() {
-    let mut proc =
-        Session::spawn(ProcAttr::default().commandline("powershell".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("powershell")).unwrap();
     thread::sleep(Duration::from_millis(300));
     _p_send_line(
         &mut proc,
@@ -375,7 +364,7 @@ fn try_read_after_process_exit() {
 #[test]
 #[cfg(windows)]
 fn try_read_after_process_exit() {
-    let mut proc = Session::spawn(ProcAttr::cmd("echo hello cat".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("echo hello cat")).unwrap();
 
     assert_eq!(proc.wait(None).unwrap(), 0);
 
@@ -411,7 +400,7 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc = Session::spawn(ProcAttr::cmd("echo Hello World".to_string())).unwrap();
+    let mut proc = Session::spawn(Command::new("echo Hello World")).unwrap();
 
     thread::sleep(Duration::from_millis(1000));
 
@@ -435,7 +424,7 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn continues_try_reads() {
-    let cmd = ProcAttr::default().commandline("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"".to_string());
+    let cmd = Command::new("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"");
 
     let mut proc = Session::spawn(cmd).unwrap();
 
