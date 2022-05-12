@@ -9,7 +9,7 @@ struct State {
 
 #[cfg(not(feature = "async"))]
 fn main() {
-    use expectrl::{interact::Context, session::Session};
+    use expectrl::{interact::Context, Session};
 
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 

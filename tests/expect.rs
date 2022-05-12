@@ -132,7 +132,7 @@ fn expect_n_bytes() {
 #[cfg(windows)]
 #[test]
 fn expect_n_bytes() {
-    use expectrl::session::Session;
+    use expectrl::Session;
     use std::process::Command;
 
     let mut session = Session::spawn(Command::new("echo Hello World")).unwrap();

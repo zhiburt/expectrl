@@ -142,7 +142,7 @@ impl<P, S: AsyncWrite + Unpin> Session<P, S> {
     /// So it may be better to use [ControlCode].
     ///
     /// ```no_run
-    /// use expectrl::{session::Session, ControlCode};
+    /// use expectrl::{Session, ControlCode};
     /// use std::process::Command;
     ///
     /// # futures_lite::future::block_on(async {

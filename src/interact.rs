@@ -3,8 +3,7 @@
 
 use crate::{
     process::{Healthcheck, NonBlocking},
-    session::Proc,
-    session::Session,
+    session::{Proc, Session},
     stream::stdin::Stdin,
     Captures, ControlCode, Error,
 };

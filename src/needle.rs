@@ -147,14 +147,22 @@ impl Needle for char {
 ///
 /// It does checks lookups in order they were provided.
 ///
+/// # Example
+///
 /// ```no_run,ignore
-/// Any(["we", "are", "here"])
+/// use expectrl::{spawn, Any};
+///
+/// let mut p = spawn("cat").unwrap();
+/// p.expect(Any(["we", "are", "here"])).unwrap();
 /// ```
 ///
 /// To be able to combine different types of lookups you can call [Any::boxed].
 ///
 /// ```no_run,ignore
-/// Any::boxed(vec![Box::new("we"), Box::new(NBytes(3))])
+/// use expectrl::{spawn, Any, NBytes};
+///
+/// let mut p = spawn("cat").unwrap();
+/// p.expect(Any::boxed(vec![Box::new("we"), Box::new(NBytes(3))])).unwrap();
 /// ```
 pub struct Any<I>(pub I);
 

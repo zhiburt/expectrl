@@ -77,7 +77,7 @@ pub use needle::{Any, Eof, NBytes, Needle, Regex};
 #[cfg(unix)]
 pub use ptyprocess::{Signal, WaitStatus};
 
-use session::Session;
+pub use session::Session;
 
 /// Spawn spawnes a new session.
 ///
@@ -87,9 +87,8 @@ use session::Session;
 /// # Example
 ///
 /// ```no_run,ignore
+/// use std::{thread, time::Duration, io::{Read, Write}};
 /// use expectrl::{spawn, ControlCode};
-/// use std::{thread, time::Duration};
-/// use std::io::{Read, Write};
 ///
 /// let mut p = spawn("cat").unwrap();
 /// p.send_line("Hello World").unwrap();

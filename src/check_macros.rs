@@ -12,12 +12,12 @@
 /// The macros levareges [crate::Session::check] function, so its just made for convience.
 ///
 /// # Example
-/// ```no_run,ignore
+/// ```no_run
 /// # let mut session = expectrl::spawn("cat").unwrap();
 /// #
 /// loop {
 ///     expectrl::check!{
-///         session,
+///         &mut session,
 ///         world = "\r" => {
 ///             // handle end of line
 ///         },

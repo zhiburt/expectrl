@@ -1,4 +1,4 @@
-use expectrl::{session::Session, Captures, ControlCode, Needle};
+use expectrl::{Captures, ControlCode, Needle, Session};
 use std::{process::Command, thread, time::Duration};
 
 #[cfg(unix)]

@@ -1,8 +1,19 @@
 //! This module contains a system independent [Session] representation.
 //!
 //! But it does set a default [Session<P, S>] processes and stream in order to be able to use Session without generics.
-//!
 //! It also sets a list of other methods which are available for a platform processes.
+//!
+//! # Example
+//!
+//! ```no_run,ignore
+//! use std::{process::Command, io::prelude::*};
+//! use expectrl::Session;
+//!
+//! let mut p = Session::spawn(Command::new("cat")).unwrap();
+//! writeln!(p, "Hello World").unwrap();
+//! let mut line = String::new();
+//! p.read_line(&mut line).unwrap();
+//! ```
 
 #[cfg(feature = "async")]
 pub mod async_session;
@@ -53,11 +64,9 @@ impl Session {
     ///
     /// # Example
     ///
-    /// On unix
-    ///
     /// ```no_run
-    /// use expectrl::session::Session;
     /// use std::process::Command;
+    /// use expectrl::Session;
     ///
     /// let p = Session::spawn(Command::new("cat"));
     /// ```

@@ -1,5 +1,5 @@
 use expectrl::interact::InteractOptions;
-use expectrl::{interact::Context, session::Session};
+use expectrl::{interact::Context, Session};
 use std::{
     io::{self, Cursor, Read, Write},
     time::{Duration, Instant},

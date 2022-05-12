@@ -1,4 +1,4 @@
-use expectrl::{session::Session, spawn};
+use expectrl::{spawn, Session};
 use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]

@@ -12,6 +12,10 @@ categories = ["development-tools::testing", "os::unix-apis", "os::windows-apis"]
 keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
+# It's necessary only for Windows, because of `Command::get_*` functions.
+# Unix build can be done on older versions
+rust-version = "1.57"
+
 [features]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 
@@ -28,3 +32,6 @@ blocking = { version = "1.2.0", optional = true }
 ptyprocess = "0.3.0"
 nix = "0.23.1"
 async-io = { version = "1.6.0", optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
