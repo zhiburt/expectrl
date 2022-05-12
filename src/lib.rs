@@ -24,9 +24,9 @@
 //! `expectrl` like original `expect` may shine when you're working with interactive applications.
 //! If your application is not interactive you may not find the library the best choise.
 //!
-//! ## Example
+//! ## Examples
 //!
-//! An example for interacting via ftp.
+//! ### An example for interacting via ftp.
 //!
 //! ```no_run,ignore
 //! use expectrl::{spawn, Regex, Eof, WaitStatus};
@@ -48,14 +48,45 @@
 //!
 //! *The example inspired by the one in [philippkeller/rexpect].*
 //!
+//! ### An example when `Command` is used.
+//!
+//! ```no_run,ignore
+//! use std::{process::Command, io::prelude::*};
+//! use expectrl::Session;
+//!
+//! let mut echo_hello = Command::new("sh");
+//! echo_hello.arg("-c").arg("echo hello");
+//!
+//! let mut p = Session::spawn(echo_hello).unwrap();
+//! p.expect("hello").unwrap();
+//! ```
+//!
+//! ### An example of logging.
+//!
+//! ```no_run,ignore
+//! use std::io::{stdout, prelude::*};
+//! use expectrl::spawn;
+//!
+//! let mut sh = spawn("sh")
+//!     .unwrap()
+//!     .with_log(stdout())
+//!     .unwrap();
+//!
+//! writeln!(sh, "Hello World").unwrap();
+//! ```
+//!
+//! ### An example of `async` feature.
+//!
+//! You need to provide a `features=["async"]` flag to use it.
+//!
+//! ```no_run,ignore
+//! use expectrl::spawn;
+//!
+//! let mut p = spawn("cat").await.unwrap();
+//! p.expect("hello").await.unwrap();
+//! ```
+//!
 //! [For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
-//!
-//! ## Features
-//!
-//! - It has an `async` support (To enable them you must turn on an `async` feature).
-//! - It supports logging.
-//! - It supports interact function.
-//! - It has a Windows support.
 
 mod captures;
 mod check_macros;
