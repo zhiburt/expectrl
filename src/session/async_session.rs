@@ -38,6 +38,11 @@ impl<P, S> Session<P, S> {
         self.stream.set_expect_timeout(expect_timeout);
     }
 
+    /// Borrow mutably the session's stream.
+    pub fn stream_mut(&mut self) -> &mut Stream<S> {
+        &mut self.stream
+    }
+
     pub(crate) fn swap_stream<F: FnOnce(S) -> R, R>(
         mut self,
         new_stream: F,
@@ -221,9 +226,9 @@ impl<P: Unpin, S: AsyncRead + Unpin> AsyncBufRead for Session<P, S> {
 }
 
 /// Session represents a spawned process and its streams.
-/// It controlls process and communication with it.
+/// It controls process and communication with it.
 #[derive(Debug)]
-struct Stream<S> {
+pub struct Stream<S> {
     stream: BufferedStream<S>,
     expect_timeout: Option<Duration>,
 }
