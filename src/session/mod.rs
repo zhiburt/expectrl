@@ -17,7 +17,7 @@
 
 #[cfg(feature = "async")]
 pub mod async_session;
-#[cfg(not(feature = "async"))]
+#[cfg(any(not(feature = "async"), doc))]
 pub mod sync_session;
 
 use std::io::{Read, Write};
