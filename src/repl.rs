@@ -280,7 +280,6 @@ impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
     /// Sends line to repl (and flush the output).
     ///
     /// If echo_on=true wait for the input to appear.
-    #[cfg(not(feature = "async"))]
     pub fn send_line<SS: AsRef<str>>(&mut self, line: SS) -> Result<(), Error> {
         self.session.send_line(line.as_ref())?;
         if self.is_echo_on {
