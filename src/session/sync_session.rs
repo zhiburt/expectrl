@@ -81,7 +81,6 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// Default version is gready.
     ///
     /// The implications are.
-    ///
     /// Imagine you use [crate::Regex] `"\d+"` to find a match.
     /// And your process outputs `123`.
     /// In case of lazy approach we will match `1`.
@@ -116,7 +115,7 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
         }
     }
 
-    /// Expect which read byte by byte.
+    /// Expect which fills as much as possible to the buffer.
     ///
     /// See [Session::expect].
     fn expect_gready<N>(&mut self, needle: N) -> Result<Captures, Error>
@@ -149,7 +148,7 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
         }
     }
 
-    /// Expect which fills as much as possible to the buffer.
+    /// Expect which reads byte by byte.
     ///
     /// See [Session::expect].
     fn expect_lazy<N>(&mut self, needle: N) -> Result<Captures, Error>
