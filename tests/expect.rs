@@ -115,7 +115,7 @@ fn expect_regex() {
             m.before(),
             [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
         );
-        assert_eq!(m.get(0).unwrap(), b"lo");
+        assert_eq!(m.get(0).unwrap(), b"lo World\r");
     }
 
     #[cfg(feature = "async")]
@@ -126,7 +126,7 @@ fn expect_regex() {
                 m.before(),
                 [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
             );
-            assert_eq!(m.get(0).unwrap(), b"lo");
+            assert_eq!(m.get(0).unwrap(), b"lo World\r");
         })
     }
 }
