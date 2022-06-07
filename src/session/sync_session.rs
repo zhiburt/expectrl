@@ -22,6 +22,7 @@ pub struct Session<P, S> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
+    expect_lazy: bool,
 }
 
 impl<P, S: Read> Session<P, S> {
@@ -31,6 +32,7 @@ impl<P, S: Read> Session<P, S> {
             proc: process,
             stream,
             expect_timeout: Some(Duration::from_millis(10000)),
+            expect_lazy: false,
         })
     }
 
@@ -55,6 +57,15 @@ impl<P, S> Session<P, S> {
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.expect_timeout = expect_timeout;
     }
+
+    /// Set a expect algorithm to be either gready or lazy.
+    ///
+    /// Default algorithm is gready.
+    ///
+    /// See [Session::expect].
+    pub fn set_expect_lazy(&mut self, lazy: bool) {
+        self.expect_lazy = lazy;
+    }
 }
 
 impl<P, S: Read + NonBlocking> Session<P, S> {
@@ -62,15 +73,30 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
     ///
-    /// This make assertions in a lazy manner. Starts from 1st byte then checks 2nd byte and goes further.
-    /// It is done intentinally to be presize.
-    /// Here's an example,
-    /// when you call this method with [crate::Regex] and output contains 123, expect will return ‘1’ as a match not ‘123’.
+    /// The match algorthm can be either
+    ///     - gready
+    ///     - lazy
+    ///
+    /// You can set one via [Session::set_expect_lazy].
+    /// Default version is gready.
+    ///
+    /// The implications are.
+    /// Imagine you use [crate::Regex] `"\d+"` to find a match.
+    /// And your process outputs `123`.
+    /// In case of lazy approach we will match `1`.
+    /// Where's in case of gready one we will match `123`.
     ///
     /// # Example
     ///
     /// ```
     /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
+    /// assert_eq!(m.get(0).unwrap(), b"123");
+    /// ```
+    ///
+    /// ```
+    /// let mut p = expectrl::spawn("echo 123").unwrap();
+    /// p.set_expect_lazy(true);
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"1");
     /// ```
@@ -79,7 +105,56 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// It returns an error if timeout is reached.
     /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    pub fn expect<E: Needle>(&mut self, expect: E) -> Result<Captures, Error> {
+    pub fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
+        match self.expect_lazy {
+            true => self.expect_lazy(needle),
+            false => self.expect_gready(needle),
+        }
+    }
+
+    /// Expect which fills as much as possible to the buffer.
+    ///
+    /// See [Session::expect].
+    fn expect_gready<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
+        let start = time::Instant::now();
+        loop {
+            let eof = self.stream.read_available()?;
+            let data = self.stream.get_available();
+
+            let found = needle.check(data, eof)?;
+            if !found.is_empty() {
+                let end_index = Captures::right_most_index(&found);
+                let involved_bytes = data[..end_index].to_vec();
+                self.stream.consume_available(end_index);
+
+                return Ok(Captures::new(involved_bytes, found));
+            }
+
+            if eof {
+                return Err(Error::Eof);
+            }
+
+            if let Some(timeout) = self.expect_timeout {
+                if start.elapsed() > timeout {
+                    return Err(Error::ExpectTimeout);
+                }
+            }
+        }
+    }
+
+    /// Expect which reads byte by byte.
+    ///
+    /// See [Session::expect].
+    fn expect_lazy<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
         let mut checking_data_length = 0;
         let mut eof = false;
         let start = time::Instant::now();
@@ -112,7 +187,7 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
 
             let data = &available[..checking_data_length];
 
-            let found = expect.check(data, eof)?;
+            let found = needle.check(data, eof)?;
             if !found.is_empty() {
                 let end_index = Captures::right_most_index(&found);
                 let involved_bytes = data[..end_index].to_vec();
@@ -153,7 +228,10 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// let m = p.check(Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
-    pub fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
+    pub fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
@@ -204,7 +282,10 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// let m = p.is_matched(Regex("\\d+")).unwrap();
     /// assert_eq!(m, true);
     /// ```
-    pub fn is_matched<E: Needle>(&mut self, needle: E) -> Result<bool, Error> {
+    pub fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
+    where
+        N: Needle,
+    {
         let eof = self.stream.read_available()?;
         let buf = self.stream.get_available();
 
