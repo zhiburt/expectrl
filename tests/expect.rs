@@ -58,15 +58,41 @@ fn expect_regex() {
     session.send_line("Hello World").unwrap();
     let m = session.expect(Regex("lo.*")).unwrap();
     assert_eq!(m.before(), b"Hel");
+    assert_eq!(m.get(0).unwrap(), b"lo World\r");
+}
+
+#[cfg(unix)]
+#[cfg(not(feature = "async"))]
+#[test]
+fn expect_regex_lazy() {
+    let mut session = spawn("cat").unwrap();
+    session.set_expect_lazy(true);
+    session.send_line("Hello World").unwrap();
+    let m = session.expect(Regex("lo.*")).unwrap();
+    assert_eq!(m.before(), b"Hel");
     assert_eq!(m.get(0).unwrap(), b"lo");
 }
 
 #[cfg(unix)]
 #[cfg(feature = "async")]
 #[test]
-fn expect_regex() {
+fn expect_gready_regex() {
     futures_lite::future::block_on(async {
         let mut session = spawn("cat").unwrap();
+        session.send_line("Hello World").await.unwrap();
+        let m = session.expect(Regex("lo.*")).await.unwrap();
+        assert_eq!(m.before(), b"Hel");
+        assert_eq!(m.get(0).unwrap(), b"lo World\r");
+    })
+}
+
+#[cfg(unix)]
+#[cfg(feature = "async")]
+#[test]
+fn expect_lazy_regex() {
+    futures_lite::future::block_on(async {
+        let mut session = spawn("cat").unwrap();
+        session.set_expect_lazy(true);
         session.send_line("Hello World").await.unwrap();
         let m = session.expect(Regex("lo.*")).await.unwrap();
         assert_eq!(m.before(), b"Hel");
@@ -89,7 +115,7 @@ fn expect_regex() {
             m.before(),
             [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
         );
-        assert_eq!(m.get(0).unwrap(), b"lo");
+        assert_eq!(m.get(0).unwrap(), b"lo World\r");
     }
 
     #[cfg(feature = "async")]
@@ -100,7 +126,7 @@ fn expect_regex() {
                 m.before(),
                 [27, 91, 50, 74, 27, 91, 109, 27, 91, 72, 72, 101, 108]
             );
-            assert_eq!(m.get(0).unwrap(), b"lo");
+            assert_eq!(m.get(0).unwrap(), b"lo World\r");
         })
     }
 }

@@ -257,7 +257,7 @@ impl<P, S: Read + NonBlocking> ReplSession<P, S> {
 impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
     /// Block until prompt is found
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
-        self._expect_prompt().await?;
+        let _ = self._expect_prompt().await?;
         Ok(())
     }
 
