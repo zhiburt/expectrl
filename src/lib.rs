@@ -23,7 +23,20 @@
 //!
 //! `expectrl` like original `expect` may shine when you're working with interactive applications.
 //! If your application is not interactive you may not find the library the best choise.
+//! 
+//! ## Feature flags
+//! 
+//! - `async`: Enables a async/await public API.
 //!
+//! By default we generate documentation for interface with no features on.
+//! You can generate documentation for other features localy using this command.
+//! 
+//! ```bash
+//! cargo doc --features async --open
+//! # or
+//! RUSTDOCFLAGS='--cfg docsrs' cargo +nightly doc --features async --open
+//! ```
+//! 
 //! ## Examples
 //!
 //! ### An example for interacting via ftp.
