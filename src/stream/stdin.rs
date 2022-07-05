@@ -109,10 +109,7 @@ impl Read for Stdin {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         crate::process::unix::_make_non_blocking(self.stdin.as_raw_fd(), true)?;
 
-        let result = match self.stdin.read(buf) {
-            Ok(n) => Ok(n),
-            Err(err) => Err(err),
-        };
+        let result = self.stdin.read(buf);
 
         crate::process::unix::_make_non_blocking(self.stdin.as_raw_fd(), false)?;
 
