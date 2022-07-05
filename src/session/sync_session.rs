@@ -475,10 +475,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
     fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.get_mut().set_non_blocking()?;
 
-        let result = match self.stream.inner.read(buf) {
-            Ok(n) => Ok(n),
-            Err(err) => Err(err),
-        };
+        let result = self.stream.inner.read(buf);
 
         // As file is DUPed changes in one descriptor affects all ones
         // so we need to make blocking file after we finished.
@@ -531,10 +528,7 @@ impl<R: Read + NonBlocking> TryStream<R> {
     fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.get_mut().set_non_blocking()?;
 
-        let result = match self.stream.get_mut().read(buf) {
-            Ok(n) => Ok(n),
-            Err(err) => Err(err),
-        };
+        let result = self.stream.get_mut().read(buf);
 
         // As file is DUPed changes in one descriptor affects all ones
         // so we need to make blocking file after we finished.
