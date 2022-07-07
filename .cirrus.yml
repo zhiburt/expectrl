@@ -2,8 +2,8 @@ freebsd_instance:
   image_family: freebsd-13-0
 
 task:
-  timeout_in: 3m
+  timeout_in: 5m
   install_script:
-    - pkg install -y rust bash
+    - pkg install -y rust bash sh python
   script:
     - cargo test
