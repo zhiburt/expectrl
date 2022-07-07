@@ -3,9 +3,6 @@ freebsd_instance:
 
 task:
   install_script:
-    - pkg install -y rust git
-    - git clone https://github.com/zhiburt/expectrl
+    - pkg install -y rust bash
   script:
-    - ls
-    - cd expectrl
     - cargo test
