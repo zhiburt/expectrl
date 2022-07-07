@@ -1,0 +1,10 @@
+freebsd_instance:
+  image_family: freebsd-13-0
+
+task:
+  install_script:
+    - pkg install -y rust git
+    - git clone https://github.com/zhiburt/expectrl
+  script:
+    cd expectrl
+    cargo test
