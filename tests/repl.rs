@@ -16,9 +16,7 @@ fn bash() {
     let mut p = spawn_bash().unwrap();
 
     p.send_line("echo Hello World").unwrap();
-    let mut msg = String::new();
-    p.read_line(&mut msg).unwrap();
-    assert!(msg.ends_with("Hello World\r\n"));
+    let _ = p.expect("Hello World\r\n").unwrap();
 
     thread::sleep(Duration::from_millis(300));
     p.send_control(ControlCode::EOT).unwrap();
@@ -35,9 +33,7 @@ fn bash_with_log() {
         .unwrap();
 
     p.send_line("echo Hello World").unwrap();
-    let mut msg = String::new();
-    p.read_line(&mut msg).unwrap();
-    assert!(msg.ends_with("Hello World\r\n"));
+    let _ = p.expect("Hello World\r\n").unwrap();
 
     thread::sleep(Duration::from_millis(300));
     p.send_control(ControlCode::EOT).unwrap();

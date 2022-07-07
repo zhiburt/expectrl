@@ -93,10 +93,11 @@ fn check_eof() {
     thread::sleep(Duration::from_millis(600));
 
     let m = session.check(Eof).unwrap();
+
     assert_eq!(m.before(), b"");
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(target_os = "macos"))]
     assert!(m.matches().len() == 0);
 }
 

@@ -75,11 +75,9 @@ fn send_line() {
     _p_send_line(&mut proc, "hello cat").unwrap();
 
     // give cat a time to react on input
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(200));
 
-    let mut buf = vec![0; 128];
-    let n = _p_read(&mut proc, &mut buf).unwrap();
-    assert_eq!(&buf[..n], b"hello cat\r\n");
+    let _ = _p_expect(&mut proc, "hello cat\r\n").unwrap();
 
     assert!(proc.exit(true).unwrap());
 }
