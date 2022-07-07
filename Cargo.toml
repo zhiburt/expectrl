@@ -2,7 +2,8 @@
 name = "expectrl"
 version = "0.5.2"
 authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
-edition = "2018"
+edition = "2021"
+resolver = "2"
 description = "A tool for automating terminal applications in Unix like Don libes expect"
 repository = "https://github.com/zhiburt/expectrl"
 homepage = "https://github.com/zhiburt/expectrl"
@@ -12,26 +13,27 @@ categories = ["development-tools::testing", "os::unix-apis", "os::windows-apis"]
 keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
-# It's necessary only for Windows, because of `Command::get_*` functions.
-# Unix build can be done on older versions
-rust-version = "1.57"
-
 [features]
+# this feature only works with 'async' feature turned off
+polling = ["dep:polling", "dep:crossbeam-channel"]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 
 [dependencies]
+# move behind the future
 regex = "1.5.4"
 futures-lite = { version = "1.12.0", optional = true }
 futures-timer = { version = "3.0.2", optional = true }
-
-[target.'cfg(windows)'.dependencies]
-conpty = "0.3.0"
-blocking = { version = "1.2.0", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 ptyprocess = "0.3.0"
 nix = "0.23.1"
 async-io = { version = "1.6.0", optional = true }
+polling = { version = "2.3.0", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+conpty = "0.3.0"
+blocking = { version = "1.2.0", optional = true }
+crossbeam-channel = { version = "0.5.6", optional = true }
 
 [package.metadata.docs.rs]
 all-features = false

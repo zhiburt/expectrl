@@ -1,0 +1,11 @@
+freebsd_instance:
+  image_family: freebsd-13-1
+
+task:
+  timeout_in: 5m
+  install_script:
+    # - pkg update -f
+    - pkg upgrade -f --yes
+    - pkg install -y rust bash python
+  script:
+    - cargo test

@@ -25,7 +25,10 @@ pub struct Session<P, S> {
     expect_lazy: bool,
 }
 
-impl<P, S: Read> Session<P, S> {
+impl<P, S> Session<P, S>
+where
+    S: Read,
+{
     pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
@@ -66,6 +69,11 @@ impl<P, S> Session<P, S> {
     pub fn set_expect_lazy(&mut self, lazy: bool) {
         self.expect_lazy = lazy;
     }
+
+    /// Get a reference to original stream.
+    pub fn get_stream(&self) -> &S {
+        self.stream.as_ref()
+    }
 }
 
 impl<P, S: Read + NonBlocking> Session<P, S> {
@@ -88,13 +96,15 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// p.set_expect_lazy(true);
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
@@ -216,15 +226,16 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///
     /// let mut p = spawn("echo 123").unwrap();
-    ///
-    /// // wait to guarantee that check echo worked out (most likely)
-    /// std::thread::sleep(Duration::from_secs(1));
-    ///
+    /// #
+    /// # // wait to guarantee that check echo worked out (most likely)
+    /// # std::thread::sleep(Duration::from_millis(500));
+    /// #
     /// let m = p.check(Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
@@ -270,15 +281,15 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///
-    /// let mut p = spawn("echo 123").unwrap();
-    ///
-    /// // wait to guarantee that check echo worked out (most likely)
-    /// std::thread::sleep(Duration::from_secs(1));
-    ///
+    /// let mut p = spawn("cat").unwrap();
+    /// p.send_line("123");
+    /// # // wait to guarantee that check echo worked out (most likely)
+    /// # std::thread::sleep(Duration::from_secs(1));
     /// let m = p.is_matched(Regex("\\d+")).unwrap();
     /// assert_eq!(m, true);
     /// ```
@@ -438,6 +449,10 @@ struct TryStream<S> {
 impl<S> TryStream<S> {
     fn into_inner(self) -> S {
         self.stream.inner.into_inner().inner
+    }
+
+    fn as_ref(&self) -> &S {
+        &self.stream.inner.get_ref().inner
     }
 }
 

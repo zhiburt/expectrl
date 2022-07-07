@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 //! This module contains a system independent [Session] representation.
 //!
 //! But it does set a default [Session<P, S>] processes and stream in order to be able to use Session without generics.
@@ -23,7 +25,8 @@ pub mod sync_session;
 use std::io::{Read, Write};
 
 use crate::{
-    process::{NonBlocking, Process},
+    interact::{InteractSession, NoAction, NoFilter},
+    process::Process,
     stream::log::LoggedStream,
     Error,
 };
@@ -131,13 +134,11 @@ impl<P, S> Session<P, S> {
     }
 }
 
-#[cfg(not(feature = "async"))]
-impl<S> Session<Proc, S>
-where
-    S: NonBlocking + Write + Read,
-{
+impl<P, S> Session<P, S> {
     /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
+    /// human at the keyboard or a [`Read`]er implementator).
+    ///
+    /// You can set different callbacks to the session, see [`InteractSession`].
     ///
     /// Keystrokes are sent to the child process, and
     /// the `stdout` and `stderr` output of the child process is printed.
@@ -152,53 +153,47 @@ where
     /// BEWARE that interact finishes after a process stops.
     /// So after the return you may not obtain a correct status of a process.
     ///
-    /// # Example
+    /// In not `async` mode the default version uses a buzy loop.
     ///
-    /// ```no_run
-    /// let mut p = expectrl::spawn("cat").unwrap();
-    /// p.interact().unwrap();
-    /// ```
+    /// - On `linux` you can use a `polling` version using the corresponding feature.
+    /// - On `windows` the feature is also present but it spawns a thread for pooling which creates a set of obsticales.
+    ///   Specifically if you're planning to call `interact()` multiple times it may not be safe. Because the previous threads may still be running.
     ///
-    /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
-    pub fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::default().interact_in_terminal(self)
-    }
-}
-
-#[cfg(feature = "async")]
-impl<S> Session<Proc, S>
-where
-    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
-{
-    /// Interact gives control of the child process to the interactive user (the
-    /// human at the keyboard).
-    ///
-    /// Keystrokes are sent to the child process, and
-    /// the `stdout` and `stderr` output of the child process is printed.
-    ///
-    /// When the user types the `escape_character` this method will return control to a running process.
-    /// The escape_character will not be transmitted.
-    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
-    ///
-    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
-    /// it echos the real `stdin` to the child `stdin`.
-    ///
-    /// BEWARE that interact finishes after a process stops.
-    /// So after the return you may not obtain a correct status of a process.
+    /// It works via polling in `async` mode on both `unix` and `windows`.
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # futures_lite::future::block_on(async {
-    /// let mut p = expectrl::spawn("cat").unwrap();
-    /// p.interact().await.unwrap();
-    /// # });
-    /// ```
+    #[cfg_attr(
+        all(unix, not(feature = "async"), not(feature = "polling")),
+        doc = "```no_run"
+    )]
+    #[cfg_attr(
+        not(all(unix, not(feature = "async"), not(feature = "polling"))),
+        doc = "```ignore"
+    )]
+    /// use std::io;
     ///
-    /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
-    pub async fn interact(&mut self) -> Result<(), Error> {
-        crate::interact::InteractOptions::default()
-            .interact_in_terminal(self)
-            .await
+    /// let mut p = expectrl::spawn("cat").unwrap();
+    ///
+    /// let input = io::Cursor::new(String::from("Some text right here"));
+    ///
+    /// p.interact(input, io::stdout()).spawn().unwrap();
+    /// ```
+    pub fn interact<I, O>(
+        &mut self,
+        input: I,
+        output: O,
+    ) -> InteractSession<
+        (),
+        Self,
+        O,
+        I,
+        NoFilter,
+        NoFilter,
+        NoAction<Self, O, ()>,
+        NoAction<Self, O, ()>,
+        NoAction<Self, O, ()>,
+    > {
+        InteractSession::new(self, output, input, ())
     }
 }
