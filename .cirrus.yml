@@ -2,6 +2,7 @@ freebsd_instance:
   image_family: freebsd-13-0
 
 task:
+  timeout_in: 3m
   install_script:
     - pkg install -y rust bash
   script:
