@@ -4,6 +4,6 @@ freebsd_instance:
 task:
   timeout_in: 5m
   install_script:
-    - pkg install -y rust bash sh python
+    - pkg install -y rust bash python
   script:
     - cargo test
