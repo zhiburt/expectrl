@@ -265,6 +265,7 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
 }
 
 #[cfg(not(feature = "async"))]
+#[cfg(not(feature = "polling"))]
 impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
     P: Healthcheck,
@@ -291,6 +292,7 @@ where
 }
 
 #[cfg(not(feature = "async"))]
+#[cfg(not(feature = "polling"))]
 impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: NonBlocking + Read + Write,
@@ -299,9 +301,55 @@ where
     ///
     /// If you don't use any settings you can use [Session::interact].
     pub fn interact_in_terminal(&mut self, session: &mut Session<Proc, S>) -> Result<(), Error> {
-        let mut stdin = crate::stream::stdin::Stdin::new(session)?;
+        let mut stdin = crate::stream::stdin::Stdin::new()?;
+        stdin.blocking(true)?;
         let r = interact(self, session, &mut stdin, &mut std::io::stdout());
-        stdin.close(session)?;
+        stdin.blocking(false)?;
+        stdin.close()?;
+        r
+    }
+}
+
+#[cfg(not(feature = "async"))]
+#[cfg(feature = "polling")]
+impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
+where
+    P: Healthcheck,
+    S: NonBlocking + Read + Write + polling::Source,
+    R: Read + polling::Source,
+    W: Write,
+{
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    ///
+    /// On process exit it tries to read available bytes from output in order to run callbacks.
+    /// But it is not guaranteed that all output will be read therefore some callbacks might be not called.
+    ///
+    /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
+    /// (at the point of the call)
+    pub fn interact(
+        &mut self,
+        session: &mut Session<P, S>,
+        mut input: R,
+        mut output: W,
+    ) -> Result<(), Error> {
+        interact(self, session, &mut input, &mut output)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+#[cfg(feature = "polling")]
+impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
+where
+    S: NonBlocking + Read + Write + polling::Source,
+{
+    /// This function runs an interact loop with a terminal, using the provided settings.
+    ///
+    /// If you don't use any settings you can use [Session::interact].
+    pub fn interact_in_terminal(&mut self, session: &mut Session<Proc, S>) -> Result<(), Error> {
+        let mut stdin = crate::stream::stdin::Stdin::new()?;
+        let r = interact(self, session, &mut stdin, &mut std::io::stdout());
+        stdin.close()?;
         r
     }
 }
@@ -338,14 +386,15 @@ where
         &mut self,
         session: &mut Session<Proc, S>,
     ) -> Result<(), Error> {
-        let mut stdin = crate::stream::stdin::Stdin::new(session)?;
+        let mut stdin = crate::stream::stdin::Stdin::new()?;
         let r = interact(self, session, &mut stdin, &mut std::io::stdout()).await;
-        stdin.close(session)?;
+        stdin.close()?;
         r
     }
 }
 
 #[cfg(not(feature = "async"))]
+#[cfg(not(feature = "polling"))]
 fn interact<P, S, R, W, C>(
     options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
@@ -463,6 +512,153 @@ where
     }
 }
 
+#[cfg(not(feature = "async"))]
+#[cfg(feature = "polling")]
+fn interact<P, S, R, W, C>(
+    options: &mut InteractOptions<P, S, R, W, C>,
+    session: &mut Session<P, S>,
+    input: &mut R,
+    output: &mut W,
+) -> Result<(), Error>
+where
+    P: Healthcheck,
+    S: NonBlocking + Read + Write + polling::Source,
+    R: Read + polling::Source,
+    W: Write,
+{
+    use polling::{Event, Poller};
+
+    let mut output_buffer = Vec::new();
+    let options_has_input_checks = !options.input_handlers.is_empty();
+    let mut input_buffer = if options_has_input_checks {
+        Some(Vec::new())
+    } else {
+        None
+    };
+    let mut exited = false;
+
+    // Create a poller and register interest in readability on the socket.
+    let poller = Poller::new()?;
+    poller.add(&input.raw(), Event::readable(0))?;
+    poller.add(&session.get_stream().raw(), Event::readable(1))?;
+
+    println!("HANDLE {}", session.get_stream().raw());
+
+    let mut buf = [0; 512];
+
+    // The event loop.
+    let mut events = Vec::new();
+    loop {
+        // In case where proceses exits we are trying to
+        // fill buffer to run callbacks if there was something in.
+        //
+        // We ignore errors because there might be errors like EOCHILD etc.
+        let status = session.is_alive();
+        if matches!(status, Ok(false)) {
+            exited = true;
+        }
+
+        // Wait for at least one I/O event.
+        events.clear();
+        let _ = poller.wait(&mut events, None)?;
+
+        for ev in &events {
+            if ev.key == 0 {
+                // We dont't print user input back to the screen.
+                // In terminal mode it will be ECHOed back automatically.
+                // This way we preserve terminal seetings for example when user inputs password.
+                // The terminal must have been prepared before.
+                match input.read(&mut buf) {
+                    Ok(0) => {
+                        return Ok(());
+                    }
+                    Ok(n) => {
+                        let bytes = &buf[..n];
+                        let bytes = if let Some(filter) = options.input_filter.as_mut() {
+                            (filter)(bytes)?
+                        } else {
+                            Cow::Borrowed(bytes)
+                        };
+
+                        let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
+                            check_buffer.extend_from_slice(&bytes);
+                            loop {
+                                match options.check_input(input, output, session, check_buffer)? {
+                                    Match::Yes(n) => {
+                                        let _ = check_buffer.drain(..n);
+                                        if check_buffer.is_empty() {
+                                            break vec![];
+                                        }
+                                    }
+                                    Match::No => {
+                                        let buffer = check_buffer.to_vec();
+                                        check_buffer.clear();
+                                        break buffer;
+                                    }
+                                    Match::MaybeLater => break vec![],
+                                }
+                            }
+                        } else {
+                            bytes.to_vec()
+                        };
+
+                        let escape_char_position =
+                            buffer.iter().position(|c| *c == options.escape_character);
+                        match escape_char_position {
+                            Some(pos) => {
+                                session.write_all(&buffer[..pos])?;
+                                return Ok(());
+                            }
+                            None => {
+                                session.write_all(&buffer[..])?;
+                            }
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+
+                // Set interest in the next readability event.
+                poller.modify(&input.raw(), Event::readable(0))?;
+            }
+
+            if ev.key == 1 {
+                match session.try_read(&mut buf) {
+                    Ok(n) => {
+                        let eof = n == 0;
+                        if eof {
+                            exited = true;
+                        }
+
+                        output_buffer.extend_from_slice(&buf[..n]);
+                        options.check_output(input, output, session, &mut output_buffer, eof)?;
+
+                        let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                            (filter)(&buf[..n])?
+                        } else {
+                            Cow::Borrowed(&buf[..n])
+                        };
+
+                        output.write_all(&bytes)?;
+                        output.flush()?;
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+
+                // Set interest in the next readability event.
+                poller.modify(&session.get_stream().raw(), Event::readable(1))?;
+            }
+        }
+
+        if exited {
+            return Ok(());
+        }
+
+        options.call_idle_handler(input, output, session)?;
+    }
+}
+
 // copy paste of sync version with async await syntax
 #[cfg(feature = "async")]
 async fn interact<P, S, R, W, C>(
@@ -488,7 +684,8 @@ where
     };
     let mut exited = false;
 
-    let mut buf = [0; 512];
+    let mut stdin_buf = [0; 512];
+    let mut proc_buf = [0; 512];
     loop {
         // In case where proceses exits we are trying to
         // fill buffer to run callbacks if there was something in.
@@ -499,82 +696,96 @@ where
             exited = true;
         }
 
-        if let Some(result) = futures_lite::future::poll_once(session.read(&mut buf)).await {
-            let n = result?;
-            let eof = n == 0;
-            if eof {
-                exited = true;
-            }
-
-            output_buffer.extend_from_slice(&buf[..n]);
-            options.check_output(input, output, session, &mut output_buffer, eof)?;
-
-            let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                (filter)(&buf[..n])?
-            } else {
-                Cow::Borrowed(&buf[..n])
-            };
-
-            output.write_all(&bytes)?;
-            output.flush()?;
+        #[derive(Debug)]
+        enum ReadFrom {
+            Stdin,
+            Process,
         }
 
-        if exited {
-            return Ok(());
-        }
+        let read_process = async { (ReadFrom::Process, session.read(&mut proc_buf).await) };
+        let read_stdin = async { (ReadFrom::Stdin, input.read(&mut stdin_buf).await) };
 
-        // We dont't print user input back to the screen.
-        // In terminal mode it will be ECHOed back automatically.
-        // This way we preserve terminal seetings for example when user inputs password.
-        // The terminal must have been prepared before.
-        match input.read(&mut buf).await {
-            Ok(0) => {
-                return Ok(());
-            }
-            Ok(n) => {
-                let bytes = &buf[..n];
-                let bytes = if let Some(filter) = options.input_filter.as_mut() {
-                    (filter)(bytes)?
+        let (read_from, result) = futures_lite::future::or(read_process, read_stdin).await;
+
+        match read_from {
+            ReadFrom::Process => {
+                let n = result?;
+                let eof = n == 0;
+                if eof {
+                    exited = true;
+                }
+
+                output_buffer.extend_from_slice(&proc_buf[..n]);
+                options.check_output(input, output, session, &mut output_buffer, eof)?;
+
+                let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                    (filter)(&proc_buf[..n])?
                 } else {
-                    Cow::Borrowed(bytes)
+                    Cow::Borrowed(&proc_buf[..n])
                 };
 
-                let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
-                    check_buffer.extend_from_slice(&bytes);
-                    loop {
-                        match options.check_input(input, output, session, check_buffer)? {
-                            Match::Yes(n) => {
-                                check_buffer.drain(..n);
-                                if check_buffer.is_empty() {
-                                    break vec![];
-                                }
-                            }
-                            Match::No => {
-                                let buffer = check_buffer.to_vec();
-                                check_buffer.clear();
-                                break buffer;
-                            }
-                            Match::MaybeLater => break vec![],
-                        }
-                    }
-                } else {
-                    bytes.to_vec()
-                };
+                output.write_all(&bytes)?;
+                output.flush()?;
 
-                let escape_char_position =
-                    buffer.iter().position(|c| *c == options.escape_character);
-                match escape_char_position {
-                    Some(pos) => {
-                        session.write_all(&buffer[..pos]).await?;
-                        return Ok(());
-                    }
-                    None => {
-                        session.write_all(&buffer[..]).await?;
-                    }
+                if exited {
+                    return Ok(());
                 }
             }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err.into()),
+            ReadFrom::Stdin => {
+                // We dont't print user input back to the screen.
+                // In terminal mode it will be ECHOed back automatically.
+                // This way we preserve terminal seetings for example when user inputs password.
+                // The terminal must have been prepared before.
+                match result {
+                    Ok(0) => {
+                        return Ok(());
+                    }
+                    Ok(n) => {
+                        let bytes = &stdin_buf[..n];
+                        let bytes = if let Some(filter) = options.input_filter.as_mut() {
+                            (filter)(bytes)?
+                        } else {
+                            Cow::Borrowed(bytes)
+                        };
+
+                        let buffer = if let Some(check_buffer) = input_buffer.as_mut() {
+                            check_buffer.extend_from_slice(&bytes);
+                            loop {
+                                match options.check_input(input, output, session, check_buffer)? {
+                                    Match::Yes(n) => {
+                                        check_buffer.drain(..n);
+                                        if check_buffer.is_empty() {
+                                            break vec![];
+                                        }
+                                    }
+                                    Match::No => {
+                                        let buffer = check_buffer.to_vec();
+                                        check_buffer.clear();
+                                        break buffer;
+                                    }
+                                    Match::MaybeLater => break vec![],
+                                }
+                            }
+                        } else {
+                            bytes.to_vec()
+                        };
+
+                        let escape_char_position =
+                            buffer.iter().position(|c| *c == options.escape_character);
+                        match escape_char_position {
+                            Some(pos) => {
+                                session.write_all(&buffer[..pos]).await?;
+                                return Ok(());
+                            }
+                            None => {
+                                session.write_all(&buffer[..]).await?;
+                            }
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
         }
 
         options.call_idle_handler(input, output, session)?;

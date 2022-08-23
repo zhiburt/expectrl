@@ -300,8 +300,6 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     async fn expect_gready<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         let expect_timeout = self.expect_timeout;
 
-        println!("{:?}", expect_timeout);
-
         let expect_future = async {
             let mut eof = false;
             loop {
@@ -326,12 +324,9 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         };
 
         if let Some(timeout) = expect_timeout {
-            println!("SETTING TIMEOUT");
-
             let timeout_future = futures_timer::Delay::new(timeout);
             futures_lite::future::or(expect_future, async {
                 timeout_future.await;
-                println!("TIMEOUT");
                 Err(Error::ExpectTimeout)
             })
             .await

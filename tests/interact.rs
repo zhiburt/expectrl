@@ -27,6 +27,7 @@ fn interact_callback() {
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
+#[cfg(not(feature = "polling"))]
 #[test]
 fn interact_callbacks_with_stream_redirection() {
     let commands = vec![
@@ -90,6 +91,7 @@ fn interact_callbacks_called_after_exit() {
 }
 
 #[cfg(unix)]
+#[cfg(not(feature = "polling"))]
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_filters() {
@@ -130,6 +132,7 @@ fn interact_filters() {
 }
 
 #[cfg(unix)]
+#[cfg(not(feature = "polling"))]
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_context() {
@@ -171,6 +174,7 @@ fn interact_context() {
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
+#[cfg(not(feature = "polling"))]
 #[test]
 fn interact_on_output_not_matched() {
     // Stops interact mode after 123 being read.
@@ -224,6 +228,7 @@ fn interact_on_output_not_matched() {
 }
 
 #[cfg(unix)]
+#[cfg(not(feature = "polling"))]
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_stream_redirection() {

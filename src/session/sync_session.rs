@@ -25,7 +25,10 @@ pub struct Session<P, S> {
     expect_lazy: bool,
 }
 
-impl<P, S: Read> Session<P, S> {
+impl<P, S> Session<P, S>
+where
+    S: Read,
+{
     pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
@@ -65,6 +68,11 @@ impl<P, S> Session<P, S> {
     /// See [Session::expect].
     pub fn set_expect_lazy(&mut self, lazy: bool) {
         self.expect_lazy = lazy;
+    }
+
+    /// Get a reference to original stream.
+    pub fn get_stream(&self) -> &S {
+        self.stream.as_ref()
     }
 }
 
@@ -438,6 +446,10 @@ struct TryStream<S> {
 impl<S> TryStream<S> {
     fn into_inner(self) -> S {
         self.stream.inner.into_inner().inner
+    }
+
+    fn as_ref(&self) -> &S {
+        &self.stream.inner.get_ref().inner
     }
 }
 

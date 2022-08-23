@@ -118,41 +118,19 @@ impl Read for PtyStream {
 impl NonBlocking for PtyStream {
     fn set_non_blocking(&mut self) -> Result<()> {
         let fd = self.handle.as_raw_fd();
-        _make_non_blocking(fd, true)
+        make_non_blocking(fd, true)
     }
 
     fn set_blocking(&mut self) -> Result<()> {
         let fd = self.handle.as_raw_fd();
-        _make_non_blocking(fd, false)
+        make_non_blocking(fd, false)
     }
 }
 
-pub(crate) fn _make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
-    use nix::fcntl::{fcntl, FcntlArg, OFlag};
-
-    let opt = fcntl(fd, FcntlArg::F_GETFL).map_err(nix_error_to_io)?;
-    let mut opt = OFlag::from_bits_truncate(opt);
-    opt.set(OFlag::O_NONBLOCK, blocking);
-    let _ = fcntl(fd, FcntlArg::F_SETFL(opt)).map_err(nix_error_to_io)?;
-    Ok(())
-}
-
-fn nix_error_to_io(err: nix::Error) -> io::Error {
-    io::Error::from_raw_os_error(err as _)
-}
-
-/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
-/// It takes care of single and double quotes but,
-///
-/// It doesn't cover all edge cases.
-/// So it may not be compatible with real shell arguments parsing.
-fn tokenize_command(program: &str) -> Vec<String> {
-    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
-    let mut res = vec![];
-    for cap in re.captures_iter(program) {
-        res.push(cap[0].to_string());
+impl AsRawFd for PtyStream {
+    fn as_raw_fd(&self) -> RawFd {
+        self.handle.as_raw_fd()
     }
-    res
 }
 
 #[cfg(feature = "async")]
@@ -161,12 +139,6 @@ impl IntoAsyncStream for PtyStream {
 
     fn into_async_stream(self) -> Result<Self::AsyncsStream> {
         AsyncPtyStream::new(self)
-    }
-}
-
-impl AsRawFd for PtyStream {
-    fn as_raw_fd(&self) -> RawFd {
-        self.handle.as_raw_fd()
     }
 }
 
@@ -212,6 +184,41 @@ impl AsyncRead for AsyncPtyStream {
     ) -> Poll<Result<usize>> {
         Pin::new(&mut self.stream).poll_read(cx, buf)
     }
+}
+
+#[cfg(feature = "polling")]
+impl polling::Source for PtyStream {
+    fn raw(&self) -> RawFd {
+        self.as_raw_fd()
+    }
+}
+
+pub(crate) fn make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
+    use nix::fcntl::{fcntl, FcntlArg, OFlag};
+
+    let opt = fcntl(fd, FcntlArg::F_GETFL).map_err(nix_error_to_io)?;
+    let mut opt = OFlag::from_bits_truncate(opt);
+    opt.set(OFlag::O_NONBLOCK, blocking);
+    let _ = fcntl(fd, FcntlArg::F_SETFL(opt)).map_err(nix_error_to_io)?;
+    Ok(())
+}
+
+fn nix_error_to_io(err: nix::Error) -> io::Error {
+    io::Error::from_raw_os_error(err as _)
+}
+
+/// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
+/// It takes care of single and double quotes but,
+///
+/// It doesn't cover all edge cases.
+/// So it may not be compatible with real shell arguments parsing.
+fn tokenize_command(program: &str) -> Vec<String> {
+    let re = regex::Regex::new(r#""[^"]+"|'[^']+'|[^'" ]+"#).unwrap();
+    let mut res = vec![];
+    for cap in re.captures_iter(program) {
+        res.push(cap[0].to_string());
+    }
+    res
 }
 
 #[cfg(test)]
