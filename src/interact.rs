@@ -264,8 +264,7 @@ impl<P, S, R, W, C> InteractOptions<P, S, R, W, C> {
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(not(feature = "polling"))]
+#[cfg(all(not(feature = "async"), not(feature = "polling")))]
 impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
     P: Healthcheck,
@@ -291,8 +290,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(not(feature = "polling"))]
+#[cfg(all(not(feature = "async"), not(feature = "polling")))]
 impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: NonBlocking + Read + Write,
@@ -310,8 +308,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "polling")]
+#[cfg(all(unix, not(feature = "async"), feature = "polling"))]
 impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
     P: Healthcheck,
@@ -337,8 +334,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "polling")]
+#[cfg(all(unix, not(feature = "async"), feature = "polling"))]
 impl<S, C> InteractOptions<Proc, S, Stdin, Stdout, C>
 where
     S: NonBlocking + Read + Write + polling::Source,
@@ -393,7 +389,7 @@ where
     }
 }
 
-#[cfg(all(windows, not(feature = "async")))]
+#[cfg(all(not(feature = "async"), not(feature = "polling")))]
 fn interact<P, S, R, W, C>(
     options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
@@ -511,7 +507,7 @@ where
     }
 }
 
-#[cfg(all(unix, not(feature = "async")))]
+#[cfg(all(unix, not(feature = "async"), feature = "polling"))]
 fn interact<P, S, R, W, C>(
     options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
