@@ -131,8 +131,7 @@ impl<P, S> Session<P, S> {
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(not(feature = "polling"))]
+#[cfg(all(not(feature = "async"), not(feature = "polling")))]
 impl<S> Session<Proc, S>
 where
     S: NonBlocking + Write + Read,
@@ -162,25 +161,32 @@ where
     ///
     /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
     pub fn interact(&mut self) -> Result<(), Error> {
-        let is_echo = self
-            .get_echo()
-            .map_err(|e| Error::unknown("failed to get echo", e))?;
-        if !is_echo {
-            let _ = self.set_echo(true, None);
+        #[cfg(unix)]
+        {
+            let is_echo = self
+                .get_echo()
+                .map_err(|e| Error::unknown("failed to get echo", e))?;
+            if !is_echo {
+                let _ = self.set_echo(true, None);
+            }
+
+            crate::interact::InteractOptions::default().interact_in_terminal(self)?;
+
+            if !is_echo {
+                let _ = self.set_echo(false, None);
+            }
         }
 
-        crate::interact::InteractOptions::default().interact_in_terminal(self)?;
-
-        if !is_echo {
-            let _ = self.set_echo(false, None);
+        #[cfg(windows)]
+        {
+            crate::interact::InteractOptions::default().interact_in_terminal(self)?;
         }
 
         Ok(())
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "polling")]
+#[cfg(all(unix, feature = "polling", not(feature = "async")))]
 impl<S> Session<Proc, S>
 where
     S: NonBlocking + Write + Read + polling::Source,
@@ -259,19 +265,25 @@ where
     ///
     /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
     pub async fn interact(&mut self) -> Result<(), Error> {
-        let is_echo = self
-            .get_echo()
-            .map_err(|e| Error::unknown("failed to get echo", e))?;
-        if !is_echo {
-            let _ = self.set_echo(true, None);
+        #[cfg(unix)]
+        {
+            let is_echo = self
+                .get_echo()
+                .map_err(|e| Error::unknown("failed to get echo", e))?;
+            if !is_echo {
+                let _ = self.set_echo(true, None);
+            }
         }
 
         crate::interact::InteractOptions::default()
             .interact_in_terminal(self)
             .await?;
 
-        if !is_echo {
-            let _ = self.set_echo(false, None);
+        #[cfg(unix)]
+        {
+            if !is_echo {
+                let _ = self.set_echo(false, None);
+            }
         }
 
         Ok(())

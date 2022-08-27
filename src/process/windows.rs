@@ -130,14 +130,16 @@ impl IntoAsyncStream for ProcessStream {
 /// An async version of IO stream of [WinProcess].
 #[cfg(feature = "async")]
 pub struct AsyncProcessStream {
-    stream: blocking::Unblock<ProcessStream>,
+    output: blocking::Unblock<PipeReader>,
+    input: blocking::Unblock<PipeWriter>,
 }
 
 #[cfg(feature = "async")]
 impl AsyncProcessStream {
     fn new(stream: ProcessStream) -> Result<Self> {
-        let stream = blocking::Unblock::new(stream);
-        Ok(Self { stream })
+        let input = blocking::Unblock::new(stream.input);
+        let output = blocking::Unblock::new(stream.output);
+        Ok(Self { input, output })
     }
 }
 
@@ -148,15 +150,15 @@ impl AsyncWrite for AsyncProcessStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize>> {
-        Pin::new(&mut self.stream).poll_write(cx, buf)
+        Pin::new(&mut self.input).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
+        Pin::new(&mut self.input).poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        Pin::new(&mut self.stream).poll_close(cx)
+        Pin::new(&mut self.input).poll_close(cx)
     }
 }
 
@@ -167,7 +169,7 @@ impl AsyncRead for AsyncProcessStream {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize>> {
-        Pin::new(&mut self.stream).poll_read(cx, buf)
+        Pin::new(&mut self.output).poll_read(cx, buf)
     }
 }
 

@@ -47,6 +47,11 @@ impl<P, S> Session<P, S> {
         self.stream.expect_lazy = is_lazy;
     }
 
+    /// Get a mut reference to original stream.
+    pub fn get_stream_mut(&mut self) -> &mut S {
+        self.stream.get_mut()
+    }
+
     pub(crate) fn swap_stream<F: FnOnce(S) -> R, R>(
         mut self,
         new_stream: F,

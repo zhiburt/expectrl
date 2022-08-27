@@ -361,19 +361,40 @@ fn try_read_after_process_exit() {
     // // assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
 }
 
-#[test]
 #[cfg(windows)]
+#[test]
 fn try_read_after_process_exit() {
+    use std::io::ErrorKind;
+
     let mut proc = Session::spawn(Command::new("echo hello cat")).unwrap();
 
     assert_eq!(proc.wait(None).unwrap(), 0);
 
-    assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 59);
-    assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
-    assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
-    assert!(_p_is_empty(&mut proc).unwrap());
+    let now = std::time::Instant::now();
 
-    assert_eq!(proc.wait(None).unwrap(), 0);
+    loop {
+        if now.elapsed() > Duration::from_secs(2) {
+            panic!("didn't read what expected")
+        }
+
+        match _p_try_read(&mut proc, &mut [0; 128]) {
+            Ok(n) => {
+                assert_eq!(n, 59);
+                assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
+                assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
+                assert!(_p_is_empty(&mut proc).unwrap());
+                assert_eq!(proc.wait(None).unwrap(), 0);
+                return;
+            },
+            Err(err) => {
+                if err.kind() == ErrorKind::WouldBlock {
+                    continue;
+                }
+
+                panic!("unexpected error {:?}", err);
+            },
+        }
+    }
 }
 
 #[test]
@@ -402,34 +423,35 @@ fn try_read_to_end() {
 fn try_read_to_end() {
     let mut proc = Session::spawn(Command::new("echo Hello World")).unwrap();
 
-    thread::sleep(Duration::from_millis(1000));
+    let mut buf: Vec<u8> = Vec::new();
 
-    let mut v: Vec<u8> = Vec::new();
-    let mut b = [0; 1];
-    loop {
-        thread::sleep(Duration::from_millis(500));
+    let now = std::time::Instant::now();
 
+    while now.elapsed() < Duration::from_secs(1) {
+        let mut b = [0; 1];
         match _p_try_read(&mut proc, &mut b) {
-            Ok(n) => {
-                v.extend(&b[..n]);
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+            Ok(n) => 
+                buf.extend(&b[..n]),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => (),
             Err(err) => Err(err).unwrap(),
         }
     }
 
-    assert!(String::from_utf8_lossy(&v).contains("Hello World"));
+    assert!(String::from_utf8_lossy(&buf).contains("Hello World"));
 }
 
 #[test]
 #[cfg(windows)]
 fn continues_try_reads() {
     let cmd = Command::new("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"");
-
     let mut proc = Session::spawn(cmd).unwrap();
 
     let mut buf = [0; 128];
     loop {
+        if !proc.is_alive() {
+            panic!("Most likely python is not installed");
+        }
+
         match _p_try_read(&mut proc, &mut buf) {
             Ok(n) => {
                 if String::from_utf8_lossy(&buf[..n]).contains("input") {

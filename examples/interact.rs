@@ -6,7 +6,7 @@ use expectrl::spawn;
 const SHELL: &str = "sh";
 
 #[cfg(windows)]
-const SHELL: &str = "pwsh";
+const SHELL: &str = "powershell";
 
 fn main() {
     let mut sh = spawn(SHELL).expect("Error while spawning sh");
@@ -19,4 +19,6 @@ fn main() {
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(sh.interact()).expect("Failed to start interact");
+
+    println!("Exiting");
 }

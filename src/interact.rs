@@ -393,8 +393,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(not(feature = "polling"))]
+#[cfg(all(windows, not(feature = "async")))]
 fn interact<P, S, R, W, C>(
     options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
@@ -512,8 +511,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "polling")]
+#[cfg(all(unix, not(feature = "async")))]
 fn interact<P, S, R, W, C>(
     options: &mut InteractOptions<P, S, R, W, C>,
     session: &mut Session<P, S>,
@@ -541,8 +539,6 @@ where
     let poller = Poller::new()?;
     poller.add(&input.raw(), Event::readable(0))?;
     poller.add(&session.get_stream().raw(), Event::readable(1))?;
-
-    println!("HANDLE {}", session.get_stream().raw());
 
     let mut buf = [0; 512];
 
@@ -682,8 +678,6 @@ where
     } else {
         None
     };
-    let mut exited = false;
-
     let mut stdin_buf = [0; 512];
     let mut proc_buf = [0; 512];
     loop {
@@ -693,27 +687,28 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = session.is_alive();
         if matches!(status, Ok(false)) {
-            exited = true;
+            return Ok(());
         }
 
         #[derive(Debug)]
         enum ReadFrom {
             Stdin,
             Process,
+            Timeout,
         }
 
         let read_process = async { (ReadFrom::Process, session.read(&mut proc_buf).await) };
         let read_stdin = async { (ReadFrom::Stdin, input.read(&mut stdin_buf).await) };
+        let timeout = async { (ReadFrom::Timeout, async { futures_timer::Delay::new(std::time::Duration::from_secs(5)).await; io::Result::Ok(0)}.await) };
 
-        let (read_from, result) = futures_lite::future::or(read_process, read_stdin).await;
+
+        let read_fut = futures_lite::future::or(read_process, read_stdin);
+        let (read_from, result) = futures_lite::future::or(read_fut, timeout).await;
 
         match read_from {
             ReadFrom::Process => {
                 let n = result?;
                 let eof = n == 0;
-                if eof {
-                    exited = true;
-                }
 
                 output_buffer.extend_from_slice(&proc_buf[..n]);
                 options.check_output(input, output, session, &mut output_buffer, eof)?;
@@ -727,7 +722,7 @@ where
                 output.write_all(&bytes)?;
                 output.flush()?;
 
-                if exited {
+                if eof {
                     return Ok(());
                 }
             }
@@ -753,7 +748,7 @@ where
                             loop {
                                 match options.check_input(input, output, session, check_buffer)? {
                                     Match::Yes(n) => {
-                                        check_buffer.drain(..n);
+                                        let _ = check_buffer.drain(..n);
                                         if check_buffer.is_empty() {
                                             break vec![];
                                         }
@@ -785,6 +780,10 @@ where
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
                     Err(err) => return Err(err.into()),
                 }
+            }
+            ReadFrom::Timeout => {
+                // We need to check whether a process is alive;
+                continue;
             }
         }
 
