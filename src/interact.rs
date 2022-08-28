@@ -350,6 +350,43 @@ where
     }
 }
 
+#[cfg(all(windows, not(feature = "async"), feature = "polling"))]
+impl<R, W, C> InteractOptions<crate::session::Proc, crate::session::Stream, R, W, C>
+where
+    R: Read + Send + Clone + 'static,
+    W: Write,
+{
+    /// Runs interact interactively.
+    /// See [Session::interact]
+    ///
+    /// On process exit it tries to read available bytes from output in order to run callbacks.
+    /// But it is not guaranteed that all output will be read therefore some callbacks might be not called.
+    ///
+    /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
+    /// (at the point of the call)
+    pub fn interact(
+        &mut self,
+        session: &mut Session,
+        input: R,
+        output: W,
+    ) -> Result<(), Error> {
+        interact(self, session, input, output)
+    }
+}
+
+#[cfg(all(windows, not(feature = "async"), feature = "polling"))]
+impl<C> InteractOptions<Proc, crate::session::Stream, Stdin, Stdout, C>
+{
+    /// This function runs an interact loop with a terminal, using the provided settings.
+    ///
+    /// If you don't use any settings you can use [Session::interact].
+    pub fn interact_in_terminal(&mut self, session: &mut Session) -> Result<(), Error> {
+        let stdin = Stdin::new()?;
+        let r = interact(self, session,  stdin,  std::io::stdout());
+        r
+    }
+}
+
 #[cfg(feature = "async")]
 impl<P, S, R, W, C> InteractOptions<P, S, R, W, C>
 where
@@ -648,6 +685,95 @@ where
         }
 
         options.call_idle_handler(input, output, session)?;
+    }
+}
+
+#[cfg(all(windows, not(feature = "async"), feature = "polling"))]
+fn interact<R, W, C>(
+    options: &mut InteractOptions<crate::session::Proc, crate::session::Stream, R, W, C>,
+    session: &mut crate::session::Session,
+    input: R,
+    mut output: W,
+) -> Result<(), Error>
+where
+    R: Read + Send + 'static,
+    W: Write,
+{
+    use crate::{waiter::{Recv, Wait2}, error::to_io_error};
+
+    let mut output_buffer = Vec::new();
+
+    // Create a poller and register interest in readability on the socket.
+    let stream = session.get_stream().try_clone().map_err(to_io_error(""))?;
+    let mut poller = Wait2::new(input, stream);
+
+    loop {
+        // In case where proceses exits we are trying to
+        // fill buffer to run callbacks if there was something in.
+        //
+        // We ignore errors because there might be errors like EOCHILD etc.
+        let status = session.is_alive();
+        if matches!(status, Ok(false)) {
+            return Ok(())
+        }
+
+        // Wait for at least one I/O event.
+        let event = poller.recv().map_err(to_io_error(""))?;
+
+        match event {
+            Recv::R1(b) => {
+                match b {
+                    Ok(None) => {
+                        return Ok(());
+                    }
+                    Ok(Some(b)) => {
+                        let bytes: &[u8] = &[b];
+                        let buffer = if let Some(filter) = options.input_filter.as_mut() {
+                            (filter)(bytes)?
+                        } else {
+                            Cow::Borrowed(bytes)
+                        };
+
+                        let escape_char_position =
+                            buffer.iter().position(|c| *c == options.escape_character);
+                        match escape_char_position {
+                            Some(pos) => {
+                                session.write_all(&buffer[..pos])?;
+                                return Ok(());
+                            }
+                            None => {
+                                session.write_all(&buffer[..])?;
+                            }
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+            },
+            Recv::R2(b) => {
+                match b {
+                    Ok(None) => {
+                        return Ok(());
+                    }
+                    Ok(Some(b)) => {
+                        let buf: &[u8] = &[b];
+                        output_buffer.extend_from_slice(buf);
+
+                        let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                            (filter)(buf)?
+                        } else {
+                            Cow::Borrowed(buf)
+                        };
+
+                        output.write_all(&bytes)?;
+                        output.flush()?;
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+            },
+            Recv::Timeout => {},
+        }
     }
 }
 

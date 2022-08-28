@@ -107,6 +107,9 @@ mod control_code;
 mod error;
 mod needle;
 
+#[cfg(feature = "polling")]
+mod waiter;
+
 pub mod interact;
 pub mod process;
 pub mod repl;

@@ -233,6 +233,38 @@ where
     }
 }
 
+#[cfg(all(windows, feature = "polling", not(feature = "async")))]
+impl Session
+{
+    /// Interact gives control of the child process to the interactive user (the
+    /// human at the keyboard).
+    ///
+    /// Keystrokes are sent to the child process, and
+    /// the `stdout` and `stderr` output of the child process is printed.
+    ///
+    /// When the user types the `escape_character` this method will return control to a running process.
+    /// The escape_character will not be transmitted.
+    /// The default for escape_character is entered as `Ctrl-]`, the very same as BSD telnet.
+    ///
+    /// This simply echos the child `stdout` and `stderr` to the real `stdout` and
+    /// it echos the real `stdin` to the child `stdin`.
+    ///
+    /// BEWARE that interact finishes after a process stops.
+    /// So after the return you may not obtain a correct status of a process.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// let mut p = expectrl::spawn("cat").unwrap();
+    /// p.interact().unwrap();
+    /// ```
+    ///
+    /// You can get a rich set of options for interact session using [crate::interact::InteractOptions].
+    pub fn interact(&mut self) -> Result<(), Error> {
+        crate::interact::InteractOptions::default().interact_in_terminal(self)
+    }
+}
+
 #[cfg(feature = "async")]
 impl<S> Session<Proc, S>
 where

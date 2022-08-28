@@ -86,6 +86,10 @@ impl ProcessStream {
     fn new(output: PipeReader, input: PipeWriter) -> Self {
         Self { input, output }
     }
+
+    pub fn try_clone(&self) -> std::result::Result<Self, conpty::error::Error> {
+        Ok(Self { input: self.input.try_clone()?, output: self.output.try_clone()? })
+    }
 }
 
 impl Write for ProcessStream {

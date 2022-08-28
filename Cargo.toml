@@ -15,7 +15,7 @@ readme = "README.md"
 
 [features]
 # this feature makes scence only when async is off
-polling = ["dep:polling"]
+polling = ["dep:polling", "dep:crossbeam-channel"]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 
 [dependencies]
@@ -33,6 +33,7 @@ polling = { version = "2.3.0", optional = true }
 [target.'cfg(windows)'.dependencies]
 conpty = "0.3.0"
 blocking = { version = "1.2.0", optional = true }
+crossbeam-channel = { version = "0.5.6", optional = true }
 
 [package.metadata.docs.rs]
 all-features = false

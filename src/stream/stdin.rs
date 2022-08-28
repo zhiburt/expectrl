@@ -1,6 +1,6 @@
 //! The module contains a nonblocking version of [std::io::Stdin].  
 
-use std::{io, os::unix::prelude::AsRawFd};
+use std::io;
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -66,13 +66,13 @@ impl AsyncRead for Stdin {
 }
 
 #[cfg(unix)]
-impl AsRawFd for Stdin {
+impl os::unix::prelude::AsRawFd for Stdin {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.inner.as_raw_fd()
     }
 }
 
-#[cfg(feature = "polling")]
+#[cfg(all(unix, feature = "polling"))]
 impl polling::Source for Stdin {
     fn raw(&self) -> std::os::unix::prelude::RawFd {
         self.as_raw_fd()
@@ -172,78 +172,81 @@ mod inner {
     }
 }
 
-/// A non blocking version of STDIN.
-///
-/// It's not recomended to be used directly.
-/// But we expose it because its used in [crate::interact::InteractOptions::interact_in_terminal].
 #[cfg(windows)]
-pub struct Stdin {
-    current_terminal: Console,
-}
+mod inner {
+    use super::*;
 
-#[cfg(windows)]
-impl Stdin {
-    /// Creates a new instance of Stdin.
-    ///
-    /// It changes terminal's STDIN state therefore, after
-    /// it's used please call [Stdin::close].
-    pub fn new(_session: &mut WinProcess) -> Result<Self, Error> {
-        let console = conpty::console::Console::current().map_err(to_io_error)?;
-        let mut stdin = Self {
-            current_terminal: console,
-        };
-        stdin.prepare()?;
-        Ok(stdin)
+    use conpty::console::Console;
+
+    pub(super) struct StdinInner {
+        terminal: Console,
+        #[cfg(not(feature = "async"))]
+        is_blocking: bool,
+        #[cfg(not(feature = "async"))]
+        stdin: io::Stdin,
+        #[cfg(feature = "async")]
+        stdin: blocking::Unblock<io::Stdin>,
     }
 
-    fn prepare(&mut self) -> Result<(), Error> {
-        self.current_terminal.set_raw().map_err(to_io_error)?;
-        Ok(())
-    }
+    impl StdinInner {
+        /// Creates a new instance of Stdin.
+        ///
+        /// It changes terminal's STDIN state therefore, after
+        /// it's used please call [Stdin::close].
+        pub(super) fn new() -> Result<Self, Error> {
+            let console = conpty::console::Console::current().map_err(to_io_error)?;
+            console.set_raw().map_err(to_io_error)?;
 
-    /// Close frees a resources which were used.
-    ///
-    /// It must be called [Stdin] was used.
-    /// Otherwise the STDIN might be returned to original state.
-    pub fn close(&mut self, _session: &mut WinProcess) -> Result<(), Error> {
-        self.current_terminal.reset().map_err(to_io_error)?;
-        Ok(())
-    }
-}
+            let stdin = io::stdin();
 
-#[cfg(windows)]
-impl Read for Stdin {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // we can't easily read in non-blocking manner,
-        // but we can check when there's something to read,
-        // which seems to be enough to not block.
-        //
-        // fixme: I am not sure why reading works on is_stdin_empty() == true
-        if self
-            .current_terminal
-            .is_stdin_empty()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-        {
-            io::stdin().read(buf)
-        } else {
-            Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
+            #[cfg(feature = "async")]
+            let stdin = blocking::Unblock::new(stdin);
+
+            Ok(Self {
+                terminal: console,
+                #[cfg(not(feature = "async"))]
+                is_blocking: false,
+                stdin,
+            })
+        }
+
+        pub(super) fn close(&mut self) -> Result<(), Error> {
+            self.terminal.reset().map_err(to_io_error)?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "async"))]
+        pub(crate) fn blocking(&mut self, on: bool) -> Result<(), Error> {
+            self.is_blocking = on;
+            Ok(())
         }
     }
-}
 
-#[cfg(windows)]
-#[cfg(feature = "async")]
-impl AsyncRead for Stdin {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        Poll::Ready(self.read(buf))
+    #[cfg(not(feature = "async"))]
+    impl Read for StdinInner {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            // fixme: I am not sure why reading works on is_stdin_empty() == true
+            // maybe rename of the method necessary
+            if self.is_blocking && !self.terminal.is_stdin_empty().map_err(to_io_error)? {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock, ""));
+            }
+
+            self.stdin.read(buf)
+        }
     }
-}
 
-#[cfg(windows)]
-fn to_io_error(err: impl std::error::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err.to_string())
+    #[cfg(feature = "async")]
+    impl AsyncRead for StdinInner {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            AsyncRead::poll_read(Pin::new(&mut self.stdin), cx, buf)
+        }
+    }
+
+    fn to_io_error(err: impl std::error::Error) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
 }
