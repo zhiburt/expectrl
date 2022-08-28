@@ -385,14 +385,14 @@ fn try_read_after_process_exit() {
                 assert!(_p_is_empty(&mut proc).unwrap());
                 assert_eq!(proc.wait(None).unwrap(), 0);
                 return;
-            },
+            }
             Err(err) => {
                 if err.kind() == ErrorKind::WouldBlock {
                     continue;
                 }
 
                 panic!("unexpected error {:?}", err);
-            },
+            }
         }
     }
 }
@@ -430,8 +430,7 @@ fn try_read_to_end() {
     while now.elapsed() < Duration::from_secs(1) {
         let mut b = [0; 1];
         match _p_try_read(&mut proc, &mut b) {
-            Ok(n) => 
-                buf.extend(&b[..n]),
+            Ok(n) => buf.extend(&b[..n]),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => (),
             Err(err) => Err(err).unwrap(),
         }
@@ -484,7 +483,7 @@ fn automatic_stop_of_interact() {
 #[cfg(not(windows))]
 fn spawn_after_interact() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
-    let _ = _p_interact(&mut p).unwrap();
+    _p_interact(&mut p).unwrap();
 
     let p = Session::spawn(Command::new("ls")).unwrap();
     assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));

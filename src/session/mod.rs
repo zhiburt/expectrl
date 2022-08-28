@@ -234,8 +234,7 @@ where
 }
 
 #[cfg(all(windows, feature = "polling", not(feature = "async")))]
-impl Session
-{
+impl Session {
     /// Interact gives control of the child process to the interactive user (the
     /// human at the keyboard).
     ///
@@ -305,19 +304,23 @@ where
             if !is_echo {
                 let _ = self.set_echo(true, None);
             }
-        }
 
-        crate::interact::InteractOptions::default()
-            .interact_in_terminal(self)
-            .await?;
+            crate::interact::InteractOptions::default()
+                .interact_in_terminal(self)
+                .await?;
 
-        #[cfg(unix)]
-        {
             if !is_echo {
                 let _ = self.set_echo(false, None);
             }
+
+            Ok(())
         }
 
-        Ok(())
+        #[cfg(not(unix))]
+        {
+            crate::interact::InteractOptions::default()
+                .interact_in_terminal(self)
+                .await
+        }
     }
 }

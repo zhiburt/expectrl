@@ -1,4 +1,4 @@
 mod blocking;
 mod wait;
 
-pub use wait::{Wait2, Recv};
+pub use wait::{Recv, Wait2};

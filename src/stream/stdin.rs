@@ -66,7 +66,7 @@ impl AsyncRead for Stdin {
 }
 
 #[cfg(unix)]
-impl os::unix::prelude::AsRawFd for Stdin {
+impl std::os::unix::prelude::AsRawFd for Stdin {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.inner.as_raw_fd()
     }
@@ -75,13 +75,15 @@ impl os::unix::prelude::AsRawFd for Stdin {
 #[cfg(all(unix, feature = "polling"))]
 impl polling::Source for Stdin {
     fn raw(&self) -> std::os::unix::prelude::RawFd {
-        self.as_raw_fd()
+        std::os::unix::io::AsRawFd::as_raw_fd(self)
     }
 }
 
 #[cfg(unix)]
 mod inner {
     use super::*;
+
+    use std::os::unix::prelude::AsRawFd;
 
     use nix::{
         libc::STDIN_FILENO,

@@ -1,4 +1,8 @@
-use std::{io::{Result, Read}, marker::PhantomData, thread::JoinHandle};
+use std::{
+    io::{Read, Result},
+    marker::PhantomData,
+    thread::JoinHandle,
+};
 
 use crossbeam_channel::Sender;
 
@@ -35,12 +39,12 @@ impl<R> Blocking<R> {
                         } else {
                             try_send(id, Ok(Some(buf[0])), &sendr, &mut buffer);
                         }
-                    },
+                    }
                     Err(err) => {
                         // stopping the thread on error
                         try_send(id, Err(err), &sendr, &mut buffer);
                         break;
-                    },
+                    }
                 }
             }
         });
@@ -57,13 +61,18 @@ impl<R> Blocking<R> {
     }
 }
 
-fn try_send(id: usize, msg: Result<Option<u8>>, sendr: &Sender<(usize, Result<Option<u8>>)>, buf: &mut Vec<u8>) {
+fn try_send(
+    id: usize,
+    msg: Result<Option<u8>>,
+    sendr: &Sender<(usize, Result<Option<u8>>)>,
+    buf: &mut Vec<u8>,
+) {
     match sendr.send((id, msg)) {
         Ok(_) => (),
         Err(err) => {
-            if let Ok(Some(b)) = err.0.1 {
+            if let Ok(Some(b)) = err.0 .1 {
                 buf.push(b);
             }
-        },
+        }
     }
 }

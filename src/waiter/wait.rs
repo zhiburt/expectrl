@@ -1,4 +1,7 @@
-use std::{io::{Read, self}, time::Duration};
+use std::{
+    io::{self, Read},
+    time::Duration,
+};
 
 use crossbeam_channel::Receiver;
 
@@ -18,7 +21,11 @@ pub enum Recv {
 }
 
 impl<R1, R2> Wait2<R1, R2> {
-    pub fn new(r1: R1, r2: R2) -> Self where R1: Send + Read + 'static, R2: Send + Read + 'static {
+    pub fn new(r1: R1, r2: R2) -> Self
+    where
+        R1: Send + Read + 'static,
+        R2: Send + Read + 'static,
+    {
         let (sndr, recv) = crossbeam_channel::unbounded();
 
         let b1 = Blocking::new(0, r1, sndr.clone());
@@ -40,12 +47,10 @@ impl<R1, R2> Wait2<R1, R2> {
 
     pub fn recv(&mut self) -> Result<Recv, crossbeam_channel::RecvError> {
         match self.recv.recv_timeout(self.timeout) {
-            Ok((id, result)) => {
-                match id {
-                    0 => Ok(Recv::R1(result)),
-                    1 => Ok(Recv::R2(result)),
-                    _ => unreachable!(),
-                }
+            Ok((id, result)) => match id {
+                0 => Ok(Recv::R1(result)),
+                1 => Ok(Recv::R2(result)),
+                _ => unreachable!(),
             },
             Err(err) => {
                 if err.is_timeout() {
@@ -53,7 +58,7 @@ impl<R1, R2> Wait2<R1, R2> {
                 } else {
                     Err(crossbeam_channel::RecvError)
                 }
-            },
+            }
         }
     }
 }

@@ -152,7 +152,7 @@ fn send_multiline() {
 #[test]
 fn send_line() {
     let mut session = spawn("cat").unwrap();
-    let _ = session.send_line("Hello World").unwrap();
+    session.send_line("Hello World").unwrap();
 
     thread::sleep(Duration::from_millis(300));
     session.exit(true).unwrap();

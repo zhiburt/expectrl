@@ -107,7 +107,7 @@ mod control_code;
 mod error;
 mod needle;
 
-#[cfg(feature = "polling")]
+#[cfg(all(windows, feature = "polling"))]
 mod waiter;
 
 pub mod interact;

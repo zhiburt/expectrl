@@ -364,25 +364,19 @@ where
     ///
     /// To mitigate such an issue you could use [Session::is_empty] to verify that there is nothing in processes output.
     /// (at the point of the call)
-    pub fn interact(
-        &mut self,
-        session: &mut Session,
-        input: R,
-        output: W,
-    ) -> Result<(), Error> {
+    pub fn interact(&mut self, session: &mut Session, input: R, output: W) -> Result<(), Error> {
         interact(self, session, input, output)
     }
 }
 
 #[cfg(all(windows, not(feature = "async"), feature = "polling"))]
-impl<C> InteractOptions<Proc, crate::session::Stream, Stdin, Stdout, C>
-{
+impl<C> InteractOptions<Proc, crate::session::Stream, Stdin, Stdout, C> {
     /// This function runs an interact loop with a terminal, using the provided settings.
     ///
     /// If you don't use any settings you can use [Session::interact].
     pub fn interact_in_terminal(&mut self, session: &mut Session) -> Result<(), Error> {
         let stdin = Stdin::new()?;
-        let r = interact(self, session,  stdin,  std::io::stdout());
+        let r = interact(self, session, stdin, std::io::stdout());
         r
     }
 }
@@ -699,7 +693,10 @@ where
     R: Read + Send + 'static,
     W: Write,
 {
-    use crate::{waiter::{Recv, Wait2}, error::to_io_error};
+    use crate::{
+        error::to_io_error,
+        waiter::{Recv, Wait2},
+    };
 
     let mut output_buffer = Vec::new();
 
@@ -714,65 +711,61 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = session.is_alive();
         if matches!(status, Ok(false)) {
-            return Ok(())
+            return Ok(());
         }
 
         // Wait for at least one I/O event.
         let event = poller.recv().map_err(to_io_error(""))?;
 
         match event {
-            Recv::R1(b) => {
-                match b {
-                    Ok(None) => {
-                        return Ok(());
-                    }
-                    Ok(Some(b)) => {
-                        let bytes: &[u8] = &[b];
-                        let buffer = if let Some(filter) = options.input_filter.as_mut() {
-                            (filter)(bytes)?
-                        } else {
-                            Cow::Borrowed(bytes)
-                        };
+            Recv::R1(b) => match b {
+                Ok(None) => {
+                    return Ok(());
+                }
+                Ok(Some(b)) => {
+                    let bytes: &[u8] = &[b];
+                    let buffer = if let Some(filter) = options.input_filter.as_mut() {
+                        (filter)(bytes)?
+                    } else {
+                        Cow::Borrowed(bytes)
+                    };
 
-                        let escape_char_position =
-                            buffer.iter().position(|c| *c == options.escape_character);
-                        match escape_char_position {
-                            Some(pos) => {
-                                session.write_all(&buffer[..pos])?;
-                                return Ok(());
-                            }
-                            None => {
-                                session.write_all(&buffer[..])?;
-                            }
+                    let escape_char_position =
+                        buffer.iter().position(|c| *c == options.escape_character);
+                    match escape_char_position {
+                        Some(pos) => {
+                            session.write_all(&buffer[..pos])?;
+                            return Ok(());
+                        }
+                        None => {
+                            session.write_all(&buffer[..])?;
                         }
                     }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(err) => return Err(err.into()),
                 }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err.into()),
             },
-            Recv::R2(b) => {
-                match b {
-                    Ok(None) => {
-                        return Ok(());
-                    }
-                    Ok(Some(b)) => {
-                        let buf: &[u8] = &[b];
-                        output_buffer.extend_from_slice(buf);
-
-                        let bytes = if let Some(filter) = options.output_filter.as_mut() {
-                            (filter)(buf)?
-                        } else {
-                            Cow::Borrowed(buf)
-                        };
-
-                        output.write_all(&bytes)?;
-                        output.flush()?;
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(err) => return Err(err.into()),
+            Recv::R2(b) => match b {
+                Ok(None) => {
+                    return Ok(());
                 }
+                Ok(Some(b)) => {
+                    let buf: &[u8] = &[b];
+                    output_buffer.extend_from_slice(buf);
+
+                    let bytes = if let Some(filter) = options.output_filter.as_mut() {
+                        (filter)(buf)?
+                    } else {
+                        Cow::Borrowed(buf)
+                    };
+
+                    output.write_all(&bytes)?;
+                    output.flush()?;
+                }
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err.into()),
             },
-            Recv::Timeout => {},
+            Recv::Timeout => {}
         }
     }
 }
@@ -821,8 +814,16 @@ where
 
         let read_process = async { (ReadFrom::Process, session.read(&mut proc_buf).await) };
         let read_stdin = async { (ReadFrom::Stdin, input.read(&mut stdin_buf).await) };
-        let timeout = async { (ReadFrom::Timeout, async { futures_timer::Delay::new(std::time::Duration::from_secs(5)).await; io::Result::Ok(0)}.await) };
-
+        let timeout = async {
+            (
+                ReadFrom::Timeout,
+                async {
+                    futures_timer::Delay::new(std::time::Duration::from_secs(5)).await;
+                    io::Result::Ok(0)
+                }
+                .await,
+            )
+        };
 
         let read_fut = futures_lite::future::or(read_process, read_stdin);
         let (read_from, result) = futures_lite::future::or(read_fut, timeout).await;
