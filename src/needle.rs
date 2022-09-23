@@ -222,7 +222,7 @@ impl<T: Needle> Needle for &T {
     }
 }
 
-impl Needle for Box<dyn Needle> {
+impl Needle for Box<dyn Needle + '_> {
     fn check(&self, buf: &[u8], eof: bool) -> Result<Vec<Match>, Error> {
         self.as_ref().check(buf, eof)
     }

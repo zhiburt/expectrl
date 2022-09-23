@@ -291,7 +291,7 @@ mod tests {
 
         #[cfg(not(feature = "async"))]
         {
-            let _ = crate::check! {
+            crate::check! {
                 &mut session,
                 as11d = "zxc" => {},
             }

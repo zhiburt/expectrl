@@ -47,6 +47,11 @@ impl<P, S> Session<P, S> {
         self.stream.expect_lazy = is_lazy;
     }
 
+    /// Get a mut reference to original stream.
+    pub fn get_stream_mut(&mut self) -> &mut S {
+        self.stream.get_mut()
+    }
+
     pub(crate) fn swap_stream<F: FnOnce(S) -> R, R>(
         mut self,
         new_stream: F,
@@ -82,7 +87,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
@@ -90,7 +96,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// # });
     /// ```
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// p.set_expect_lazy(true);
@@ -117,7 +124,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// But its strategy of matching is different from it.
     /// It makes search agains all bytes available.
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// // wait to guarantee that check will successed (most likely)
@@ -300,8 +308,6 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     async fn expect_gready<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         let expect_timeout = self.expect_timeout;
 
-        println!("{:?}", expect_timeout);
-
         let expect_future = async {
             let mut eof = false;
             loop {
@@ -326,12 +332,9 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         };
 
         if let Some(timeout) = expect_timeout {
-            println!("SETTING TIMEOUT");
-
             let timeout_future = futures_timer::Delay::new(timeout);
             futures_lite::future::or(expect_future, async {
                 timeout_future.await;
-                println!("TIMEOUT");
                 Err(Error::ExpectTimeout)
             })
             .await
@@ -427,7 +430,8 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     /// But its strategy of matching is different from it.
     /// It makes search agains all bytes available.
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// #
     /// let mut p = expectrl::spawn("echo 123").unwrap();
@@ -600,7 +604,7 @@ impl<S: AsyncRead + Unpin> AsyncBufRead for BufferedStream<S> {
     }
 
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
-        self.buffer.drain(..amt);
+        let _ = self.buffer.drain(..amt);
         self.length -= amt;
     }
 }
