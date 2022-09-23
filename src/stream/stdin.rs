@@ -19,7 +19,9 @@ use crate::Error;
 /// A non blocking version of STDIN.
 ///
 /// It's not recomended to be used directly.
-/// But we expose it because its used in [crate::interact::InteractOptions::interact_in_terminal].
+/// But we expose it because it cab be used with [`Session::interact`].
+///
+/// [`Session::interact`]: crate::session::Session::interact
 pub struct Stdin {
     inner: inner::StdinInner,
 }
@@ -29,16 +31,24 @@ impl Stdin {
     ///
     /// It may change terminal's STDIN state therefore, after
     /// it's used you must call [Stdin::close].
-    pub fn new() -> Result<Self, Error> {
-        inner::StdinInner::new().map(|inner| Self { inner })
+    pub fn open() -> Result<Self, Error> {
+        let mut stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
+
+        #[cfg(not(feature = "async"))]
+        stdin.blocking(true)?;
+
+        Ok(stdin)
     }
 
     /// Close frees a resources which were used.
     ///
     /// It must be called [Stdin] was used.
     /// Otherwise the STDIN might be returned to original state.
-    pub fn close(&mut self) -> Result<(), Error> {
-        self.inner.close()
+    pub fn close(mut self) -> Result<(), Error> {
+        #[cfg(not(feature = "async"))]
+        self.blocking(false)?;
+        self.inner.close()?;
+        Ok(())
     }
 
     #[cfg(not(feature = "async"))]
@@ -67,6 +77,13 @@ impl AsyncRead for Stdin {
 
 #[cfg(unix)]
 impl std::os::unix::prelude::AsRawFd for Stdin {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.inner.as_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl std::os::unix::prelude::AsRawFd for &mut Stdin {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.inner.as_raw_fd()
     }

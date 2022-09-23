@@ -14,7 +14,7 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-# this feature makes scence only when async is off
+# this feature only works with 'async' feature turned off
 polling = ["dep:polling", "dep:crossbeam-channel"]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 

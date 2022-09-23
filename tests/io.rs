@@ -666,14 +666,22 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 
 #[cfg(unix)]
 fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
+    use expectrl::stream::stdin::Stdin;
+    use std::io::stdout;
+
+    let mut stdin = Stdin::open()?;
+    let stdout = stdout();
+
     #[cfg(not(feature = "async"))]
     {
-        proc.interact()
+        proc.interact(&mut stdin, stdout).spawn()?;
     }
     #[cfg(feature = "async")]
     {
-        block_on(proc.interact())
+        block_on(proc.interact(&mut stdin, stdout).spawn())?;
     }
+
+    stdin.close()
 }
 
 #[cfg(windows)]

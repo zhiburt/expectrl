@@ -27,15 +27,7 @@
 //! ## Feature flags
 //!
 //! - `async`: Enables a async/await public API.
-//!
-//! By default we generate documentation for interface with no features on.
-//! You can generate documentation for other features localy using this command.
-//!
-//! ```bash
-//! cargo doc --features async --open
-//! # or
-//! RUSTDOCFLAGS='--cfg docsrs' cargo +nightly doc --features async --open
-//! ```
+//! - `regex`: Enables regex support.
 //!
 //! ## Examples
 //!
@@ -97,6 +89,23 @@
 //!
 //! let mut p = spawn("cat").await.unwrap();
 //! p.expect("hello").await.unwrap();
+//! ```
+//!
+//! ### An example of interact session with `STDIN` and `STDOUT`
+//!
+//! ```no_run,ignore
+//! use expectrl::{spawn, stream::stdin::Stdin};
+//! use std::io::stdout;
+//!
+//! let mut sh = spawn("cat").expect("Failed to spawn a 'cat' process");
+//!
+//! let mut stdin = Stdin::open().expect("Failed to create stdin");
+//!
+//! sh.interact(&mut stdin, stdout())
+//!     .spawn()
+//!     .expect("Failed to start interact session");
+//!
+//! stdin.close().expect("Failed to close a stdin");
 //! ```
 //!
 //! [For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
