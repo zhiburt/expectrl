@@ -96,13 +96,15 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// p.set_expect_lazy(true);
     /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
@@ -224,15 +226,16 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///
     /// let mut p = spawn("echo 123").unwrap();
-    ///
-    /// // wait to guarantee that check echo worked out (most likely)
-    /// std::thread::sleep(Duration::from_secs(1));
-    ///
+    /// #
+    /// # // wait to guarantee that check echo worked out (most likely)
+    /// # std::thread::sleep(Duration::from_millis(500));
+    /// #
     /// let m = p.check(Regex("\\d+")).unwrap();
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// ```
@@ -278,7 +281,8 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///

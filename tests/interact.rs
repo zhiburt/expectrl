@@ -368,6 +368,7 @@ impl Read for ListReaderWithDelayedEof {
     }
 }
 
+#[cfg(unix)]
 impl std::os::unix::io::AsRawFd for ListReaderWithDelayedEof {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         0

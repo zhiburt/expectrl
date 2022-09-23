@@ -87,7 +87,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     ///
     /// # Example
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// let m = p.expect(expectrl::Regex("\\d+")).await.unwrap();
@@ -95,7 +96,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// # });
     /// ```
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// p.set_expect_lazy(true);
@@ -122,7 +124,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// But its strategy of matching is different from it.
     /// It makes search agains all bytes available.
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// // wait to guarantee that check will successed (most likely)
@@ -427,7 +430,8 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     /// But its strategy of matching is different from it.
     /// It makes search agains all bytes available.
     ///
-    /// ```
+    #[cfg_attr(windows, doc = "```no_run")]
+    #[cfg_attr(unix, doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// #
     /// let mut p = expectrl::spawn("echo 123").unwrap();
@@ -600,7 +604,7 @@ impl<S: AsyncRead + Unpin> AsyncBufRead for BufferedStream<S> {
     }
 
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
-        self.buffer.drain(..amt);
+        let _ = self.buffer.drain(..amt);
         self.length -= amt;
     }
 }

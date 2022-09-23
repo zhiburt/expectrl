@@ -8,6 +8,7 @@ use crossbeam_channel::Sender;
 
 /// Blocking implements a reading operation on a different thread.
 /// It stops the thread once any [`Error`] is encountered.
+#[derive(Debug)]
 pub struct Blocking<R> {
     _id: usize,
     _thread: JoinHandle<()>,

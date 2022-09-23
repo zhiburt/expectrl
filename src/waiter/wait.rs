@@ -7,6 +7,7 @@ use crossbeam_channel::Receiver;
 
 use super::blocking::Blocking;
 
+#[derive(Debug)]
 pub struct Wait2<R1, R2> {
     recv: Receiver<(usize, io::Result<Option<u8>>)>,
     b1: Blocking<R1>,
@@ -14,6 +15,7 @@ pub struct Wait2<R1, R2> {
     timeout: Duration,
 }
 
+#[derive(Debug)]
 pub enum Recv {
     R1(io::Result<Option<u8>>),
     R2(io::Result<Option<u8>>),

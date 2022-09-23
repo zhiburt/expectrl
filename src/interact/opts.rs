@@ -450,26 +450,18 @@ impl<
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
     {
-        #[cfg(unix)]
-        {
-            let is_echo = self
-                .session
-                .get_echo()
-                .map_err(|e| Error::unknown("failed to get echo", e))?;
-            if !is_echo {
-                let _ = self.session.set_echo(true, None);
-            }
-
-            interact_polling(&mut self)?;
-
-            if !is_echo {
-                let _ = self.session.set_echo(false, None);
-            }
+        let is_echo = self
+            .session
+            .get_echo()
+            .map_err(|e| Error::unknown("failed to get echo", e))?;
+        if !is_echo {
+            let _ = self.session.set_echo(true, None);
         }
 
-        #[cfg(windows)]
-        {
-            interact_buzy_loop(&mut self).await?;
+        interact_polling(&mut self)?;
+
+        if !is_echo {
+            let _ = self.session.set_echo(false, None);
         }
 
         Ok(self.state)
@@ -523,6 +515,54 @@ impl<
 
             Ok(self.state)
         }
+    }
+}
+
+impl<State, Output, Input, InputFilter, OutputFilter, InputAction, OutputAction, IdleAction>
+    InteractSession<
+        '_,
+        State,
+        Session,
+        Output,
+        Input,
+        InputFilter,
+        OutputFilter,
+        InputAction,
+        OutputAction,
+        IdleAction,
+    >
+{
+    /// Runs the session.
+    ///
+    /// See [`Session::interact`].
+    ///
+    /// [`Session::interact`]: crate::session::Session::interact
+    #[cfg(all(windows, feature = "polling", not(feature = "async")))]
+    pub fn spawn(mut self) -> Result<State, Error>
+    where
+        Input: Read + Send + 'static,
+        Output: Write,
+        InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        InputAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+        OutputAction:
+            FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+        IdleAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+    {
+        interact_polling_on_thread(
+            self.session,
+            self.output,
+            self.input,
+            &mut self.state,
+            self.escape_character,
+            self.input_filter,
+            self.output_filter,
+            self.input_action,
+            self.output_action,
+            self.idle_action,
+        )?;
+
+        Ok(self.state)
     }
 }
 
@@ -834,20 +874,35 @@ where
 }
 
 #[cfg(all(windows, not(feature = "async"), feature = "polling"))]
-fn interact_polling_on_thread<R, W, C, IF, OF, IA, OA, TA>(
+fn interact_polling_on_thread<
+    State,
+    Output,
+    Input,
+    InputFilter,
+    OutputFilter,
+    InputAction,
+    OutputAction,
+    IdleAction,
+>(
     session: &mut Session,
-    mut input: R,
-    mut output: W,
-    opts: &mut InteractConfig<C, IF, OF, IA, OA, TA>,
+    mut output: Output,
+    input: Input,
+    state: &mut State,
+    escape_character: u8,
+    mut input_filter: Option<InputFilter>,
+    mut output_filter: Option<OutputFilter>,
+    mut input_action: Option<InputAction>,
+    mut output_action: Option<OutputAction>,
+    mut idle_action: Option<IdleAction>,
 ) -> Result<(), Error>
 where
-    R: Read + Send + 'static,
-    W: Write,
-    IF: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OF: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    IA: FnMut(Context<'_, Proc, crate::session::Stream, W, C>) -> Result<(), Error>,
-    OA: FnMut(Context<'_, Proc, crate::session::Stream, W, C>) -> Result<(), Error>,
-    TA: FnMut(Context<'_, Proc, crate::session::Stream, W, C>) -> Result<(), Error>,
+    Input: Read + Send + 'static,
+    Output: Write,
+    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    InputAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+    OutputAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+    IdleAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
 {
     use crate::{
         error::to_io_error,
@@ -870,31 +925,36 @@ where
 
         // Wait for at least one I/O event.
         let event = poller.recv().map_err(to_io_error(""))?;
-
         match event {
             Recv::R1(b) => match b {
                 Ok(b) => {
-                    let eof = b.is_some();
-                    let buf: &[u8] = b.map_or(&[], |b| &[b]);
+                    let eof = b.is_none();
+                    let n = if eof { 0 } else { 1 };
+                    let buf = b.map_or([0], |b| [b]);
+                    let buf = &buf[..n];
 
-                    let buf = (opts.input_filter)(&buf)?;
+                    let buf = if let Some(filter) = input_filter.as_mut() {
+                        (filter)(buf)?
+                    } else {
+                        Cow::Borrowed(buf)
+                    };
 
-                    let ctx = Context::new(session, &mut output, &mut opts.state, &buf, eof);
-                    (opts.input_action)(ctx)?;
+                    if let Some(action) = input_action.as_mut() {
+                        let ctx = Context::new(&mut *session, &mut output, &buf, eof, &mut *state);
+                        (action)(ctx)?;
+                    }
 
                     if eof {
                         return Ok(());
                     }
 
-                    let escape_char_pos = buf.iter().position(|c| *c == opts.escape_character);
+                    let escape_char_pos = buf.iter().position(|c| *c == escape_character);
                     match escape_char_pos {
                         Some(pos) => {
                             session.write_all(&buf[..pos])?;
                             return Ok(());
                         }
-                        None => {
-                            session.write_all(&buf[..])?;
-                        }
+                        None => session.write_all(&buf[..])?,
                     }
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -902,12 +962,21 @@ where
             },
             Recv::R2(b) => match b {
                 Ok(b) => {
-                    let eof = b.is_some();
-                    let buf: &[u8] = b.map_or(&[], |b| &[b]);
-                    let buf = (opts.output_filter)(&buf)?;
+                    let eof = b.is_none();
+                    let n = if eof { 0 } else { 1 };
+                    let buf = b.map_or([0], |b| [b]);
+                    let buf = &buf[..n];
 
-                    let ctx = Context::new(session, &mut output, &mut opts.state, &buf, eof);
-                    (opts.output_action)(ctx)?;
+                    let buf = if let Some(filter) = output_filter.as_mut() {
+                        (filter)(buf)?
+                    } else {
+                        Cow::Borrowed(buf)
+                    };
+
+                    if let Some(action) = output_action.as_mut() {
+                        let ctx = Context::new(&mut *session, &mut output, &buf, eof, &mut *state);
+                        (action)(ctx)?;
+                    }
 
                     if eof {
                         return Ok(());
@@ -920,8 +989,10 @@ where
                 Err(err) => return Err(err.into()),
             },
             Recv::Timeout => {
-                let ctx = Context::new(session, &mut output, &mut opts.state, &[], false);
-                (opts.idle_action)(ctx)?;
+                if let Some(action) = idle_action.as_mut() {
+                    let ctx = Context::new(&mut *session, &mut output, &[], false, &mut *state);
+                    (action)(ctx)?;
+                }
             }
         }
     }

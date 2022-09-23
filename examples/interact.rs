@@ -9,7 +9,7 @@ const SHELL: &str = "sh";
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 
-#[cfg(not(feature = "async"))]
+#[cfg(all(not(feature = "async"), not(all(windows, feature = "polling"))))]
 fn main() {
     let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
@@ -40,6 +40,25 @@ fn main() {
 
     block_on(sh.interact(&mut stdin, stdout()).spawn()).expect("Failed to start interact");
 
+    stdin.close().expect("Failed to close a stdin");
+
+    println!("Exiting");
+}
+
+#[cfg(all(windows, feature = "polling"))]
+fn main() {
+    let mut sh = spawn(SHELL).expect("Error while spawning sh");
+
+    println!("Now you're in interacting mode");
+    println!("To return control back to main type CTRL-] combination");
+
+    let stdin = Stdin::open().expect("Failed to create stdin");
+
+    sh.interact(stdin, stdout())
+        .spawn()
+        .expect("Failed to start interact");
+
+    let stdin = Stdin::open().expect("Failed to create stdin");
     stdin.close().expect("Failed to close a stdin");
 
     println!("Exiting");

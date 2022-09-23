@@ -163,8 +163,14 @@ impl<P, S> Session<P, S> {
     ///
     /// # Example
     ///
-    #[cfg_attr(all(unix, not(feature = "async"), not(feature = "polling")), doc = "```no_run")]
-    #[cfg_attr(not(all(unix, not(feature = "async"), not(feature = "polling"))), doc = "```ignore")]
+    #[cfg_attr(
+        all(unix, not(feature = "async"), not(feature = "polling")),
+        doc = "```no_run"
+    )]
+    #[cfg_attr(
+        not(all(unix, not(feature = "async"), not(feature = "polling"))),
+        doc = "```ignore"
+    )]
     /// use std::io;
     ///
     /// let mut p = expectrl::spawn("cat").unwrap();
