@@ -27,7 +27,7 @@
 //! ## Feature flags
 //!
 //! - `async`: Enables a async/await public API.
-//! - `regex`: Enables regex support.
+//! - `polling`: Enables polling backend in interact session. Be cautious to use it on windows.
 //!
 //! ## Examples
 //!
