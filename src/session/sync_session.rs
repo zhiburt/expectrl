@@ -286,11 +286,10 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///
-    /// let mut p = spawn("echo 123").unwrap();
-    ///
-    /// // wait to guarantee that check echo worked out (most likely)
-    /// std::thread::sleep(Duration::from_secs(1));
-    ///
+    /// let mut p = spawn("cat").unwrap();
+    /// p.send_line("123");
+    /// # // wait to guarantee that check echo worked out (most likely)
+    /// # std::thread::sleep(Duration::from_secs(1));
     /// let m = p.is_matched(Regex("\\d+")).unwrap();
     /// assert_eq!(m, true);
     /// ```

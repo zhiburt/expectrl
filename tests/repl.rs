@@ -11,6 +11,7 @@ use std::io::BufRead;
 use std::{thread, time::Duration};
 
 #[cfg(not(feature = "async"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn bash() {
     let mut p = spawn_bash().unwrap();
@@ -20,13 +21,13 @@ fn bash() {
     p.read_line(&mut msg).unwrap();
     assert!(msg.ends_with("Hello World\r\n"));
 
-    thread::sleep(Duration::from_millis(300));
     p.send_control(ControlCode::EOT).unwrap();
 
     assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 }
 
 #[cfg(not(feature = "async"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn bash_with_log() {
     let mut p = spawn_bash()
