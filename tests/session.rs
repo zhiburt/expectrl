@@ -74,16 +74,12 @@ fn send_multiline() {
     let mut session = spawn("cat").unwrap();
     session.send("Hello World\n").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
-    session.write_all(&[3]).unwrap(); // Ctrl+C
-    session.flush().unwrap();
+    let m = session.expect('\n').unwrap();
+    let buf = String::from_utf8_lossy(m.before());
 
-    let mut buf = String::new();
-    session.read_to_string(&mut buf).unwrap();
+    assert_eq!(buf, "Hello World\r");
 
-    // cat repeats a send line after <enter> is presend
-    // <enter> is basically a new line
-    assert_eq!(buf, "Hello World\r\n");
+    session.exit(true).unwrap();
 }
 
 #[cfg(unix)]
@@ -154,19 +150,12 @@ fn send_line() {
     let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
+    let m = session.expect('\n').unwrap();
+    let buf = String::from_utf8_lossy(m.before());
+
+    assert_eq!(buf, "Hello World\r");
+
     session.exit(true).unwrap();
-    thread::sleep(Duration::from_millis(300));
-
-    let mut buf = String::new();
-    session.read_to_string(&mut buf).unwrap();
-
-    // cat repeats a send line after <enter> is presend
-    // <enter> is basically a new line
-    //
-    // NOTE: in debug mode though it equals 'Hello World\r\n'
-    // : stty -a are the same
-    assert_eq!(buf, "Hello World\r\n");
 }
 
 #[cfg(unix)]
