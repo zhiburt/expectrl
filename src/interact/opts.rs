@@ -643,8 +643,8 @@ where
                     return Ok(());
                 }
 
-                opts.output.write_all(&buf)?;
-                opts.output.flush()?;
+                spin_write(&mut opts.output, &buf)?;
+                spin_flush(&mut opts.output)?;
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err.into()),
@@ -1166,6 +1166,32 @@ where
                 // We need to check whether a process is alive;
                 continue;
             }
+        }
+    }
+}
+
+fn spin_write<W>(mut writer: W, buf: &[u8]) -> io::Result<()>
+where
+    W: Write,
+{
+    loop {
+        match writer.write_all(buf) {
+            Ok(_) => return Ok(()),
+            Err(err) if err.kind() != io::ErrorKind::WouldBlock => return Err(err),
+            Err(_) => (),
+        }
+    }
+}
+
+fn spin_flush<W>(mut writer: W) -> io::Result<()>
+where
+    W: Write,
+{
+    loop {
+        match writer.flush() {
+            Ok(_) => return Ok(()),
+            Err(err) if err.kind() != io::ErrorKind::WouldBlock => return Err(err),
+            Err(_) => (),
         }
     }
 }
