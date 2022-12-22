@@ -200,7 +200,7 @@ fn interact_context() {
     let mut input_data = Lookup::new();
     let mut output_data = Lookup::new();
 
-    let state = session
+    let (state, is_alive) = session
         .interact(reader, &mut writer)
         .set_state((0, 0))
         .on_input(|ctx| {
@@ -221,6 +221,8 @@ fn interact_context() {
         })
         .spawn()
         .unwrap();
+
+    assert!(is_alive);
 
     assert_eq!(state.0, 4);
     assert!(state.1 > 0, "{:?}", state.1);
@@ -250,7 +252,7 @@ fn interact_on_output_not_matched() {
     let mut input = Lookup::new();
 
     let mut session = spawn("cat").unwrap();
-    let state = session
+    let (state, is_alive) = session
         .interact(reader, &mut writer)
         .set_state((0, 0))
         .on_input(|ctx| {
@@ -271,6 +273,8 @@ fn interact_on_output_not_matched() {
         })
         .spawn()
         .unwrap();
+
+    assert!(is_alive);
 
     assert_eq!(state.0, 2);
     assert_eq!(state.1, 0);

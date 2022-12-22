@@ -385,7 +385,7 @@ impl<
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     #[cfg(not(any(feature = "async", feature = "polling")))]
-    pub fn spawn(mut self) -> Result<State, Error>
+    pub fn spawn(mut self) -> Result<(State, bool), Error>
     where
         Stream: NonBlocking + Write + Read,
         Input: Read,
@@ -402,6 +402,8 @@ impl<
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
     {
+        let is_alive;
+
         #[cfg(unix)]
         {
             let is_echo = self
@@ -412,7 +414,7 @@ impl<
                 let _ = self.session.set_echo(true, None);
             }
 
-            interact_buzy_loop(&mut self)?;
+            is_alive = interact_buzy_loop(&mut self)?;
 
             if !is_echo {
                 let _ = self.session.set_echo(false, None);
@@ -421,10 +423,10 @@ impl<
 
         #[cfg(windows)]
         {
-            interact_buzy_loop(&mut self)?;
+            is_alive = interact_buzy_loop(&mut self)?;
         }
 
-        Ok(self.state)
+        Ok((self.state, is_alive))
     }
 
     /// Runs the session.
@@ -433,7 +435,7 @@ impl<
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     #[cfg(all(unix, feature = "polling", not(feature = "async")))]
-    pub fn spawn(mut self) -> Result<State, Error>
+    pub fn spawn(mut self) -> Result<(State, bool), Error>
     where
         Stream: Write + Read + std::os::unix::io::AsRawFd,
         Input: Read + std::os::unix::io::AsRawFd,
@@ -458,13 +460,13 @@ impl<
             let _ = self.session.set_echo(true, None);
         }
 
-        interact_polling(&mut self)?;
+        let is_alive = interact_polling(&mut self)?;
 
         if !is_echo {
             let _ = self.session.set_echo(false, None);
         }
 
-        Ok(self.state)
+        Ok((self.state, is_alive))
     }
 
     /// Runs the session.
@@ -473,7 +475,7 @@ impl<
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     #[cfg(feature = "async")]
-    pub async fn spawn(mut self) -> Result<State, Error>
+    pub async fn spawn(mut self) -> Result<(State, bool), Error>
     where
         Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
         Input: futures_lite::AsyncRead + Unpin,
@@ -501,19 +503,20 @@ impl<
                     let _ = self.session.set_echo(true, None);
                 }
 
-                interact_async(&mut self).await?;
+                let is_alive = interact_async(&mut self).await?;
 
                 if !is_echo {
                     let _ = self.session.set_echo(false, None);
                 }
+
+                Ok((self.state, is_alive))
             }
 
             #[cfg(windows)]
             {
-                interact_async(&mut self).await?;
+                let is_alive = interact_async(&mut self).await?;
+                Ok((self.state, is_alive))
             }
-
-            Ok(self.state)
         }
     }
 }
@@ -589,7 +592,7 @@ fn interact_buzy_loop<
         OutputAction,
         IdleAction,
     >,
-) -> Result<(), Error>
+) -> Result<bool, Error>
 where
     Stream: NonBlocking + Write + Read,
     Input: Read,
@@ -614,7 +617,7 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = opts.session.is_alive();
         if matches!(status, Ok(false)) {
-            return Ok(());
+            return Ok(false);
         }
 
         match opts.session.try_read(&mut buf) {
@@ -640,7 +643,7 @@ where
                 }
 
                 if eof {
-                    return Ok(());
+                    return Ok(true);
                 }
 
                 spin_write(&mut opts.output, &buf)?;
@@ -677,14 +680,14 @@ where
                 }
 
                 if eof {
-                    return Ok(());
+                    return Ok(true);
                 }
 
                 let escape_char_position = buf.iter().position(|c| *c == opts.escape_character);
                 match escape_char_position {
                     Some(pos) => {
                         opts.session.write_all(&buf[..pos])?;
-                        return Ok(());
+                        return Ok(true);
                     }
                     None => {
                         opts.session.write_all(&buf[..])?;
@@ -731,7 +734,7 @@ fn interact_polling<
         OutputAction,
         IdleAction,
     >,
-) -> Result<(), Error>
+) -> Result<bool, Error>
 where
     Stream: Write + Read + std::os::unix::io::AsRawFd,
     Input: Read + std::os::unix::io::AsRawFd,
@@ -752,8 +755,8 @@ where
 
     // Create a poller and register interest in readability on the socket.
     let poller = Poller::new()?;
-    poller.add(&opts.input.as_raw_fd(), Event::readable(0))?;
-    poller.add(&opts.session.get_stream().as_raw_fd(), Event::readable(1))?;
+    poller.add(opts.input.as_raw_fd(), Event::readable(0))?;
+    poller.add(opts.session.get_stream().as_raw_fd(), Event::readable(1))?;
 
     let mut buf = [0; 512];
 
@@ -766,7 +769,7 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = opts.session.is_alive();
         if matches!(status, Ok(false)) {
-            return Ok(());
+            return Ok(false);
         }
 
         // Wait for at least one I/O event.
@@ -802,13 +805,14 @@ where
                         }
 
                         if eof {
-                            return Ok(());
+                            return Ok(true);
                         }
 
                         let escape_char_pos = buf.iter().position(|c| *c == opts.escape_character);
                         match escape_char_pos {
                             Some(pos) => {
-                                return opts.session.write_all(&buf[..pos]).map_err(|e| e.into())
+                                opts.session.write_all(&buf[..pos]).map_err(Error::IO)?;
+                                return Ok(true);
                             }
                             None => opts.session.write_all(&buf[..])?,
                         }
@@ -818,7 +822,7 @@ where
                 }
 
                 // Set interest in the next readability event.
-                poller.modify(&opts.input.as_raw_fd(), Event::readable(0))?;
+                poller.modify(opts.input.as_raw_fd(), Event::readable(0))?;
             }
 
             if ev.key == 1 {
@@ -845,7 +849,7 @@ where
                         }
 
                         if eof {
-                            return Ok(());
+                            return Ok(true);
                         }
 
                         spin_write(&mut opts.output, &buf)?;
@@ -856,7 +860,7 @@ where
                 }
 
                 // Set interest in the next readability event.
-                poller.modify(&opts.session.get_stream().as_raw_fd(), Event::readable(1))?;
+                poller.modify(opts.session.get_stream().as_raw_fd(), Event::readable(1))?;
             }
         }
 
@@ -894,7 +898,7 @@ fn interact_polling_on_thread<
     mut input_action: Option<InputAction>,
     mut output_action: Option<OutputAction>,
     mut idle_action: Option<IdleAction>,
-) -> Result<(), Error>
+) -> Result<bool, Error>
 where
     Input: Read + Send + 'static,
     Output: Write,
@@ -920,7 +924,7 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = session.is_alive();
         if matches!(status, Ok(false)) {
-            return Ok(());
+            return Ok(false);
         }
 
         // Wait for at least one I/O event.
@@ -945,14 +949,14 @@ where
                     }
 
                     if eof {
-                        return Ok(());
+                        return Ok(true);
                     }
 
                     let escape_char_pos = buf.iter().position(|c| *c == escape_character);
                     match escape_char_pos {
                         Some(pos) => {
                             session.write_all(&buf[..pos])?;
-                            return Ok(());
+                            return Ok(true);
                         }
                         None => session.write_all(&buf[..])?,
                     }
@@ -979,7 +983,7 @@ where
                     }
 
                     if eof {
-                        return Ok(());
+                        return Ok(true);
                     }
 
                     output.write_all(&buf)?;
@@ -1022,7 +1026,7 @@ async fn interact_async<
         OutputAction,
         IdleAction,
     >,
-) -> Result<(), Error>
+) -> Result<bool, Error>
 where
     Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
     Input: futures_lite::AsyncRead + Unpin,
@@ -1052,7 +1056,7 @@ where
         // We ignore errors because there might be errors like EOCHILD etc.
         let status = opts.session.is_alive();
         if matches!(status, Ok(false)) {
-            return Ok(());
+            return Ok(false);
         }
 
         #[derive(Debug)]
@@ -1101,7 +1105,7 @@ where
                 }
 
                 if eof {
-                    return Ok(());
+                    return Ok(true);
                 }
 
                 spin_write(&mut opts.output, &buf)?;
@@ -1114,7 +1118,6 @@ where
                 // The terminal must have been prepared before.
                 match result {
                     Ok(n) => {
-                        let n = result?;
                         let buf = &stdin_buf[..n];
                         let buf = match opts.input_filter.as_mut() {
                             Some(filter) => (filter)(buf)?,
@@ -1135,14 +1138,14 @@ where
                         }
 
                         if eof {
-                            return Ok(());
+                            return Ok(true);
                         }
 
                         let escape_char_pos = buf.iter().position(|c| *c == opts.escape_character);
                         match escape_char_pos {
                             Some(pos) => {
                                 opts.session.write_all(&buf[..pos]).await?;
-                                return Ok(());
+                                return Ok(true);
                             }
                             None => opts.session.write_all(&buf[..]).await?,
                         }

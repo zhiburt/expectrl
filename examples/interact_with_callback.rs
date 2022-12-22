@@ -17,7 +17,7 @@ fn main() {
     let mut stdin = Stdin::open().unwrap();
     let stdout = std::io::stdout();
 
-    let state = session
+    let (state, is_alive) = session
         .interact(&mut stdin, stdout)
         .set_state(State::default())
         .on_output(|mut ctx| {
@@ -57,7 +57,11 @@ fn main() {
 
     stdin.close().unwrap();
 
-    println!("RESULTS...........");
+    if !is_alive {
+        println!("The process was exited");
+    }
+
+    println!("RESULTS");
     println!(
         "Number of time 'Y' was pressed = {}",
         state.pressed_yes_on_continue.unwrap_or_default()
@@ -115,11 +119,15 @@ fn main() {
             Ok(())
         });
 
-    let state = block_on(interact.spawn()).expect("Failed to start interact");
+    let (state, is_alive) = block_on(interact.spawn()).expect("Failed to start interact");
 
     stdin.close().unwrap();
 
-    println!("RESULTS...........");
+    if !is_alive {
+        println!("The process was exited")
+    }
+
+    println!("RESULTS");
     println!(
         "Number of time 'Y' was pressed = {}",
         state.pressed_yes_on_continue.unwrap_or_default()
@@ -140,7 +148,7 @@ fn main() {
     let stdin = Stdin::open().unwrap();
     let stdout = std::io::stdout();
 
-    let state = session
+    let (state, _) = session
         .interact(stdin, stdout)
         .set_state(State::default())
         .on_output(|mut ctx| {
