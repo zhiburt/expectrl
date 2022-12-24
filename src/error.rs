@@ -24,6 +24,7 @@ pub enum Error {
 }
 
 impl Error {
+    #[allow(dead_code)]
     pub(crate) fn unknown(message: impl Display, err: impl Display) -> Error {
         Self::Other {
             message: format!("{}: {}", message, err),

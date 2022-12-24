@@ -161,7 +161,7 @@ fn expect_n_bytes() {
     use expectrl::Session;
     use std::process::Command;
 
-    let mut session = Session::spawn(Command::new("echo Hello World")).unwrap();
+    let mut session = Session::spawn(Command::new("cmd /C echo Hello World")).unwrap();
 
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
