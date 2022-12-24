@@ -1,3 +1,5 @@
+#![cfg(not(windows))]
+
 use std::{
     io::{self, sink, Cursor, Read, Write},
     time::{Duration, Instant},
