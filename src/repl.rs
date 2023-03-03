@@ -188,6 +188,7 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
 /// A repl session: e.g. bash or the python shell:
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
+#[derive(Debug)]
 pub struct ReplSession<P = Proc, S = Stream> {
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.

@@ -22,6 +22,7 @@ use crate::Error;
 /// But we expose it because it cab be used with [`Session::interact`].
 ///
 /// [`Session::interact`]: crate::session::Session::interact
+#[derive(Debug)]
 pub struct Stdin {
     inner: inner::StdinInner,
 }
@@ -109,6 +110,7 @@ mod inner {
     };
     use ptyprocess::set_raw;
 
+    #[derive(Debug)]
     pub(super) struct StdinInner {
         orig_flags: Option<Termios>,
         #[cfg(feature = "async")]
@@ -198,6 +200,7 @@ mod inner {
 
     use conpty::console::Console;
 
+    #[derive(Debug)]
     pub(super) struct StdinInner {
         terminal: Console,
         #[cfg(not(feature = "async"))]

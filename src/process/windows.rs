@@ -25,6 +25,7 @@ use std::{
 };
 
 /// A windows representation of a [Process] via [conpty::Process].
+#[derive(Debug)]
 pub struct WinProcess {
     proc: Process,
 }
@@ -136,6 +137,7 @@ impl IntoAsyncStream for ProcessStream {
 
 /// An async version of IO stream of [WinProcess].
 #[cfg(feature = "async")]
+#[derive(Debug)]
 pub struct AsyncProcessStream {
     output: blocking::Unblock<PipeReader>,
     input: blocking::Unblock<PipeWriter>,

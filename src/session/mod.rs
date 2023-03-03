@@ -184,6 +184,7 @@ impl<P, S> Session<P, S> {
         input: I,
         output: O,
     ) -> InteractSession<
+        '_,
         (),
         Self,
         O,

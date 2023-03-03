@@ -22,6 +22,7 @@ use std::{
 };
 
 /// A Unix representation of a [Process] via [PtyProcess]
+#[derive(Debug)]
 pub struct UnixProcess {
     proc: PtyProcess,
 }

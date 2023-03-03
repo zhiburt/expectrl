@@ -18,6 +18,7 @@ use crate::process::NonBlocking;
 use super::Context;
 
 /// InteractConfig represents options of an interactive session.
+#[derive(Debug)]
 pub struct InteractSession<
     'a,
     State,
@@ -63,6 +64,7 @@ impl<'a, State, Session, Output, Input>
         input: Input,
         state: State,
     ) -> InteractSession<
+        '_,
         State,
         Session,
         Output,
@@ -184,7 +186,7 @@ impl<
         IdleAction,
     >
     where
-        Filter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        Filter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     {
         InteractSession {
             state: self.state,
@@ -221,7 +223,7 @@ impl<
         IdleAction,
     >
     where
-        Filter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        Filter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     {
         InteractSession {
             state: self.state,
@@ -353,7 +355,7 @@ pub type NoAction<Session, Output, State> =
     fn(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>;
 
 /// A helper type to set a default filter to [`InteractSession`].
-pub type NoFilter = fn(&[u8]) -> Result<Cow<[u8]>, Error>;
+pub type NoFilter = fn(&[u8]) -> Result<Cow<'_, [u8]>, Error>;
 
 impl<
         State,
@@ -390,8 +392,8 @@ impl<
         Stream: NonBlocking + Write + Read,
         Input: Read,
         Output: Write,
-        InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-        OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         InputAction: FnMut(
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
@@ -579,6 +581,7 @@ fn interact_buzy_loop<
     IdleAction,
 >(
     opts: &mut InteractSession<
+        '_,
         State,
         Session<Proc, Stream>,
         Output,
@@ -594,8 +597,8 @@ where
     Stream: NonBlocking + Write + Read,
     Input: Read,
     Output: Write,
-    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     InputAction: FnMut(
         Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
     ) -> Result<(), Error>,

@@ -10,7 +10,9 @@
     unused_qualifications,
     unused_results,
     unused_variables,
-    variant_size_differences
+    variant_size_differences,
+    missing_debug_implementations,
+    rust_2018_idioms
 )]
 #![allow(clippy::uninlined_format_args)]
 

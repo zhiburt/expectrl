@@ -36,12 +36,13 @@ impl Match {
 }
 
 impl From<regex::bytes::Match<'_>> for Match {
-    fn from(m: regex::bytes::Match) -> Self {
+    fn from(m: regex::bytes::Match<'_>) -> Self {
         Self::new(m.start(), m.end())
     }
 }
 
 /// Regex tries to look up a match by a regex.
+#[derive(Debug)]
 pub struct Regex<Re: AsRef<str>>(pub Re);
 
 impl<Re: AsRef<str>> Needle for Regex<Re> {
@@ -56,6 +57,7 @@ impl<Re: AsRef<str>> Needle for Regex<Re> {
 }
 
 /// Eof consider a match when an EOF is reached.
+#[derive(Debug)]
 pub struct Eof;
 
 impl Needle for Eof {
@@ -68,6 +70,7 @@ impl Needle for Eof {
 }
 
 /// NBytes matches N bytes from the stream.
+#[derive(Debug)]
 pub struct NBytes(pub usize);
 
 impl NBytes {
@@ -164,6 +167,7 @@ impl Needle for char {
 /// let mut p = spawn("cat").unwrap();
 /// p.expect(Any::boxed(vec![Box::new("we"), Box::new(NBytes(3))])).unwrap();
 /// ```
+#[derive(Debug)]
 pub struct Any<I>(pub I);
 
 impl Any<Vec<Box<dyn Needle>>> {
