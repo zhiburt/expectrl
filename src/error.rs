@@ -3,6 +3,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::io;
 
+#[allow(variant_size_differences)]
 /// An main error type used in [crate].
 #[derive(Debug)]
 pub enum Error {
@@ -18,16 +19,18 @@ pub enum Error {
     Eof,
     /// It maybe OS specific error or a general erorr.
     Other {
-        /// It's a custom error message
+        /// The reason of the erorr.
         message: String,
+        /// An underlying error message.
+        err: String,
     },
 }
 
 impl Error {
-    #[allow(dead_code)]
-    pub(crate) fn unknown(message: impl Display, err: impl Display) -> Error {
+    pub(crate) fn unknown(message: impl Into<String>, err: impl Into<String>) -> Error {
         Self::Other {
-            message: format!("{}: {}", message, err),
+            message: message.into(),
+            err: err.into(),
         }
     }
 }
@@ -40,7 +43,7 @@ impl Display for Error {
             Error::RegexParsing => write!(f, "Can't parse a regex expression"),
             Error::ExpectTimeout => write!(f, "Reached a timeout for expect type of command"),
             Error::Eof => write!(f, "EOF was reached; the read may successed later"),
-            Error::Other { message } => write!(f, "An other error; {} ", message),
+            Error::Other { message, err } => write!(f, "Unexpected error; {}; {}", message, err),
         }
     }
 }

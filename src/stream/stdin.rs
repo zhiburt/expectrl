@@ -22,6 +22,7 @@ use crate::Error;
 /// But we expose it because it cab be used with [`Session::interact`].
 ///
 /// [`Session::interact`]: crate::session::Session::interact
+#[derive(Debug)]
 pub struct Stdin {
     inner: inner::StdinInner,
 }
@@ -32,12 +33,18 @@ impl Stdin {
     /// It may change terminal's STDIN state therefore, after
     /// it's used you must call [Stdin::close].
     pub fn open() -> Result<Self, Error> {
-        let mut stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
-
         #[cfg(not(feature = "async"))]
-        stdin.blocking(true)?;
+        {
+            let mut stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
+            stdin.blocking(true)?;
+            Ok(stdin)
+        }
 
-        Ok(stdin)
+        #[cfg(feature = "async")]
+        {
+            let stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
+            Ok(stdin)
+        }
     }
 
     /// Close frees a resources which were used.
@@ -109,6 +116,7 @@ mod inner {
     };
     use ptyprocess::set_raw;
 
+    #[derive(Debug)]
     pub(super) struct StdinInner {
         orig_flags: Option<Termios>,
         #[cfg(feature = "async")]
@@ -136,16 +144,17 @@ mod inner {
 
             // verify: possible controlling fd can be stdout and stderr as well?
             // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-            let isatty_terminal =
-                isatty(STDIN_FILENO).map_err(|e| Error::unknown("failed to call isatty", e))?;
+            let isatty_terminal = isatty(STDIN_FILENO)
+                .map_err(|e| Error::unknown("failed to call isatty", e.to_string()))?;
             if isatty_terminal {
                 // tcgetattr issues error if a provided fd is not a tty,
                 // but we can work with such input as it may be redirected.
                 o_pty_flags = termios::tcgetattr(STDIN_FILENO)
                     .map(Some)
-                    .map_err(|e| Error::unknown("failed to call tcgetattr", e))?;
+                    .map_err(|e| Error::unknown("failed to call tcgetattr", e.to_string()))?;
 
-                set_raw(STDIN_FILENO).map_err(|e| Error::unknown("failed to set a raw tty", e))?;
+                set_raw(STDIN_FILENO)
+                    .map_err(|e| Error::unknown("failed to set a raw tty", e.to_string()))?;
             }
 
             Ok(o_pty_flags)
@@ -154,7 +163,7 @@ mod inner {
         pub(super) fn close(&mut self) -> Result<(), Error> {
             if let Some(origin_stdin_flags) = &self.orig_flags {
                 termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSAFLUSH, origin_stdin_flags)
-                    .map_err(|e| Error::unknown("failed to call tcsetattr", e))?;
+                    .map_err(|e| Error::unknown("failed to call tcsetattr", e.to_string()))?;
             }
 
             Ok(())
@@ -205,6 +214,17 @@ mod inner {
         stdin: io::Stdin,
         #[cfg(feature = "async")]
         stdin: blocking::Unblock<io::Stdin>,
+    }
+
+    impl std::fmt::Debug for StdinInner {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("StdinInner")
+                .field("terminal", &"...")
+                .field("is_blocking", &self.is_blocking)
+                .field("stdin", &self.stdin)
+                .field("stdin", &self.stdin)
+                .finish()
+        }
     }
 
     impl StdinInner {

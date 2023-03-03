@@ -80,6 +80,7 @@ impl<'a> IntoIterator for &'a Captures {
     }
 }
 
+#[derive(Debug)]
 pub struct MatchIter<'a> {
     buf: &'a [u8],
     matches: std::slice::Iter<'a, Match>,

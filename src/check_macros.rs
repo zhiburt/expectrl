@@ -68,17 +68,17 @@ macro_rules! check {
     };
     (@case $session:expr, (default => $body:tt, $($tail:tt)*), ($($head:tt)*), ()) => {
         // A default branch
-        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unreachable_code)] Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unreachable_code)] Ok(()) } ))
     };
     (@case $session:expr, (default => $body:tt $($tail:tt)*), ($($head:tt)*), ()) => {
         // A default branch
         // allow missed comma `,`
-        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unused_qualifications)] Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; Ok(()) } ))
     };
     (@case $session:expr, (), ($($head:tt)*), ()) => {
         // there's no default branch
         // so we make up our own.
-        $crate::check!(@case $session, (), ($($head)*), ( { #[allow(unused_qualifications)] Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, (), ($($head)*), ( { Ok(()) } ))
     };
     (@case $session:expr, (), ($($tail:tt)*), ($($default:tt)*)) => {
         // last point of @case
@@ -131,7 +131,10 @@ macro_rules! check {
     };
     // Entry point
     ($($tokens:tt)*) => {
-        $crate::check!(@check ($($tokens)*) ())
+        {
+            let result: Result::<(), $crate::Error> = $crate::check!(@check ($($tokens)*) ());
+            result
+        }
     };
 }
 
@@ -181,17 +184,17 @@ macro_rules! check {
     };
     (@case $session:expr, (default => $body:tt, $($tail:tt)*), ($($head:tt)*), ()) => {
         // A default branch
-        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unreachable_code)] Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; #[allow(unreachable_code)] Ok(()) } ))
     };
     (@case $session:expr, (default => $body:tt $($tail:tt)*), ($($head:tt)*), ()) => {
         // A default branch
         // allow missed comma `,`
-        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, ($($tail)*), ($($head)*), ( { $body; Ok(()) } ))
     };
     (@case $session:expr, (), ($($head:tt)*), ()) => {
         // there's no default branch
         // so we make up our own.
-        $crate::check!(@case $session, (), ($($head)*), ( { Result::<(), $crate::Error>::Ok(()) } ))
+        $crate::check!(@case $session, (), ($($head)*), ( { Ok(()) } ))
     };
     (@case $session:expr, (), ($($tail:tt)*), ($($default:tt)*)) => {
         // last point of @case
@@ -215,13 +218,14 @@ macro_rules! check {
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
         match $crate::session::Session::check(&mut $session, $exp).await {
-            result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
-                let $var = result.unwrap();
-                $body;
-                #[allow(unreachable_code)]
-                Ok(())
-            }
-            Ok(_) => {
+            Ok(found) => {
+                if !found.is_empty() {
+                    let $var = found;
+                    $body;
+                    #[allow(unreachable_code)]
+                    return Ok(())
+                }
+
                 $crate::check!(@branch $session, ($($tail)*), ($($default)*))
             }
             Err(err) => Err(err),
@@ -245,7 +249,8 @@ macro_rules! check {
     // Entry point
     ($($tokens:tt)*) => {
         async {
-            $crate::check!(@check ($($tokens)*) ())
+            let value: Result::<(), $crate::Error> = $crate::check!(@check ($($tokens)*) ());
+            value
         }
     };
 }
@@ -316,7 +321,7 @@ mod tests {
         }
         #[cfg(feature = "async")]
         async {
-            let _ = crate::check! {
+            crate::check! {
                 session,
                 as11d = "zxc" => {},
             }

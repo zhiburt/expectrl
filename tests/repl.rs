@@ -49,8 +49,6 @@ fn bash_with_log() {
 #[cfg(feature = "async")]
 #[test]
 fn bash() {
-    use futures_lite::AsyncReadExt;
-
     futures_lite::future::block_on(async {
         let mut p = spawn_bash().await.unwrap();
 
@@ -69,8 +67,6 @@ fn bash() {
 #[cfg(feature = "async")]
 #[test]
 fn bash_with_log() {
-    use futures_lite::AsyncReadExt;
-
     futures_lite::future::block_on(async {
         let mut p = spawn_bash()
             .await

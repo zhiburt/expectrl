@@ -53,7 +53,7 @@ fn main() {
         let mut hostname = String::new();
         p.read_line(&mut hostname).await.unwrap();
         p.expect_prompt().await.unwrap(); // go sure `hostname` is really done
-        println!("Current hostname: {:?}", hostname); // it prints some undetermined characters before hostname ...
+        println!("Current hostname: {hostname:?}"); // it prints some undetermined characters before hostname ...
 
         // case 2: wait until done, only extract a few infos
         p.send_line("wc /etc/passwd").await.unwrap();

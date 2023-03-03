@@ -2,14 +2,15 @@
 
 use crate::{
     error::Error,
-    process::NonBlocking,
     session::{Proc, Stream},
     Captures, Session,
 };
-use std::{
-    io::{Read, Write},
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
+
+#[cfg(not(feature = "async"))]
+use crate::process::NonBlocking;
+#[cfg(not(feature = "async"))]
+use std::io::{Read, Write};
 
 #[cfg(unix)]
 use std::process::Command;
@@ -68,12 +69,12 @@ pub fn spawn_bash() -> Result<ReplSession, Error> {
 pub async fn spawn_bash() -> Result<ReplSession, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
-    cmd.env("PS1", DEFAULT_PROMPT);
+    let _ = cmd.env("PS1", DEFAULT_PROMPT);
     // bind 'set enable-bracketed-paste off' turns off paste mode,
     // without it each command in bash starts and ends with an invisible sequence.
     //
     // We might need to turn it off optionally?
-    cmd.env(
+    let _ = cmd.env(
         "PROMPT_COMMAND",
         "PS1=EXPECT_PROMPT; unset PROMPT_COMMAND; bind 'set enable-bracketed-paste off'",
     );
@@ -188,6 +189,7 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
 /// A repl session: e.g. bash or the python shell:
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
+#[derive(Debug)]
 pub struct ReplSession<P = Proc, S = Stream> {
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.
@@ -317,7 +319,7 @@ impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
     pub async fn send_line(&mut self, line: impl AsRef<str>) -> Result<(), Error> {
         self.session.send_line(line.as_ref()).await?;
         if self.is_echo_on {
-            self.expect(line.as_ref()).await?;
+            let _ = self.expect(line.as_ref()).await?;
         }
         Ok(())
     }
