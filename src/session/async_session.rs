@@ -166,8 +166,8 @@ impl<P, S: AsyncWrite + Unpin> Session<P, S> {
         const LINE_ENDING: &[u8] = b"\n";
 
         let buf = s.as_ref().as_bytes();
-        let _ = self.stream.write_all(buf).await?;
-        let _ = self.stream.write_all(LINE_ENDING).await?;
+        self.stream.write_all(buf).await?;
+        self.stream.write_all(LINE_ENDING).await?;
         self.stream.flush().await?;
 
         Ok(())
@@ -474,7 +474,7 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     async fn try_fill(&mut self) -> Result<bool, Error> {
         match futures_lite::future::poll_once(self.stream.fill()).await {
             Some(Ok(n)) => Ok(n == 0),
-            Some(Err(err)) => return Err(err.into()),
+            Some(Err(err)) => Err(err.into()),
             None => Ok(false),
         }
     }
@@ -756,18 +756,18 @@ mod tests {
     impl AsyncWrite for NoEofReader {
         fn poll_write(
             mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
+            _: &mut Context<'_>,
             buf: &[u8],
         ) -> Poll<io::Result<usize>> {
             self.data.extend(buf);
             Poll::Ready(Ok(buf.len()))
         }
 
-        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
             Poll::Ready(Ok(()))
         }
 
-        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
             Poll::Ready(Ok(()))
         }
     }
@@ -775,7 +775,7 @@ mod tests {
     impl AsyncRead for NoEofReader {
         fn poll_read(
             mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
+            _: &mut Context<'_>,
             mut buf: &mut [u8],
         ) -> Poll<io::Result<usize>> {
             if self.data.is_empty() {
@@ -783,7 +783,7 @@ mod tests {
             }
 
             let n = std::io::Write::write(&mut buf, &self.data)?;
-            self.data.drain(..n);
+            let _ = self.data.drain(..n);
             Poll::Ready(Ok(n))
         }
     }

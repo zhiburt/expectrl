@@ -161,7 +161,7 @@ fn expect_n_bytes() {
     use expectrl::Session;
     use std::process::Command;
 
-    let mut session = Session::spawn(Command::new("echo Hello World")).unwrap();
+    let mut session = Session::spawn(Command::new("cmd /C echo Hello World")).unwrap();
 
     // give shell some time
     std::thread::sleep(Duration::from_millis(300));
@@ -311,7 +311,7 @@ fn expect_eof_timeout() {
     p.set_expect_timeout(Some(Duration::from_millis(100)));
     match p.expect(Eof) {
         Err(expectrl::Error::ExpectTimeout) => {}
-        r => panic!("should raise TimeOut {:?}", r),
+        r => panic!("reached a timeout {r:?}"),
     }
 }
 
@@ -324,7 +324,7 @@ fn expect_eof_timeout() {
         p.set_expect_timeout(Some(Duration::from_millis(100)));
         match p.expect(Eof).await {
             Err(expectrl::Error::ExpectTimeout) => {}
-            r => panic!("should raise TimeOut {:?}", r),
+            r => panic!("reached a timeout {r:?}"),
         }
     })
 }

@@ -3,7 +3,9 @@ use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
+
 #[cfg(not(feature = "async"))]
+#[cfg(not(windows))]
 use std::io::{Read, Write};
 
 #[cfg(windows)]
@@ -164,7 +166,7 @@ fn send_line() {
 fn send_line() {
     futures_lite::future::block_on(async {
         let mut session = spawn("cat").unwrap();
-        let _ = session.send_line("Hello World").await.unwrap();
+        session.send_line("Hello World").await.unwrap();
 
         thread::sleep(Duration::from_millis(300));
         session.exit(true).unwrap();

@@ -5,6 +5,7 @@
 ///
 /// [`InteractSession`]: crate::interact::InteractSession
 /// [`Session`]: crate::session::Session
+#[derive(Debug)]
 pub struct Context<'a, Session, Output, State> {
     /// The field contains a &mut reference to a [`Session`].
     ///

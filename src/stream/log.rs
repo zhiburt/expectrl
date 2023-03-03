@@ -18,6 +18,7 @@ use crate::process::NonBlocking;
 
 /// LoggedStream a IO stream wrapper,
 /// which logs each write/read operation.
+#[derive(Debug)]
 pub struct LoggedStream<S, W> {
     stream: S,
     logger: W,

@@ -366,7 +366,7 @@ fn try_read_after_process_exit() {
 fn try_read_after_process_exit() {
     use std::io::ErrorKind;
 
-    let mut proc = Session::spawn(Command::new("echo hello cat")).unwrap();
+    let mut proc = Session::spawn(Command::new("cmd /C echo hello cat")).unwrap();
 
     assert_eq!(proc.wait(None).unwrap(), 0);
 
@@ -421,7 +421,7 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc = Session::spawn(Command::new("echo Hello World")).unwrap();
+    let mut proc = Session::spawn(Command::new("cmd /C echo Hello World")).unwrap();
 
     let mut buf: Vec<u8> = Vec::new();
 

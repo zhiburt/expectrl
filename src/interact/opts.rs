@@ -2,15 +2,12 @@
 
 //! This module contains a [`InteractSession`] which runs an interact session with IO.
 
-use std::{
-    borrow::Cow,
-    io::{Read, Write},
-};
+use std::{borrow::Cow, io::Write};
 
 use crate::{process::Healthcheck, session::Proc, ControlCode, Error, Session};
 
 #[cfg(not(feature = "async"))]
-use std::io;
+use std::io::{self, Read};
 
 #[cfg(all(not(feature = "async"), not(feature = "polling")))]
 use crate::process::NonBlocking;
@@ -18,6 +15,7 @@ use crate::process::NonBlocking;
 use super::Context;
 
 /// InteractConfig represents options of an interactive session.
+#[derive(Debug)]
 pub struct InteractSession<
     'a,
     State,
@@ -63,6 +61,7 @@ impl<'a, State, Session, Output, Input>
         input: Input,
         state: State,
     ) -> InteractSession<
+        '_,
         State,
         Session,
         Output,
@@ -184,7 +183,7 @@ impl<
         IdleAction,
     >
     where
-        Filter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        Filter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     {
         InteractSession {
             state: self.state,
@@ -221,7 +220,7 @@ impl<
         IdleAction,
     >
     where
-        Filter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        Filter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     {
         InteractSession {
             state: self.state,
@@ -353,7 +352,7 @@ pub type NoAction<Session, Output, State> =
     fn(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>;
 
 /// A helper type to set a default filter to [`InteractSession`].
-pub type NoFilter = fn(&[u8]) -> Result<Cow<[u8]>, Error>;
+pub type NoFilter = fn(&[u8]) -> Result<Cow<'_, [u8]>, Error>;
 
 impl<
         State,
@@ -390,8 +389,8 @@ impl<
         Stream: NonBlocking + Write + Read,
         Input: Read,
         Output: Write,
-        InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-        OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         InputAction: FnMut(
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
@@ -409,7 +408,7 @@ impl<
             let is_echo = self
                 .session
                 .get_echo()
-                .map_err(|e| Error::unknown("failed to get echo", e))?;
+                .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
             if !is_echo {
                 let _ = self.session.set_echo(true, None);
             }
@@ -480,8 +479,8 @@ impl<
         Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
         Input: futures_lite::AsyncRead + Unpin,
         Output: Write,
-        InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-        OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         InputAction: FnMut(
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
@@ -498,7 +497,7 @@ impl<
                 let is_echo = self
                     .session
                     .get_echo()
-                    .map_err(|e| Error::unknown("failed to get echo", e))?;
+                    .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
                 if !is_echo {
                     let _ = self.session.set_echo(true, None);
                 }
@@ -582,6 +581,7 @@ fn interact_buzy_loop<
     IdleAction,
 >(
     opts: &mut InteractSession<
+        '_,
         State,
         Session<Proc, Stream>,
         Output,
@@ -597,8 +597,8 @@ where
     Stream: NonBlocking + Write + Read,
     Input: Read,
     Output: Write,
-    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     InputAction: FnMut(
         Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
     ) -> Result<(), Error>,
@@ -1031,8 +1031,8 @@ where
     Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
     Input: futures_lite::AsyncRead + Unpin,
     Output: Write,
-    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     InputAction: FnMut(
         Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
     ) -> Result<(), Error>,
