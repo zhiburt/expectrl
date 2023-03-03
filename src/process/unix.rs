@@ -145,6 +145,7 @@ impl IntoAsyncStream for PtyStream {
 
 /// An async version of IO stream of [UnixProcess].
 #[cfg(feature = "async")]
+#[derive(Debug)]
 pub struct AsyncPtyStream {
     stream: async_io::Async<PtyStream>,
 }

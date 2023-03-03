@@ -1,13 +1,17 @@
 #![cfg(not(windows))]
 
 use std::{
-    io::{self, sink, Cursor, Read, Write},
+    io::{self, Cursor, Read, Write},
     time::{Duration, Instant},
 };
 
+#[cfg(not(feature = "async"))]
+use std::io::sink;
+
+#[cfg(not(feature = "async"))]
 use expectrl::{interact::actions::lookup::Lookup, spawn, stream::stdin::Stdin, NBytes};
 
-#[cfg(unix)]
+#[cfg(not(feature = "async"))]
 use expectrl::WaitStatus;
 
 #[cfg(unix)]
@@ -343,6 +347,7 @@ struct ListReaderWithDelayedEof {
 }
 
 impl ListReaderWithDelayedEof {
+    #[cfg(not(feature = "async"))]
     fn new(lines: Vec<String>, eof_timeout: Duration) -> Self {
         Self {
             lines,

@@ -162,7 +162,6 @@ fn read_after_check_str() {
         thread::sleep(Duration::from_millis(600));
 
         let f = session.check("Hello").await.unwrap();
-        println!("{:?}", f);
         assert!(!f.is_empty());
 
         // we stop process so read operation will fail.
@@ -194,7 +193,7 @@ fn check_eof_timeout() {
         let mut p = spawn("sleep 3").expect("cannot run sleep 3");
         match p.check(Eof).await {
             Ok(found) if found.is_empty() => {}
-            r => panic!("should raise TimeOut {:?}", r),
+            r => panic!("reached a timeout {r:?}"),
         }
     })
 }

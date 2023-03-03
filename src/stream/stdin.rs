@@ -33,12 +33,18 @@ impl Stdin {
     /// It may change terminal's STDIN state therefore, after
     /// it's used you must call [Stdin::close].
     pub fn open() -> Result<Self, Error> {
-        let mut stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
-
         #[cfg(not(feature = "async"))]
-        stdin.blocking(true)?;
+        {
+            let mut stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
+            stdin.blocking(true)?;
+            Ok(stdin)
+        }
 
-        Ok(stdin)
+        #[cfg(feature = "async")]
+        {
+            let stdin = inner::StdinInner::new().map(|inner| Self { inner })?;
+            Ok(stdin)
+        }
     }
 
     /// Close frees a resources which were used.

@@ -2,15 +2,12 @@
 
 //! This module contains a [`InteractSession`] which runs an interact session with IO.
 
-use std::{
-    borrow::Cow,
-    io::{Read, Write},
-};
+use std::{borrow::Cow, io::Write};
 
 use crate::{process::Healthcheck, session::Proc, ControlCode, Error, Session};
 
 #[cfg(not(feature = "async"))]
-use std::io;
+use std::io::{self, Read};
 
 #[cfg(all(not(feature = "async"), not(feature = "polling")))]
 use crate::process::NonBlocking;
@@ -480,8 +477,8 @@ impl<
         Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
         Input: futures_lite::AsyncRead + Unpin,
         Output: Write,
-        InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-        OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+        InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         InputAction: FnMut(
             Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
         ) -> Result<(), Error>,
@@ -498,7 +495,7 @@ impl<
                 let is_echo = self
                     .session
                     .get_echo()
-                    .map_err(|e| Error::unknown("failed to get echo", e))?;
+                    .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
                 if !is_echo {
                     let _ = self.session.set_echo(true, None);
                 }
@@ -1030,8 +1027,8 @@ where
     Stream: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
     Input: futures_lite::AsyncRead + Unpin,
     Output: Write,
-    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
+    InputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    OutputFilter: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     InputAction: FnMut(
         Context<'_, &mut Session<Proc, Stream>, &mut Output, &mut State>,
     ) -> Result<(), Error>,
@@ -1117,7 +1114,6 @@ where
                 // The terminal must have been prepared before.
                 match result {
                     Ok(n) => {
-                        let n = result?;
                         let buf = &stdin_buf[..n];
                         let buf = match opts.input_filter.as_mut() {
                             Some(filter) => (filter)(buf)?,

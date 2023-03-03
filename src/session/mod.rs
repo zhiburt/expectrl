@@ -22,7 +22,7 @@ pub mod async_session;
 #[cfg(not(feature = "async"))]
 pub mod sync_session;
 
-use std::io::{Read, Write};
+use std::io::Write;
 
 use crate::{
     interact::{InteractSession, NoAction, NoFilter},
@@ -30,6 +30,9 @@ use crate::{
     stream::log::LoggedStream,
     Error,
 };
+
+#[cfg(not(feature = "async"))]
+use std::io::Read;
 
 #[cfg(feature = "async")]
 use crate::process::IntoAsyncStream;
