@@ -75,7 +75,7 @@ fn interact_output_callback() {
     // fixme: sometimes it's 0
     //        I guess because the process gets down to fast.
 
-    assert!(matches!(state, 1 | 0), "{:?}", state);
+    assert!(matches!(state, 1 | 0), "{state:?}");
 }
 
 #[cfg(unix)]
@@ -143,7 +143,7 @@ fn interact_callbacks_with_stream_redirection() {
         .unwrap();
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
-    assert!(buffer.contains("Hello World"), "{:?}", buffer);
+    assert!(buffer.contains("Hello World"), "{buffer:?}");
 }
 
 #[cfg(unix)]
@@ -228,7 +228,7 @@ fn interact_context() {
     assert!(state.1 > 0, "{:?}", state.1);
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
-    assert!(buffer.contains("123"), "{:?}", buffer);
+    assert!(buffer.contains("123"), "{buffer:?}");
 }
 
 #[cfg(all(unix, not(any(feature = "async", feature = "polling"))))]

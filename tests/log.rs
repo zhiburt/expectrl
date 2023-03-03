@@ -107,14 +107,14 @@ fn log() {
         let _ = session.read(&mut buf).unwrap();
 
         let bytes = writer.inner.lock().unwrap();
-        let s = String::from_utf8_lossy(bytes.get_ref());
+        let text = String::from_utf8_lossy(bytes.get_ref());
         if !matches!(
-            s.as_ref(),
+            text.as_ref(),
             "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
                 | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
                 | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n",
         ) {
-            panic!("unexpected output {:?}", s);
+            panic!("unexpected output {text:?}");
         }
     }
 }
@@ -157,14 +157,14 @@ fn log_read_line() {
         assert_eq!(buf, "Hello World\r\n");
 
         let bytes = writer.inner.lock().unwrap();
-        let s = String::from_utf8_lossy(bytes.get_ref());
+        let text = String::from_utf8_lossy(bytes.get_ref());
         if !matches!(
-            s.as_ref(),
+            text.as_ref(),
             "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
                 | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
                 | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n",
         ) {
-            panic!("unexpected output {:?}", s);
+            panic!("unexpected output {text:?}");
         }
     }
 }

@@ -136,16 +136,17 @@ mod inner {
 
             // verify: possible controlling fd can be stdout and stderr as well?
             // https://stackoverflow.com/questions/35873843/when-setting-terminal-attributes-via-tcsetattrfd-can-fd-be-either-stdout
-            let isatty_terminal =
-                isatty(STDIN_FILENO).map_err(|e| Error::unknown("failed to call isatty", e))?;
+            let isatty_terminal = isatty(STDIN_FILENO)
+                .map_err(|e| Error::unknown("failed to call isatty", e.to_string()))?;
             if isatty_terminal {
                 // tcgetattr issues error if a provided fd is not a tty,
                 // but we can work with such input as it may be redirected.
                 o_pty_flags = termios::tcgetattr(STDIN_FILENO)
                     .map(Some)
-                    .map_err(|e| Error::unknown("failed to call tcgetattr", e))?;
+                    .map_err(|e| Error::unknown("failed to call tcgetattr", e.to_string()))?;
 
-                set_raw(STDIN_FILENO).map_err(|e| Error::unknown("failed to set a raw tty", e))?;
+                set_raw(STDIN_FILENO)
+                    .map_err(|e| Error::unknown("failed to set a raw tty", e.to_string()))?;
             }
 
             Ok(o_pty_flags)
@@ -154,7 +155,7 @@ mod inner {
         pub(super) fn close(&mut self) -> Result<(), Error> {
             if let Some(origin_stdin_flags) = &self.orig_flags {
                 termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSAFLUSH, origin_stdin_flags)
-                    .map_err(|e| Error::unknown("failed to call tcsetattr", e))?;
+                    .map_err(|e| Error::unknown("failed to call tcsetattr", e.to_string()))?;
             }
 
             Ok(())

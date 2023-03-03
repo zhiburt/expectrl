@@ -305,6 +305,7 @@ mod tests {
         assert_eq!(b"".check(b"qwerty", false).unwrap(), vec![Match::new(0, 0)]);
     }
 
+    #[allow(clippy::needless_borrow)]
     #[test]
     fn test_bytes_ref() {
         assert_eq!(

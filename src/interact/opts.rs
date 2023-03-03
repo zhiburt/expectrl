@@ -407,7 +407,7 @@ impl<
             let is_echo = self
                 .session
                 .get_echo()
-                .map_err(|e| Error::unknown("failed to get echo", e))?;
+                .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
             if !is_echo {
                 let _ = self.session.set_echo(true, None);
             }

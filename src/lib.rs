@@ -12,6 +12,7 @@
     unused_variables,
     variant_size_differences
 )]
+#![allow(clippy::uninlined_format_args)]
 
 //! # A tool for automating terminal applications on alike original expect.
 //!
