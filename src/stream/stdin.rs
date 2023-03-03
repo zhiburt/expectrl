@@ -206,7 +206,6 @@ mod inner {
 
     use conpty::console::Console;
 
-    #[derive(Debug)]
     pub(super) struct StdinInner {
         terminal: Console,
         #[cfg(not(feature = "async"))]
@@ -215,6 +214,17 @@ mod inner {
         stdin: io::Stdin,
         #[cfg(feature = "async")]
         stdin: blocking::Unblock<io::Stdin>,
+    }
+
+    impl std::fmt::Debug for StdinInner {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("StdinInner")
+                .field("terminal", &"...")
+                .field("is_blocking", &self.is_blocking)
+                .field("stdin", &self.stdin)
+                .field("stdin", &self.stdin)
+                .finish()
+        }
     }
 
     impl StdinInner {
