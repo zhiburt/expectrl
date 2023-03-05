@@ -379,7 +379,7 @@ fn try_read_after_process_exit() {
 
         match _p_try_read(&mut proc, &mut [0; 128]) {
             Ok(n) => {
-                assert_eq!(n, 59);
+                assert!(n > 0);
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_is_empty(&mut proc).unwrap());

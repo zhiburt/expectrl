@@ -27,6 +27,7 @@ pub enum Error {
 }
 
 impl Error {
+    #[cfg(unix)]
     pub(crate) fn unknown(message: impl Into<String>, err: impl Into<String>) -> Error {
         Self::Other {
             message: message.into(),

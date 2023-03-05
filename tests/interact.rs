@@ -378,7 +378,7 @@ fn interact_output_callback() {
     let mut stdin = Stdin::open().unwrap();
     let stdout = std::io::sink();
 
-    let mut otps = InteractOptions::new((0, Lookup::new())).on_output( |ctx| {
+    let mut otps = InteractOptions::new((0, Lookup::new())).on_output(|ctx| {
         if ctx.state.1.on(ctx.buf, ctx.eof, "World")?.is_some() {
             ctx.state.0 += 1;
         }

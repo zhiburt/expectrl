@@ -52,6 +52,8 @@ fn send() {
 #[cfg(windows)]
 #[test]
 fn send() {
+    use std::io::Write;
+
     let mut session = spawn("powershell -C type").unwrap();
     #[cfg(not(feature = "async"))]
     {

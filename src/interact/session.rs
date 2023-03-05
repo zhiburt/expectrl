@@ -36,6 +36,7 @@ impl<S, I, O> InteractSession<S, I, O> {
             output,
             session,
             escape_character: Self::ESCAPE,
+            #[cfg(unix)]
             status: None,
         }
     }
@@ -247,11 +248,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact
-                .session
-                .is_alive()
-                .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))?
-            {
+            if !interact.session.is_alive() {
                 return Ok(false);
             }
         }
@@ -624,11 +621,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact
-                .session
-                .is_alive()
-                .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))?
-            {
+            if !interact.session.is_alive() {
                 return Ok(false);
             }
         }

@@ -145,7 +145,9 @@ impl<S, I, O, C, IF, OF, IA, WA>
     }
 }
 
-impl<S, I, O, C, IF, OF, IA, OA> InteractOptions<C, IF, OF, IA, OA, NoAction<Session<Proc, S>, I, O, C>> {
+impl<S, I, O, C, IF, OF, IA, OA>
+    InteractOptions<C, IF, OF, IA, OA, NoAction<Session<Proc, S>, I, O, C>>
+{
     /// Puts a handler which will be called on each interaction when no input is detected.
     pub fn on_idle<F>(self, action: F) -> InteractOptions<C, IF, OF, IA, OA, F>
     where
