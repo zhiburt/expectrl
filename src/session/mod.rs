@@ -24,12 +24,7 @@ pub mod sync_session;
 
 use std::io::Write;
 
-use crate::{
-    interact::{InteractSession, NoAction, NoFilter},
-    process::Process,
-    stream::log::LoggedStream,
-    Error,
-};
+use crate::{interact::InteractSession, process::Process, stream::log::LoggedStream, Error};
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -182,22 +177,7 @@ impl<P, S> Session<P, S> {
     ///
     /// p.interact(input, io::stdout()).spawn().unwrap();
     /// ```
-    pub fn interact<I, O>(
-        &mut self,
-        input: I,
-        output: O,
-    ) -> InteractSession<
-        '_,
-        (),
-        Self,
-        O,
-        I,
-        NoFilter,
-        NoFilter,
-        NoAction<Self, O, ()>,
-        NoAction<Self, O, ()>,
-        NoAction<Self, O, ()>,
-    > {
-        InteractSession::new(self, output, input, ())
+    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O> {
+        InteractSession::new(self, input, output)
     }
 }

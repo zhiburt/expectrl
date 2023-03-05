@@ -206,7 +206,7 @@ pub(crate) fn make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
 }
 
 fn nix_error_to_io(err: nix::Error) -> io::Error {
-    io::Error::from_raw_os_error(err as _)
+    io::Error::new(io::ErrorKind::Other, err)
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
