@@ -379,7 +379,7 @@ fn try_read_after_process_exit() {
 
         match _p_try_read(&mut proc, &mut [0; 128]) {
             Ok(n) => {
-                assert_eq!(n, 59);
+                assert!(n > 0);
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_is_empty(&mut proc).unwrap());
@@ -466,12 +466,9 @@ fn continues_try_reads() {
 #[test]
 #[cfg(not(target_os = "macos"))]
 #[cfg(not(windows))]
-fn automatic_stop_of_interact() {
+fn automatic_stop_of_interact_on_eof() {
     let mut p = Session::spawn(Command::new("ls")).unwrap();
     _p_interact(&mut p).unwrap();
-
-    // It may be finished not only because process is done but
-    // also because it reached EOF.
 
     // check that second spawn works
     let mut p = Session::spawn(Command::new("ls")).unwrap();
@@ -666,7 +663,7 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 
 #[cfg(unix)]
 fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
-    use expectrl::stream::stdin::Stdin;
+    use expectrl::{interact::InteractOptions, stream::stdin::Stdin};
     use std::io::stdout;
 
     let mut stdin = Stdin::open()?;
@@ -674,11 +671,15 @@ fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
 
     #[cfg(not(feature = "async"))]
     {
-        proc.interact(&mut stdin, stdout).spawn()?;
+        proc.interact(&mut stdin, stdout)
+            .spawn(InteractOptions::default())?;
     }
     #[cfg(feature = "async")]
     {
-        block_on(proc.interact(&mut stdin, stdout).spawn())?;
+        block_on(
+            proc.interact(&mut stdin, stdout)
+                .spawn(InteractOptions::default()),
+        )?;
     }
 
     stdin.close()

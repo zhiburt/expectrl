@@ -311,6 +311,7 @@ mod tests {
 
     #[allow(clippy::needless_borrow)]
     #[test]
+    #[allow(clippy::needless_borrow)]
     fn test_bytes_ref() {
         assert_eq!(
             (&[b'q', b'w', b'e']).check(b"qwerty", false).unwrap(),

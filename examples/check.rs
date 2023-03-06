@@ -1,7 +1,5 @@
-#[cfg(unix)]
 use expectrl::{check, spawn, Error};
 
-#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
@@ -24,7 +22,6 @@ fn main() {
     }
 }
 
-#[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
     futures_lite::future::block_on(async {
@@ -49,9 +46,4 @@ fn main() {
             };
         }
     })
-}
-
-#[cfg(windows)]
-fn main() {
-    panic!("An example doesn't supported on windows")
 }

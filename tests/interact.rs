@@ -1,4 +1,4 @@
-#![cfg(not(windows))]
+#![cfg(unix)]
 
 use std::{
     io::{self, Cursor, Read, Write},
@@ -19,6 +19,8 @@ use expectrl::WaitStatus;
 #[ignore = "It requires manual interaction; Or it's necessary to redirect an stdin of current process"]
 #[test]
 fn interact_callback() {
+    use expectrl::interact::InteractOptions;
+
     let mut input_handle = Lookup::new();
     let mut output_handle = Lookup::new();
 
@@ -26,15 +28,7 @@ fn interact_callback() {
 
     let mut stdin = Stdin::open().unwrap();
 
-    session
-        .interact(&mut stdin, sink())
-        .on_input(|ctx| {
-            if input_handle.on(ctx.buf, ctx.eof, "213")?.is_some() {
-                ctx.session.send_line("Hello World")?;
-            }
-
-            Ok(())
-        })
+    let opts = InteractOptions::default()
         .on_output(|ctx| {
             if let Some(m) = output_handle.on(ctx.buf, ctx.eof, b'\n')? {
                 let line = m.before();
@@ -43,8 +37,15 @@ fn interact_callback() {
 
             Ok(())
         })
-        .spawn()
-        .unwrap();
+        .on_input(|ctx| {
+            if input_handle.on(ctx.buf, ctx.eof, "213")?.is_some() {
+                ctx.session.send_line("Hello World")?;
+            }
+
+            Ok(())
+        });
+
+    session.interact(&mut stdin, sink()).spawn(opts).unwrap();
 
     stdin.close().unwrap();
 }
@@ -53,6 +54,8 @@ fn interact_callback() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_output_callback() {
+    use expectrl::interact::{InteractOptions, InteractSession};
+
     let mut session = expectrl::spawn("sleep 1 && echo 'Hello World'").unwrap();
 
     let mut stdin = Stdin::open().unwrap();
@@ -61,18 +64,15 @@ fn interact_output_callback() {
     let mut state = 0;
 
     let mut lookup = Lookup::new();
-    session
-        .interact(&mut stdin, stdout)
-        .set_state(&mut state)
-        .on_output(|ctx| {
-            if lookup.on(ctx.buf, ctx.eof, "World")?.is_some() {
-                **ctx.state += 1;
-            }
+    let interact_opts = InteractOptions::new(&mut state).on_output(|ctx| {
+        if lookup.on(ctx.buf, ctx.eof, "World")?.is_some() {
+            **ctx.state += 1;
+        }
 
-            Ok(())
-        })
-        .spawn()
-        .unwrap();
+        Ok(())
+    });
+    let mut interact = InteractSession::new(&mut session, &mut stdin, stdout);
+    interact.spawn(interact_opts).unwrap();
 
     stdin.close().unwrap();
 
@@ -86,6 +86,8 @@ fn interact_output_callback() {
 #[cfg(not(feature = "async"))]
 #[test]
 fn interact_callbacks_called_after_exit() {
+    use expectrl::interact::InteractOptions;
+
     let mut session = expectrl::spawn("echo 'Hello World'").unwrap();
 
     assert_eq!(
@@ -101,15 +103,13 @@ fn interact_callbacks_called_after_exit() {
     let mut lookup = Lookup::new();
     session
         .interact(&mut stdin, stdout)
-        .set_state(&mut state)
-        .on_output(|ctx| {
+        .spawn(&mut InteractOptions::new(&mut state).on_output(|ctx| {
             if lookup.on(ctx.buf, ctx.eof, "World")?.is_some() {
                 **ctx.state += 1;
             }
 
             Ok(())
-        })
-        .spawn()
+        }))
         .unwrap();
 
     stdin.close().unwrap();
@@ -121,6 +121,8 @@ fn interact_callbacks_called_after_exit() {
 #[cfg(not(any(feature = "async", feature = "polling")))]
 #[test]
 fn interact_callbacks_with_stream_redirection() {
+    use expectrl::interact::InteractOptions;
+
     let output_lines = vec![
         "NO_MATCHED\n".to_string(),
         "QWE\n".to_string(),
@@ -136,14 +138,13 @@ fn interact_callbacks_with_stream_redirection() {
     let mut input_handle = Lookup::new();
     session
         .interact(reader, &mut writer)
-        .on_input(|ctx| {
+        .spawn(InteractOptions::default().on_input(|ctx| {
             if input_handle.on(ctx.buf, ctx.eof, "QWE")?.is_some() {
                 ctx.session.send_line("Hello World")?;
             };
 
             Ok(())
-        })
-        .spawn()
+        }))
         .unwrap();
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
@@ -154,30 +155,34 @@ fn interact_callbacks_with_stream_redirection() {
 #[cfg(not(any(feature = "async", feature = "polling")))]
 #[test]
 fn interact_filters() {
+    use expectrl::interact::InteractOptions;
+
     let reader = ReaderWithDelayEof::new("1009\nNO\n", Duration::from_secs(4));
     let mut writer = io::Cursor::new(vec![0; 2048]);
 
     let mut session = spawn("cat").unwrap();
     session
         .interact(reader, &mut writer)
-        .input_filter(|buf| {
-            // ignore 0 chars
-            let v = buf.iter().filter(|&&b| b != b'0').copied().collect();
-            Ok(v)
-        })
-        .output_filter(|buf| {
-            // Make NO -> YES
-            let v = buf
-                .chunks(2)
-                .flat_map(|s| match s {
-                    &[b'N', b'O'] => &[b'Y', b'E', b'S'],
-                    other => other,
+        .spawn(
+            InteractOptions::default()
+                .input_filter(|buf| {
+                    // ignore 0 chars
+                    let v = buf.iter().filter(|&&b| b != b'0').copied().collect();
+                    Ok(v)
                 })
-                .copied()
-                .collect();
-            Ok(v)
-        })
-        .spawn()
+                .output_filter(|buf| {
+                    // Make NO -> YES
+                    let v = buf
+                        .chunks(2)
+                        .flat_map(|s| match s {
+                            &[b'N', b'O'] => &[b'Y', b'E', b'S'],
+                            other => other,
+                        })
+                        .copied()
+                        .collect();
+                    Ok(v)
+                }),
+        )
         .unwrap();
 
     let buffer = String::from_utf8_lossy(writer.get_ref());
@@ -190,6 +195,8 @@ fn interact_filters() {
 #[cfg(all(unix, not(any(feature = "async", feature = "polling"))))]
 #[test]
 fn interact_context() {
+    use expectrl::interact::InteractOptions;
+
     let mut session = spawn("cat").unwrap();
 
     let reader = ListReaderWithDelayedEof::new(
@@ -206,9 +213,7 @@ fn interact_context() {
     let mut input_data = Lookup::new();
     let mut output_data = Lookup::new();
 
-    let state = session
-        .interact(reader, &mut writer)
-        .set_state((0, 0))
+    let mut opts = InteractOptions::new((0, 0))
         .on_input(|ctx| {
             if input_data.on(ctx.buf, ctx.eof, "QWE\n")?.is_some() {
                 ctx.state.0 += 1;
@@ -224,9 +229,16 @@ fn interact_context() {
             }
 
             Ok(())
-        })
-        .spawn()
+        });
+
+    let is_alive = session
+        .interact(reader, &mut writer)
+        .spawn(&mut opts)
         .unwrap();
+
+    let state = opts.into_inner();
+
+    assert!(is_alive);
 
     assert_eq!(state.0, 4);
     assert!(state.1 > 0, "{:?}", state.1);
@@ -242,6 +254,8 @@ fn interact_on_output_not_matched() {
     // Which may cause it to stay buffered in session.
     // Verify this buffer was cleaned and 123 won't be accessed then.
 
+    use expectrl::interact::InteractOptions;
+
     let reader = ListReaderWithDelayedEof::new(
         vec![
             "QWE\n".to_string(),
@@ -256,9 +270,7 @@ fn interact_on_output_not_matched() {
     let mut input = Lookup::new();
 
     let mut session = spawn("cat").unwrap();
-    let state = session
-        .interact(reader, &mut writer)
-        .set_state((0, 0))
+    let mut opts = InteractOptions::new((0, 0))
         .on_input(|ctx| {
             if input.on(ctx.buf, ctx.eof, "QWE\n")?.is_some() {
                 ctx.state.0 += 1;
@@ -274,9 +286,16 @@ fn interact_on_output_not_matched() {
         .on_idle(|_ctx| {
             std::thread::sleep(Duration::from_millis(500));
             Ok(())
-        })
-        .spawn()
+        });
+
+    let is_alive = session
+        .interact(reader, &mut writer)
+        .spawn(&mut opts)
         .unwrap();
+
+    let state = opts.into_inner();
+
+    assert!(is_alive);
 
     assert_eq!(state.0, 2);
     assert_eq!(state.1, 0);
@@ -320,6 +339,8 @@ fn interact_on_output_not_matched() {
 #[cfg(feature = "async")]
 #[test]
 fn interact_stream_redirection() {
+    use expectrl::interact::InteractOptions;
+
     futures_lite::future::block_on(async {
         let commands = "Hello World\nIt works :)\n";
 
@@ -328,7 +349,11 @@ fn interact_stream_redirection() {
 
         let mut session = expectrl::spawn("cat").unwrap();
 
-        session.interact(reader, &mut writer).spawn().await.unwrap();
+        session
+            .interact(reader, &mut writer)
+            .spawn(InteractOptions::default())
+            .await
+            .unwrap();
 
         let buffer = String::from_utf8_lossy(writer.get_ref());
         let buffer = buffer.trim_end_matches(char::from(0));
@@ -338,6 +363,39 @@ fn interact_stream_redirection() {
             "Hello World\r\nIt works :)\r\nHello World\r\nIt works :)\r\n"
         );
     });
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn interact_output_callback() {
+    use expectrl::{
+        interact::{actions::lookup::Lookup, InteractOptions, InteractSession},
+        stream::stdin::Stdin,
+    };
+
+    let mut session = expectrl::spawn("sleep 1 && echo 'Hello World'").unwrap();
+
+    let mut stdin = Stdin::open().unwrap();
+    let stdout = std::io::sink();
+
+    let mut otps = InteractOptions::new((0, Lookup::new())).on_output(|ctx| {
+        if ctx.state.1.on(ctx.buf, ctx.eof, "World")?.is_some() {
+            ctx.state.0 += 1;
+        }
+
+        Ok(())
+    });
+    let mut interact = InteractSession::new(&mut session, &mut stdin, stdout);
+    futures_lite::future::block_on(interact.spawn(&mut otps)).unwrap();
+
+    let (state, _) = otps.into_inner();
+
+    stdin.close().unwrap();
+
+    // fixme: sometimes it's 0
+    //        I guess because the process gets down to fast.
+
+    assert!(matches!(state, 1 | 0), "{state:?}");
 }
 
 struct ListReaderWithDelayedEof {

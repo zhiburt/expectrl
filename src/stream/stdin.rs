@@ -218,12 +218,23 @@ mod inner {
 
     impl std::fmt::Debug for StdinInner {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("StdinInner")
-                .field("terminal", &"...")
-                .field("is_blocking", &self.is_blocking)
-                .field("stdin", &self.stdin)
-                .field("stdin", &self.stdin)
-                .finish()
+            #[cfg(not(feature = "async"))]
+            {
+                f.debug_struct("StdinInner")
+                    .field("terminal", &"...")
+                    .field("is_blocking", &self.is_blocking)
+                    .field("stdin", &self.stdin)
+                    .field("stdin", &self.stdin)
+                    .finish()
+            }
+            #[cfg(feature = "async")]
+            {
+                f.debug_struct("StdinInner")
+                    .field("terminal", &"...")
+                    .field("stdin", &self.stdin)
+                    .field("stdin", &self.stdin)
+                    .finish()
+            }
         }
     }
 

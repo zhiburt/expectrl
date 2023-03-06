@@ -24,12 +24,7 @@ pub mod sync_session;
 
 use std::io::Write;
 
-use crate::{
-    interact::{InteractSession, NoAction, NoFilter},
-    process::Process,
-    stream::log::LoggedStream,
-    Error,
-};
+use crate::{interact::InteractSession, process::Process, stream::log::LoggedStream, Error};
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -174,30 +169,16 @@ impl<P, S> Session<P, S> {
         not(all(unix, not(feature = "async"), not(feature = "polling"))),
         doc = "```ignore"
     )]
-    /// use std::io;
+    /// use std::io::{stdout, Cursor};
+    /// use expectrl::{self, interact::InteractOptions};
     ///
     /// let mut p = expectrl::spawn("cat").unwrap();
     ///
-    /// let input = io::Cursor::new(String::from("Some text right here"));
+    /// let input = Cursor::new(String::from("Some text right here"));
     ///
-    /// p.interact(input, io::stdout()).spawn().unwrap();
+    /// p.interact(input, stdout()).spawn(InteractOptions::default()).unwrap();
     /// ```
-    pub fn interact<I, O>(
-        &mut self,
-        input: I,
-        output: O,
-    ) -> InteractSession<
-        '_,
-        (),
-        Self,
-        O,
-        I,
-        NoFilter,
-        NoFilter,
-        NoAction<Self, O, ()>,
-        NoAction<Self, O, ()>,
-        NoAction<Self, O, ()>,
-    > {
-        InteractSession::new(self, output, input, ())
+    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O> {
+        InteractSession::new(self, input, output)
     }
 }

@@ -1,6 +1,6 @@
 //! To run an example run `cargo run --example interact`.
 
-use expectrl::{spawn, stream::stdin::Stdin};
+use expectrl::{interact::InteractOptions, spawn, stream::stdin::Stdin};
 use std::io::stdout;
 
 #[cfg(unix)]
@@ -9,7 +9,7 @@ const SHELL: &str = "sh";
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 
-#[cfg(all(not(feature = "async"), not(all(windows, feature = "polling"))))]
+#[cfg(not(feature = "async"))]
 fn main() {
     let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
@@ -19,7 +19,7 @@ fn main() {
     let mut stdin = Stdin::open().expect("Failed to create stdin");
 
     sh.interact(&mut stdin, stdout())
-        .spawn()
+        .spawn(&mut InteractOptions::default())
         .expect("Failed to start interact");
 
     stdin.close().expect("Failed to close a stdin");
@@ -29,37 +29,21 @@ fn main() {
 
 #[cfg(feature = "async")]
 fn main() {
-    use futures_lite::future::block_on;
+    futures_lite::future::block_on(async {
+        let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
-    let mut sh = spawn(SHELL).expect("Error while spawning sh");
+        println!("Now you're in interacting mode");
+        println!("To return control back to main type CTRL-] combination");
 
-    println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-] combination");
+        let mut stdin = Stdin::open().expect("Failed to create stdin");
 
-    let mut stdin = Stdin::open().expect("Failed to create stdin");
+        sh.interact(&mut stdin, stdout())
+            .spawn(&mut InteractOptions::default())
+            .await
+            .expect("Failed to start interact");
 
-    block_on(sh.interact(&mut stdin, stdout()).spawn()).expect("Failed to start interact");
+        stdin.close().expect("Failed to close a stdin");
 
-    stdin.close().expect("Failed to close a stdin");
-
-    println!("Exiting");
-}
-
-#[cfg(all(windows, feature = "polling"))]
-fn main() {
-    let mut sh = spawn(SHELL).expect("Error while spawning sh");
-
-    println!("Now you're in interacting mode");
-    println!("To return control back to main type CTRL-] combination");
-
-    let stdin = Stdin::open().expect("Failed to create stdin");
-
-    sh.interact(stdin, stdout())
-        .spawn()
-        .expect("Failed to start interact");
-
-    let stdin = Stdin::open().expect("Failed to create stdin");
-    stdin.close().expect("Failed to close a stdin");
-
-    println!("Exiting");
+        println!("Exiting");
+    });
 }
