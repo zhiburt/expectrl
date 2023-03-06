@@ -35,14 +35,14 @@ fn interact_callback() {
                 println!("Line in output {:?}", String::from_utf8_lossy(line));
             }
 
-            Ok(())
+            Ok(false)
         })
         .on_input(|ctx| {
             if input_handle.on(ctx.buf, ctx.eof, "213")?.is_some() {
                 ctx.session.send_line("Hello World")?;
             }
 
-            Ok(())
+            Ok(false)
         });
 
     session.interact(&mut stdin, sink()).spawn(opts).unwrap();
@@ -69,7 +69,7 @@ fn interact_output_callback() {
             **ctx.state += 1;
         }
 
-        Ok(())
+        Ok(false)
     });
     let mut interact = InteractSession::new(&mut session, &mut stdin, stdout);
     interact.spawn(interact_opts).unwrap();
@@ -108,7 +108,7 @@ fn interact_callbacks_called_after_exit() {
                 **ctx.state += 1;
             }
 
-            Ok(())
+            Ok(false)
         }))
         .unwrap();
 
@@ -143,7 +143,7 @@ fn interact_callbacks_with_stream_redirection() {
                 ctx.session.send_line("Hello World")?;
             };
 
-            Ok(())
+            Ok(false)
         }))
         .unwrap();
 
@@ -220,7 +220,7 @@ fn interact_context() {
                 ctx.session.send_line("123")?;
             }
 
-            Ok(())
+            Ok(false)
         })
         .on_output(|ctx| {
             if output_data.on(ctx.buf, ctx.eof, NBytes(1))?.is_some() {
@@ -228,7 +228,7 @@ fn interact_context() {
                 output_data.clear();
             }
 
-            Ok(())
+            Ok(false)
         });
 
     let is_alive = session
@@ -280,12 +280,12 @@ fn interact_on_output_not_matched() {
                 ctx.state.1 += 1;
             }
 
-            Ok(())
+            Ok(false)
         })
-        .on_output(|_ctx| Ok(()))
+        .on_output(|_ctx| Ok(false))
         .on_idle(|_ctx| {
             std::thread::sleep(Duration::from_millis(500));
-            Ok(())
+            Ok(false)
         });
 
     let is_alive = session
@@ -383,7 +383,7 @@ fn interact_output_callback() {
             ctx.state.0 += 1;
         }
 
-        Ok(())
+        Ok(false)
     });
     let mut interact = InteractSession::new(&mut session, &mut stdin, stdout);
     futures_lite::future::block_on(interact.spawn(&mut otps)).unwrap();

@@ -31,7 +31,7 @@ fn main() {
                 output_action.clear();
             }
 
-            Ok(())
+            Ok(false)
         })
         .on_input(|mut ctx| {
             let m = input_action.on(ctx.buf, ctx.eof, "y")?;
@@ -48,7 +48,7 @@ fn main() {
                 }
             }
 
-            Ok(())
+            Ok(false)
         });
 
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
@@ -98,7 +98,7 @@ fn main() {
                 output_action.clear();
             }
 
-            Ok(())
+            Ok(false)
         })
         .on_input(|mut ctx| {
             let m = input_action.on(ctx.buf, ctx.eof, "y")?;
@@ -115,7 +115,7 @@ fn main() {
                 }
             }
 
-            Ok(())
+            Ok(false)
         });
 
     let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
