@@ -2,7 +2,7 @@
 //!
 #![cfg_attr(all(unix, not(feature = "async")), doc = "```no_run")]
 #![cfg_attr(not(all(unix, not(feature = "async"))), doc = "```ignore")]
-//! use expectrl::{interact::actions::lookup::Lookup, spawn, stream::stdin::Stdin, Regex};
+//! use expectrl::{interact::{InteractOptions, actions::lookup::Lookup}, spawn, stream::stdin::Stdin, Regex};
 //!
 //! #[derive(Debug)]
 //! enum Answer {
@@ -18,9 +18,7 @@
 //! let mut stdin = Stdin::open().unwrap();
 //! let stdout = std::io::stdout();
 //!
-//! let answer = session
-//!     .interact(&mut stdin, stdout)
-//!     .set_state(Answer::Unrecognized)
+//! let mut opts = InteractOptions::new(Answer::Unrecognized)
 //!     .on_input(|mut ctx| {
 //!         let m = input_action.on(ctx.buf, ctx.eof, "yes")?;
 //!         if m.is_some() {
@@ -33,9 +31,13 @@
 //!         };
 //!
 //!         Ok(())
-//!     })
-//!     .spawn()
+//!     });
+//!
+//! session.interact(&mut stdin, stdout)
+//!     .spawn(&mut opts)
 //!     .expect("Failed to run an interact session");
+//!
+//! let answer = opts.into_inner();
 //!
 //! stdin.close().unwrap();
 //!

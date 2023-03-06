@@ -9,19 +9,41 @@ const SHELL: &str = "sh";
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 
+#[cfg(not(feature = "async"))]
 fn main() {
-    // let mut sh = spawn(SHELL).expect("Error while spawning sh");
+    let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
-    // println!("Now you're in interacting mode");
-    // println!("To return control back to main type CTRL-] combination");
+    println!("Now you're in interacting mode");
+    println!("To return control back to main type CTRL-] combination");
 
-    // let mut stdin = Stdin::open().expect("Failed to create stdin");
+    let mut stdin = Stdin::open().expect("Failed to create stdin");
 
-    // sh.interact(&mut stdin, stdout())
-    //     .spawn(&mut InteractOptions::default())
-    //     .expect("Failed to start interact");
+    sh.interact(&mut stdin, stdout())
+        .spawn(&mut InteractOptions::default())
+        .expect("Failed to start interact");
 
-    // stdin.close().expect("Failed to close a stdin");
+    stdin.close().expect("Failed to close a stdin");
 
-    // println!("Exiting");
+    println!("Exiting");
+}
+
+#[cfg(feature = "async")]
+fn main() {
+    futures_lite::future::block_on(async {
+        let mut sh = spawn(SHELL).expect("Error while spawning sh");
+
+        println!("Now you're in interacting mode");
+        println!("To return control back to main type CTRL-] combination");
+
+        let mut stdin = Stdin::open().expect("Failed to create stdin");
+
+        sh.interact(&mut stdin, stdout())
+            .spawn(&mut InteractOptions::default())
+            .await
+            .expect("Failed to start interact");
+
+        stdin.close().expect("Failed to close a stdin");
+
+        println!("Exiting");
+    });
 }

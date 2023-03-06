@@ -49,6 +49,12 @@ impl<S, I, O> InteractSession<S, I, O> {
     }
 
     /// Returns a status of spawned session if it was exited.
+    ///
+    /// If [`Self::spawn`] returns false but this method returns None it means that a child process was shutdown by various reasons.
+    /// Which sometimes happens and it's not considered to be a valid [`WaitStatus`], so None is returned.
+    ///
+    /// [`Self::spawn`]: crate::interact::InteractSession::spawn
+    /// [`WaitStatus`]: crate::WaitStatus
     #[cfg(unix)]
     pub fn get_status(&self) -> Option<crate::WaitStatus> {
         self.status
