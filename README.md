@@ -46,31 +46,59 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send_line("exit")?;
     p.expect(Eof)?;
-    assert_eq!(p.wait()?, WaitStatus::Exited(p.pid(), 0));
+    assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
+    Ok(())
 }
 ```
 
 *The example inspired by the one in [philippkeller/rexpect].*
 
-The same exxample but the password will be read from stdin.
+The same example but the password will be read from stdin.
 
 ```rust
-use expectrl::{spawn, Regex, Eof, WaitStatus, Error};
+use expectrl::{
+    interact::{actions::lookup::Lookup, InteractOptions},
+    spawn,
+    stream::stdin::Stdin,
+    ControlCode, Error, Regex, WaitStatus,
+};
+use std::io::stdout;
 
 fn main() -> Result<(), Error> {
-    let mut p = spawn("ftp speedtest.tele2.net")?;
-    p.expect(Regex("Name \\(.*\\):"))?;
-    p.send_line("anonymous")?;
-    p.expect("Password")?;
-    p.send_line("test")?;
+    let mut auth = false;
+    let mut login_lookup = Lookup::new();
+    let opts = InteractOptions::new(&mut auth).on_output(|ctx| {
+        if login_lookup
+            .on(ctx.buf, ctx.eof, "Login successful")?
+            .is_some()
+        {
+            **ctx.state = true;
+            return Ok(true);
+        }
+
+        Ok(false)
+    });
+
+    let mut p = spawn("ftp bks4-speedtest-1.tele2.net")?;
+
+    let mut stdin = Stdin::open()?;
+    p.interact(&mut stdin, stdout()).spawn(opts)?;
+    stdin.close()?;
+
+    if !auth {
+        println!("An authefication was not passed");
+        return Ok(());
+    }
+
     p.expect("ftp>")?;
     p.send_line("cd upload")?;
-    p.expect("successfully changed.\r\nftp>")?;
+    p.expect("successfully changed.")?;
     p.send_line("pwd")?;
     p.expect(Regex("[0-9]+ \"/upload\""))?;
-    p.send_line("exit")?;
-    p.expect(Eof)?;
-    assert_eq!(p.wait()?, WaitStatus::Exited(p.pid(), 0));
+    p.send_control(ControlCode::EndOfTransmission)?;
+    p.expect("Goodbye.")?;
+    assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
+    Ok(())
 }
 ```
 
