@@ -30,7 +30,7 @@
 //!             *ctx.state = Answer::No;
 //!         };
 //!
-//!         Ok(())
+//!         Ok(false)
 //!     });
 //!
 //! session.interact(&mut stdin, stdout)

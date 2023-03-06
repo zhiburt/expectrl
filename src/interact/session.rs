@@ -78,9 +78,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
     {
         #[cfg(unix)]
         {
@@ -126,9 +126,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
     {
         let is_echo = self
             .session
@@ -166,9 +166,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
     {
         #[cfg(unix)]
         {
@@ -237,9 +237,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
 {
     let mut buf = [0; 512];
     loop {
@@ -265,7 +265,7 @@ where
                 let buf = &buf[..n];
                 let buf = call_filter(opts.output_filter.as_mut(), buf)?;
 
-                call_action(
+                let exit = call_action(
                     opts.output_action.as_mut(),
                     interact.session,
                     &mut interact.input,
@@ -275,7 +275,7 @@ where
                     eof,
                 )?;
 
-                if eof {
+                if eof || exit {
                     return Ok(true);
                 }
 
@@ -296,7 +296,7 @@ where
                 let buf = &buf[..n];
                 let buf = call_filter(opts.input_filter.as_mut(), buf)?;
 
-                call_action(
+                let exit = call_action(
                     opts.input_action.as_mut(),
                     interact.session,
                     &mut interact.input,
@@ -306,7 +306,7 @@ where
                     eof,
                 )?;
 
-                if eof {
+                if eof | exit {
                     return Ok(true);
                 }
 
@@ -325,7 +325,7 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        call_action(
+        let exit = call_action(
             opts.idle_action.as_mut(),
             interact.session,
             &mut interact.input,
@@ -334,6 +334,10 @@ where
             &[],
             false,
         )?;
+
+        if exit {
+            return Ok(true);
+        }
     }
 }
 
@@ -348,9 +352,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
 {
     use polling::{Event, Poller};
 
@@ -605,9 +609,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<(), Error>,
+    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
 {
     use std::io;
 
@@ -775,13 +779,13 @@ fn call_action<F, S, I, O, C>(
     state: &mut C,
     buf: &[u8],
     eof: bool,
-) -> Result<(), Error>
+) -> Result<bool, Error>
 where
-    F: FnMut(Context<'_, S, I, O, C>) -> Result<(), Error>,
+    F: FnMut(Context<'_, S, I, O, C>) -> Result<bool, Error>,
 {
     match action {
         Some(mut action) => (action)(Context::new(s, r, w, state, buf, eof)),
-        None => Ok(()),
+        None => Ok(false),
     }
 }
 

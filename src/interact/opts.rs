@@ -108,7 +108,7 @@ impl<S, I, O, C, IF, OF, OA, WA>
     /// See <https://github.com/zhiburt/expectrl/issues/16>.
     pub fn on_input<F>(self, action: F) -> InteractOptions<C, IF, OF, F, OA, WA>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<()>,
+        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -132,7 +132,7 @@ impl<S, I, O, C, IF, OF, IA, WA>
     /// will cause the read bytes not to apeard in the output stream!
     pub fn on_output<F>(self, action: F) -> InteractOptions<C, IF, OF, IA, F, WA>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<()>,
+        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -151,7 +151,7 @@ impl<S, I, O, C, IF, OF, IA, OA>
     /// Puts a handler which will be called on each interaction when no input is detected.
     pub fn on_idle<F>(self, action: F) -> InteractOptions<C, IF, OF, IA, OA, F>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<()>,
+        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -165,7 +165,7 @@ impl<S, I, O, C, IF, OF, IA, OA>
 }
 
 /// A helper type to set a default action to [`InteractSession`].
-pub type NoAction<S, I, O, C> = fn(Context<'_, S, I, O, C>) -> Result<()>;
+pub type NoAction<S, I, O, C> = fn(Context<'_, S, I, O, C>) -> Result<bool>;
 
 /// A helper type to set a default filter to [`InteractSession`].
 pub type NoFilter = fn(&[u8]) -> Result<Cow<'_, [u8]>>;

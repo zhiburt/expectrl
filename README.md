@@ -20,7 +20,15 @@ If your application is not interactive you may not find the library the best cho
 
 ## Usage
 
-A general example where the program simulates a used interacting with `ftp`.
+Add `expectrl` to your Cargo.toml.
+
+```toml
+# Cargo.toml
+[dependencies]
+pg-embed = { version = "0.7", default-features = false, features = ["rt_tokio"] }
+```
+
+An example where the program simulates a used interacting with `ftp`.
 
 ```rust
 use expectrl::{spawn, Regex, Eof, WaitStatus, Error};
@@ -43,6 +51,28 @@ fn main() -> Result<(), Error> {
 ```
 
 *The example inspired by the one in [philippkeller/rexpect].*
+
+The same exxample but the password will be read from stdin.
+
+```rust
+use expectrl::{spawn, Regex, Eof, WaitStatus, Error};
+
+fn main() -> Result<(), Error> {
+    let mut p = spawn("ftp speedtest.tele2.net")?;
+    p.expect(Regex("Name \\(.*\\):"))?;
+    p.send_line("anonymous")?;
+    p.expect("Password")?;
+    p.send_line("test")?;
+    p.expect("ftp>")?;
+    p.send_line("cd upload")?;
+    p.expect("successfully changed.\r\nftp>")?;
+    p.send_line("pwd")?;
+    p.expect(Regex("[0-9]+ \"/upload\""))?;
+    p.send_line("exit")?;
+    p.expect(Eof)?;
+    assert_eq!(p.wait()?, WaitStatus::Exited(p.pid(), 0));
+}
+```
 
 #### [For more examples, check the examples directory.](https://github.com/zhiburt/expectrl/tree/main/examples)
 
