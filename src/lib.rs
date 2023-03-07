@@ -153,7 +153,7 @@ pub use session::Session;
 /// p.send_line("Hello World").unwrap();
 ///
 /// thread::sleep(Duration::from_millis(300)); // give 'cat' some time to set up
-/// p.send_control(ControlCode::EndOfText).unwrap(); // abort: SIGINT
+/// p.send(ControlCode::EndOfText).unwrap(); // abort: SIGINT
 ///
 /// let mut buf = String::new();
 /// p.read_to_string(&mut buf).unwrap();

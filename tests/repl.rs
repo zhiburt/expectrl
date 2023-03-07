@@ -21,7 +21,7 @@ fn bash() {
     p.read_line(&mut msg).unwrap();
     assert!(msg.ends_with("Hello World\r\n"));
 
-    p.send_control(ControlCode::EOT).unwrap();
+    p.send(ControlCode::EOT).unwrap();
 
     assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 }
@@ -41,7 +41,7 @@ fn bash_with_log() {
     assert!(msg.ends_with("Hello World\r\n"));
 
     thread::sleep(Duration::from_millis(300));
-    p.send_control(ControlCode::EOT).unwrap();
+    p.send(ControlCode::EOT).unwrap();
 
     assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 }
@@ -58,7 +58,7 @@ fn bash() {
         assert!(msg.ends_with("Hello World\r\n"));
 
         thread::sleep(Duration::from_millis(300));
-        p.send_control(ControlCode::EOT).await.unwrap();
+        p.send(ControlCode::EOT).await.unwrap();
 
         assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
     })
@@ -80,7 +80,7 @@ fn bash_with_log() {
         assert!(msg.ends_with("Hello World\r\n"));
 
         thread::sleep(Duration::from_millis(300));
-        p.send_control(ControlCode::EOT).await.unwrap();
+        p.send(ControlCode::EOT).await.unwrap();
 
         assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
     })
@@ -96,7 +96,7 @@ fn python() {
         assert_eq!(prompt, b"Hello World\r\n");
 
         thread::sleep(Duration::from_millis(300));
-        p.send_control(ControlCode::EndOfText).await.unwrap();
+        p.send(ControlCode::EndOfText).await.unwrap();
         thread::sleep(Duration::from_millis(300));
 
         let mut msg = String::new();
@@ -109,9 +109,7 @@ fn python() {
 
         p.expect_prompt().await.unwrap();
 
-        p.send_control(ControlCode::EndOfTransmission)
-            .await
-            .unwrap();
+        p.send(ControlCode::EndOfTransmission).await.unwrap();
 
         assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
     })
@@ -126,7 +124,7 @@ fn python() {
     assert_eq!(prompt, b"Hello World\r\n");
 
     thread::sleep(Duration::from_millis(300));
-    p.send_control(ControlCode::EndOfText).unwrap();
+    p.send(ControlCode::EndOfText).unwrap();
     thread::sleep(Duration::from_millis(300));
 
     let mut msg = String::new();
@@ -139,7 +137,7 @@ fn python() {
 
     p.expect_prompt().unwrap();
 
-    p.send_control(ControlCode::EndOfTransmission).unwrap();
+    p.send(ControlCode::EndOfTransmission).unwrap();
 
     assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
 }
@@ -164,11 +162,11 @@ fn bash_control_chars() {
         let mut p = spawn_bash().await.unwrap();
         p.send_line("cat <(echo ready) -").await.unwrap();
         thread::sleep(Duration::from_millis(100));
-        p.send_control(ControlCode::EndOfText).await.unwrap(); // abort: SIGINT
+        p.send(ControlCode::EndOfText).await.unwrap(); // abort: SIGINT
         p.expect_prompt().await.unwrap();
         p.send_line("cat <(echo ready) -").await.unwrap();
         thread::sleep(Duration::from_millis(100));
-        p.send_control(ControlCode::Substitute).await.unwrap(); // suspend:SIGTSTPcon
+        p.send(ControlCode::Substitute).await.unwrap(); // suspend:SIGTSTPcon
         p.expect_prompt().await.unwrap();
     });
 }
@@ -190,10 +188,10 @@ fn bash_control_chars() {
     let mut p = spawn_bash().unwrap();
     p.send_line("cat <(echo ready) -").unwrap();
     thread::sleep(Duration::from_millis(300));
-    p.send_control(ControlCode::EndOfText).unwrap(); // abort: SIGINT
+    p.send(ControlCode::EndOfText).unwrap(); // abort: SIGINT
     p.expect_prompt().unwrap();
     p.send_line("cat <(echo ready) -").unwrap();
     thread::sleep(Duration::from_millis(100));
-    p.send_control(ControlCode::Substitute).unwrap(); // suspend:SIGTSTPcon
+    p.send(ControlCode::Substitute).unwrap(); // suspend:SIGTSTPcon
     p.expect_prompt().unwrap();
 }

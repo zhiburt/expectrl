@@ -1,19 +1,12 @@
 //! Module contains a Session structure.
 
 use std::{
-    convert::TryInto,
     io::{self, BufRead, BufReader, Read, Write},
     ops::{Deref, DerefMut},
     time::{self, Duration},
 };
 
-use crate::{
-    control_code::ControlCode,
-    error::{to_io_error, Error},
-    needle::Needle,
-    process::NonBlocking,
-    Captures,
-};
+use crate::{error::Error, needle::Needle, process::NonBlocking, Captures};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -313,72 +306,49 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     }
 }
 
-impl<P, S: Write> Session<P, S> {
+impl<Proc, Stream: Write> Session<Proc, Stream> {
     /// Send text to child’s STDIN.
     ///
     /// You can also use methods from [std::io::Write] instead.
-    pub fn send(&mut self, s: impl AsRef<str>) -> io::Result<()> {
-        self.stream.write_all(s.as_ref().as_bytes())
-    }
-
-    /// Send a line to child’s STDIN.
-    pub fn send_line(&mut self, s: impl AsRef<str>) -> io::Result<()> {
-        // fixme: move it to a processes stream function.
-        #[cfg(windows)]
-        {
-            // win32 has writefilegather function which could be used as write_vectored but it asyncronos which may involve some issue?
-            // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefilegather
-
-            const LINE_ENDING: &[u8] = b"\r\n";
-            let _ = self.write_all(s.as_ref().as_bytes())?;
-            let _ = self.write_all(LINE_ENDING)?;
-            self.flush()?;
-            Ok(())
-        }
-        #[cfg(not(windows))]
-        {
-            const LINE_ENDING: &[u8] = b"\n";
-
-            let bufs = &mut [
-                std::io::IoSlice::new(s.as_ref().as_bytes()),
-                std::io::IoSlice::new(LINE_ENDING),
-                std::io::IoSlice::new(&[]), // we need to add a empty one as it may be not written.
-            ];
-
-            // As Write trait says it's not guaranteed that write_vectored will write_all data.
-            // But we are sure that write_vectored writes everyting or nothing because underthehood it uses a File.
-            // But we rely on this fact not explicitely.
-            //
-            // todo: check amount of written bytes ands write the rest if not everyting was written already.
-            let _ = self.write_vectored(bufs)?;
-            self.flush()?;
-
-            Ok(())
-        }
-    }
-
-    /// Sends controll character to a child process.
-    ///
-    /// You must be carefull passing a char or &str as an argument.
-    /// If you pass an unexpected controll you’ll get a error.
-    /// So it may be better to use [ControlCode].
     ///
     /// # Example
     ///
     /// ```
     /// use expectrl::{spawn, ControlCode};
     ///
-    /// let mut process = spawn("cat").unwrap();
+    /// let mut proc = spawn("cat").unwrap();
     ///
-    /// process.send_control(ControlCode::EndOfText); // sends CTRL^C
-    /// process.send_control('C'); // sends CTRL^C
-    /// process.send_control("^C"); // sends CTRL^C
+    /// proc.send("Hello");
+    /// proc.send(b"World");
+    /// proc.send(ControlCode::try_from("^C").unwrap());
     /// ```
-    pub fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
-        let code = code
-            .try_into()
-            .map_err(|_| to_io_error("Failed to parse a control character")(""))?;
-        self.stream.write_all(&[code.into()])
+    pub fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
+        self.stream.write_all(buf.as_ref())
+    }
+
+    /// Send a line to child’s STDIN.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use expectrl::{spawn, ControlCode};
+    ///
+    /// let mut proc = spawn("cat").unwrap();
+    ///
+    /// proc.send_line("Hello");
+    /// proc.send_line(b"World");
+    /// proc.send_line(ControlCode::try_from("^C").unwrap());
+    /// ```
+    pub fn send_line<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
+        #[cfg(windows)]
+        const LINE_ENDING: &[u8] = b"\r\n";
+        #[cfg(not(windows))]
+        const LINE_ENDING: &[u8] = b"\n";
+
+        self.stream.write_all(buf.as_ref())?;
+        self.write_all(LINE_ENDING)?;
+
+        Ok(())
     }
 }
 

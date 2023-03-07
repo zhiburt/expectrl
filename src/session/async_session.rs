@@ -1,7 +1,6 @@
 //! Module contains an async version of Session structure.
 
 use std::{
-    convert::TryInto,
     io::{self, IoSliceMut},
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -13,7 +12,7 @@ use futures_lite::{
     ready, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
 };
 
-use crate::{error::to_io_error, Captures, ControlCode, Error, Needle};
+use crate::{Captures, Error, Needle};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -150,51 +149,53 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     }
 }
 
-impl<P, S: AsyncWrite + Unpin> Session<P, S> {
-    /// Send text to child's `STDIN`.
+impl<Proc, S: AsyncWrite + Unpin> Session<Proc, S> {
+    /// Send text to child’s STDIN.
     ///
-    /// To write bytes you can use a [std::io::Write] operations instead.
-    pub async fn send<Str: AsRef<str>>(&mut self, s: Str) -> io::Result<()> {
-        self.stream.write_all(s.as_ref().as_bytes()).await
+    /// You can also use methods from [std::io::Write] instead.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use expectrl::{spawn, ControlCode};
+    ///
+    /// let mut proc = spawn("cat").unwrap();
+    ///
+    /// # futures_lite::future::block_on(async {
+    /// proc.send("Hello");
+    /// proc.send(b"World");
+    /// proc.send(ControlCode::try_from("^C").unwrap());
+    /// # });
+    /// ```
+    pub async fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
+        self.stream.write_all(buf.as_ref()).await
     }
 
-    /// Send a line to child's `STDIN`.
-    pub async fn send_line<Str: AsRef<str>>(&mut self, s: Str) -> io::Result<()> {
+    /// Send a line to child’s STDIN.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use expectrl::{spawn, ControlCode};
+    ///
+    /// let mut proc = spawn("cat").unwrap();
+    ///
+    /// # futures_lite::future::block_on(async {
+    /// proc.send_line("Hello");
+    /// proc.send_line(b"World");
+    /// proc.send_line(ControlCode::try_from("^C").unwrap());
+    /// # });
+    /// ```
+    pub async fn send_line<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
         #[cfg(windows)]
         const LINE_ENDING: &[u8] = b"\r\n";
         #[cfg(not(windows))]
         const LINE_ENDING: &[u8] = b"\n";
 
-        let buf = s.as_ref().as_bytes();
-        self.stream.write_all(buf).await?;
+        self.stream.write_all(buf.as_ref()).await?;
         self.stream.write_all(LINE_ENDING).await?;
-        self.stream.flush().await?;
 
         Ok(())
-    }
-
-    /// Send controll character to a child process.
-    ///
-    /// You must be carefull passing a char or &str as an argument.
-    /// If you pass an unexpected controll you'll get a error.
-    /// So it may be better to use [ControlCode].
-    ///
-    /// ```no_run
-    /// use expectrl::{Session, ControlCode};
-    /// use std::process::Command;
-    ///
-    /// # futures_lite::future::block_on(async {
-    /// let mut process = Session::spawn(Command::new("cat")).unwrap();
-    /// process.send_control(ControlCode::EndOfText).await.unwrap(); // sends CTRL^C
-    /// process.send_control('C').await.unwrap(); // sends CTRL^C
-    /// process.send_control("^C").await.unwrap(); // sends CTRL^C
-    /// # });
-    /// ```
-    pub async fn send_control(&mut self, code: impl TryInto<ControlCode>) -> io::Result<()> {
-        let code = code
-            .try_into()
-            .map_err(|_| to_io_error("Failed to parse a control character")(""))?;
-        self.stream.write_all(&[code.into()]).await
     }
 }
 

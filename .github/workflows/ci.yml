@@ -29,6 +29,26 @@ jobs:
         with:
           command: check
 
+  check-tests:
+    name: Check Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [nightly, stable]
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust || 'stable' }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --tests
+
   test:
     name: Test Suite
     strategy:

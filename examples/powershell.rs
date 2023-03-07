@@ -42,7 +42,7 @@ fn main() {
                 );
             }
 
-            p.send_control(ControlCode::ETX).await.unwrap();
+            p.send(ControlCode::ETX).await.unwrap();
             p.expect_prompt().await.unwrap();
         });
     }
@@ -82,7 +82,7 @@ fn main() {
             );
         }
 
-        p.send_control(ControlCode::ETX).unwrap();
+        p.send(ControlCode::ETX).unwrap();
         p.expect_prompt().unwrap();
     }
 }
