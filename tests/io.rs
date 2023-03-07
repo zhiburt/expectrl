@@ -573,11 +573,11 @@ fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
 fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
-        proc.send_control(buf)
+        proc.send(buf.into())
     }
     #[cfg(feature = "async")]
     {
-        block_on(proc.send_control(buf))
+        block_on(proc.send(buf.into()))
     }
 }
 

@@ -12,7 +12,7 @@ fn main() -> Result<(), Error> {
     p.expect("successfully changed.")?;
     p.send_line("pwd")?;
     p.expect(Regex("[0-9]+ \"/upload\""))?;
-    p.send_control(ControlCode::EndOfTransmission)?;
+    p.send(ControlCode::EndOfTransmission)?;
     p.expect("Goodbye.")?;
     assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
     Ok(())

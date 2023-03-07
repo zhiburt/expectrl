@@ -10,10 +10,7 @@ fn main() {
 
     // case 1: execute
     let hostname = p.execute("hostname").unwrap();
-    println!(
-        "Current hostname: {:?}",
-        String::from_utf8(hostname).unwrap()
-    );
+    println!("Current hostname: {:?}", String::from_utf8_lossy(&hostname));
 
     // case 2: wait until done, only extract a few infos
     p.send_line("wc /etc/passwd").unwrap();
@@ -37,7 +34,7 @@ fn main() {
         println!("Roundtrip time: {}", String::from_utf8_lossy(&duration[0]));
     }
 
-    p.send_control(ControlCode::EOT).unwrap();
+    p.send(ControlCode::EOT).unwrap();
 }
 
 #[cfg(unix)]
@@ -80,7 +77,7 @@ fn main() {
             );
         }
 
-        p.send_control(ControlCode::EOT).await.unwrap();
+        p.send(ControlCode::EOT).await.unwrap();
     })
 }
 
