@@ -46,7 +46,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: check --tests
+          command: check
+          args: --tests
 
   test:
     name: Test Suite
