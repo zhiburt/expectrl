@@ -17,7 +17,7 @@ jobs:
       matrix:
         rust: [nightly, stable]
         platform: [ubuntu-latest, macos-latest, windows-latest]
-        features: ["", "polling", "async", "polling,async"]
+        features: ["''", "polling", "async", "polling,async"]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
@@ -28,7 +28,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: check --no-default-features --features ${{ matrix.features }}
+          command: check
+          args: --no-default-features --features ${{ matrix.features }}
 
   check-tests:
     name: Check Tests
