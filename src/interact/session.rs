@@ -86,17 +86,18 @@ where
         {
             let is_echo = self
                 .session
+                .get_process()
                 .get_echo()
                 .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
             if !is_echo {
-                let _ = self.session.set_echo(true, None);
+                let _ = self.session.get_process_mut().set_echo(true, None);
             }
 
             self.status = None;
             let is_alive = interact_buzy_loop(self, ops.borrow_mut())?;
 
             if !is_echo {
-                let _ = self.session.set_echo(false, None);
+                let _ = self.session.get_process_mut().set_echo(false, None);
             }
 
             Ok(is_alive)
@@ -132,17 +133,18 @@ where
     {
         let is_echo = self
             .session
+            .get_process()
             .get_echo()
             .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
         if !is_echo {
-            let _ = self.session.set_echo(true, None);
+            let _ = self.session.get_process_mut().set_echo(true, None);
         }
 
         self.status = None;
         let is_alive = interact_polling(self, ops.borrow_mut())?;
 
         if !is_echo {
-            let _ = self.session.set_echo(false, None);
+            let _ = self.session.get_process_mut().set_echo(false, None);
         }
 
         Ok(is_alive)
@@ -197,32 +199,26 @@ where
 }
 
 #[cfg(all(windows, feature = "polling", not(feature = "async")))]
-impl<S, I, O, C> InteractSession<Session<Proc, S>, I, O, C>
+impl<I, O> InteractSession<&mut Session, I, O>
 where
-    I: Read + Send + 'static,
+    I: Read + Clone + Send + 'static,
     O: Write,
-    S: Write + Read + std::os::unix::io::AsRawFd,
 {
     /// Runs the session.
     ///
     /// See [`Session::interact`].
     ///
     /// [`Session::interact`]: crate::session::Session::interact
-    pub fn spawn(mut self) -> Result<bool, Error> {
-        interact_polling_on_thread(
-            self.session,
-            self.output,
-            self.input,
-            &mut self.state,
-            self.escape_character,
-            self.input_filter,
-            self.output_filter,
-            self.input_action,
-            self.output_action,
-            self.idle_action,
-        )?;
-
-        Ok(self.state)
+    pub fn spawn<C, IF, OF, IA, OA, WA, OPS>(&mut self, mut ops: OPS) -> Result<bool, Error>
+    where
+        OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
+        IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+        IA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
+    {
+        interact_polling_on_thread(self, ops.borrow_mut())
     }
 }
 
@@ -254,7 +250,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact.session.is_alive() {
+            if !interact.session.is_alive()? {
                 return Ok(false);
             }
         }
@@ -393,7 +389,7 @@ where
                         let buf = &buf[..n];
                         let buf = call_filter(opts.input_filter.as_mut(), buf)?;
 
-                        call_action(
+                        let exit = call_action(
                             opts.input_action.as_mut(),
                             interact.session,
                             &mut interact.input,
@@ -403,7 +399,7 @@ where
                             eof,
                         )?;
 
-                        if eof {
+                        if eof || exit {
                             return Ok(true);
                         }
 
@@ -432,7 +428,7 @@ where
                         let buf = &buf[..n];
                         let buf = call_filter(opts.output_filter.as_mut(), buf)?;
 
-                        call_action(
+                        let exit = call_action(
                             opts.output_action.as_mut(),
                             interact.session,
                             &mut interact.input,
@@ -442,7 +438,7 @@ where
                             eof,
                         )?;
 
-                        if eof {
+                        if eof || exit {
                             return Ok(true);
                         }
 
@@ -461,7 +457,7 @@ where
             }
         }
 
-        call_action(
+        let exit = call_action(
             opts.idle_action.as_mut(),
             interact.session,
             &mut interact.input,
@@ -470,39 +466,26 @@ where
             &[],
             false,
         )?;
+
+        if exit {
+            return Ok(true);
+        }
     }
 }
 
 #[cfg(all(windows, not(feature = "async"), feature = "polling"))]
-fn interact_polling_on_thread<
-    State,
-    Output,
-    Input,
-    InputFilter,
-    OutputFilter,
-    InputAction,
-    OutputAction,
-    IdleAction,
->(
-    session: &mut Session,
-    mut output: Output,
-    input: Input,
-    state: &mut State,
-    escape_character: u8,
-    mut input_filter: Option<InputFilter>,
-    mut output_filter: Option<OutputFilter>,
-    mut input_action: Option<InputAction>,
-    mut output_action: Option<OutputAction>,
-    mut idle_action: Option<IdleAction>,
+fn interact_polling_on_thread<O, I, C, IF, OF, IA, OA, WA>(
+    interact: &mut InteractSession<&mut Session, I, O>,
+    opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
 ) -> Result<bool, Error>
 where
-    Input: Read + Send + 'static,
-    Output: Write,
-    InputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    OutputFilter: FnMut(&[u8]) -> Result<Cow<[u8]>, Error>,
-    InputAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
-    OutputAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
-    IdleAction: FnMut(Context<'_, &mut Session, &mut Output, &mut State>) -> Result<(), Error>,
+    I: Read + Clone + Send + 'static,
+    O: Write,
+    IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
+    IA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session, I, O, C>) -> Result<bool, Error>,
 {
     use crate::{
         error::to_io_error,
@@ -510,16 +493,19 @@ where
     };
 
     // Create a poller and register interest in readability on the socket.
-    let stream = session.get_stream().try_clone().map_err(to_io_error(""))?;
-    let mut poller = Wait2::new(input, stream);
+    let stream = interact
+        .session
+        .get_stream()
+        .try_clone()
+        .map_err(to_io_error(""))?;
+    let mut poller = Wait2::new(interact.input.clone(), stream);
 
     loop {
         // In case where proceses exits we are trying to
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = session.is_alive();
-        if matches!(status, Ok(false)) {
+        if interact.session.is_alive()? {
             return Ok(false);
         }
 
@@ -528,70 +514,82 @@ where
         match event {
             Recv::R1(b) => match b {
                 Ok(b) => {
+                    let buf = b.map_or([0], |b| [b]);
                     let eof = b.is_none();
                     let n = if eof { 0 } else { 1 };
-                    let buf = b.map_or([0], |b| [b]);
                     let buf = &buf[..n];
 
-                    let buf = if let Some(filter) = input_filter.as_mut() {
-                        (filter)(buf)?
-                    } else {
-                        Cow::Borrowed(buf)
-                    };
+                    let buf = call_filter(opts.input_filter.as_mut(), buf)?;
 
-                    if let Some(action) = input_action.as_mut() {
-                        let ctx = Context::new(&mut *session, &mut output, &buf, eof, &mut *state);
-                        (action)(ctx)?;
-                    }
+                    let exit = call_action(
+                        opts.input_action.as_mut(),
+                        interact.session,
+                        &mut interact.input,
+                        &mut interact.output,
+                        &mut opts.state,
+                        &buf,
+                        eof,
+                    )?;
 
-                    if eof {
+                    if eof || exit {
                         return Ok(true);
                     }
 
-                    let escape_char_pos = buf.iter().position(|c| *c == escape_character);
+                    // todo: replace all of these by 1 by 1 write
+                    let escape_char_pos = buf.iter().position(|c| *c == interact.escape_character);
                     match escape_char_pos {
                         Some(pos) => {
-                            session.write_all(&buf[..pos])?;
+                            interact.session.write_all(&buf[..pos])?;
                             return Ok(true);
                         }
-                        None => session.write_all(&buf[..])?,
+                        None => interact.session.write_all(&buf[..])?,
                     }
                 }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(err) => return Err(err.into()),
             },
             Recv::R2(b) => match b {
                 Ok(b) => {
+                    let buf = b.map_or([0], |b| [b]);
                     let eof = b.is_none();
                     let n = if eof { 0 } else { 1 };
-                    let buf = b.map_or([0], |b| [b]);
                     let buf = &buf[..n];
 
-                    let buf = if let Some(filter) = output_filter.as_mut() {
-                        (filter)(buf)?
-                    } else {
-                        Cow::Borrowed(buf)
-                    };
+                    let buf = call_filter(opts.output_filter.as_mut(), buf)?;
 
-                    if let Some(action) = output_action.as_mut() {
-                        let ctx = Context::new(&mut *session, &mut output, &buf, eof, &mut *state);
-                        (action)(ctx)?;
-                    }
+                    let exit = call_action(
+                        opts.output_action.as_mut(),
+                        interact.session,
+                        &mut interact.input,
+                        &mut interact.output,
+                        &mut opts.state,
+                        &buf,
+                        eof,
+                    )?;
 
-                    if eof {
+                    if eof || exit {
                         return Ok(true);
                     }
 
-                    output.write_all(&buf)?;
-                    output.flush()?;
+                    interact.output.write_all(&buf)?;
+                    interact.output.flush()?;
                 }
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(err) => return Err(err.into()),
             },
             Recv::Timeout => {
-                if let Some(action) = idle_action.as_mut() {
-                    let ctx = Context::new(&mut *session, &mut output, &[], false, &mut *state);
-                    (action)(ctx)?;
+                let exit = call_action(
+                    opts.idle_action.as_mut(),
+                    interact.session,
+                    &mut interact.input,
+                    &mut interact.output,
+                    &mut opts.state,
+                    &[],
+                    false,
+                )?;
+
+                if exit {
+                    return Ok(true);
                 }
             }
         }
@@ -631,7 +629,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact.session.is_alive() {
+            if !interact.session.is_alive()? {
                 return Ok(false);
             }
         }
@@ -671,7 +669,7 @@ where
                 let buf = &proc_buf[..n];
                 let buf = call_filter(opts.output_filter.as_mut(), buf)?;
 
-                call_action(
+                let exit = call_action(
                     opts.output_action.as_mut(),
                     interact.session,
                     &mut interact.input,
@@ -681,7 +679,7 @@ where
                     eof,
                 )?;
 
-                if eof {
+                if eof || exit {
                     return Ok(true);
                 }
 
@@ -699,7 +697,7 @@ where
                         let buf = &stdin_buf[..n];
                         let buf = call_filter(opts.output_filter.as_mut(), buf)?;
 
-                        call_action(
+                        let exit = call_action(
                             opts.input_action.as_mut(),
                             interact.session,
                             &mut interact.input,
@@ -709,7 +707,7 @@ where
                             eof,
                         )?;
 
-                        if eof {
+                        if eof || exit {
                             return Ok(true);
                         }
 
@@ -728,7 +726,7 @@ where
                 }
             }
             ReadFrom::Timeout => {
-                call_action(
+                let exit = call_action(
                     opts.idle_action.as_mut(),
                     interact.session,
                     &mut interact.input,
@@ -738,8 +736,9 @@ where
                     false,
                 )?;
 
-                // We need to check whether a process is alive;
-                continue;
+                if exit {
+                    return Ok(true);
+                }
             }
         }
     }
@@ -801,7 +800,7 @@ where
 
 #[cfg(unix)]
 fn get_status<S>(session: &Session<Proc, S>) -> Result<Option<crate::WaitStatus>, Error> {
-    match session.status() {
+    match session.get_process().status() {
         Ok(status) => Ok(Some(status)),
         Err(ptyprocess::errno::Errno::ECHILD | ptyprocess::errno::Errno::ESRCH) => Ok(None),
         Err(err) => Err(Error::IO(std::io::Error::new(ErrorKind::Other, err))),

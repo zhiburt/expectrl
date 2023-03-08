@@ -12,6 +12,7 @@ struct State {
     pressed_yes_on_continue: Option<bool>,
 }
 
+#[cfg(not(all(windows, feature = "polling")))]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut output_action = Lookup::new();
@@ -146,3 +147,6 @@ fn main() {
         state.stutus_verification_counter.unwrap_or_default()
     );
 }
+
+#[cfg(all(windows, feature = "polling", not(feature = "async")))]
+fn main() {}

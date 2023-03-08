@@ -18,7 +18,10 @@ use std::io::{BufRead, Read, Write};
 fn send_controll() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send_control(&mut proc, ControlCode::EOT).unwrap();
-    assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0),);
+    assert_eq!(
+        proc.get_process().wait().unwrap(),
+        WaitStatus::Exited(proc.get_process().pid(), 0),
+    );
 }
 
 #[test]
@@ -31,7 +34,7 @@ fn send_controll() {
 
     _p_send_control(&mut proc, ControlCode::ETX).unwrap();
     assert!({
-        let code = proc.wait(None).unwrap();
+        let code = proc.get_process().wait(None).unwrap();
         code == 0 || code == 3221225786
     });
 }
@@ -49,7 +52,7 @@ fn send() {
     let n = _p_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"hello cat\r\n");
 
-    assert!(proc.exit(true).unwrap());
+    assert!(proc.get_process_mut().exit(true).unwrap());
 }
 
 #[test]
@@ -64,7 +67,7 @@ fn send() {
     thread::sleep(Duration::from_millis(600));
 
     _p_expect(&mut proc, "hello cat").unwrap();
-    proc.exit(0).unwrap();
+    proc.get_process_mut().exit(0).unwrap();
 }
 
 #[test]
@@ -81,7 +84,7 @@ fn send_line() {
     let n = _p_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"hello cat\r\n");
 
-    assert!(proc.exit(true).unwrap());
+    assert!(proc.get_process_mut().exit(true).unwrap());
 }
 
 #[test]
@@ -94,7 +97,7 @@ fn send_line() {
     thread::sleep(Duration::from_millis(1000));
 
     _p_expect(&mut proc, "hello cat").unwrap();
-    proc.exit(0).unwrap();
+    proc.get_process_mut().exit(0).unwrap();
 }
 
 #[test]
@@ -340,7 +343,10 @@ fn try_read_after_process_exit() {
     command.arg("hello cat");
     let mut proc = Session::spawn(command).unwrap();
 
-    assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
+    assert_eq!(
+        proc.get_process().wait().unwrap(),
+        WaitStatus::Exited(proc.get_process().pid(), 0)
+    );
 
     #[cfg(target_os = "linux")]
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
@@ -368,7 +374,7 @@ fn try_read_after_process_exit() {
 
     let mut proc = Session::spawn(Command::new("cmd /C echo hello cat")).unwrap();
 
-    assert_eq!(proc.wait(None).unwrap(), 0);
+    assert_eq!(proc.get_process().wait(None).unwrap(), 0);
 
     let now = std::time::Instant::now();
 
@@ -383,7 +389,7 @@ fn try_read_after_process_exit() {
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_is_empty(&mut proc).unwrap());
-                assert_eq!(proc.wait(None).unwrap(), 0);
+                assert_eq!(proc.get_process().wait(None).unwrap(), 0);
                 return;
             }
             Err(err) => {
@@ -447,7 +453,7 @@ fn continues_try_reads() {
 
     let mut buf = [0; 128];
     loop {
-        if !proc.is_alive() {
+        if !proc.is_alive().unwrap() {
             panic!("Most likely python is not installed");
         }
 
@@ -483,7 +489,10 @@ fn spawn_after_interact() {
     _p_interact(&mut p).unwrap();
 
     let p = Session::spawn(Command::new("ls")).unwrap();
-    assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
+    assert!(matches!(
+        p.get_process().wait().unwrap(),
+        WaitStatus::Exited(_, 0)
+    ));
 }
 
 #[test]
@@ -501,7 +510,7 @@ fn read_line_test() {
     let line = _p_read_line(&mut proc).unwrap();
     assert_eq!(&line, "123\r\n");
 
-    proc.exit(true).unwrap();
+    proc.get_process_mut().exit(true).unwrap();
 }
 
 fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {

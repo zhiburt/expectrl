@@ -221,7 +221,7 @@ mod inner {
             #[cfg(not(feature = "async"))]
             {
                 f.debug_struct("StdinInner")
-                    .field("terminal", &"...")
+                    .field("terminal", &self.terminal)
                     .field("is_blocking", &self.is_blocking)
                     .field("stdin", &self.stdin)
                     .field("stdin", &self.stdin)
@@ -230,7 +230,7 @@ mod inner {
             #[cfg(feature = "async")]
             {
                 f.debug_struct("StdinInner")
-                    .field("terminal", &"...")
+                    .field("terminal", &self.terminal)
                     .field("stdin", &self.stdin)
                     .field("stdin", &self.stdin)
                     .finish()
@@ -298,5 +298,25 @@ mod inner {
 
     fn to_io_error(err: impl std::error::Error) -> io::Error {
         io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
+
+    #[cfg(all(feature = "polling", not(feature = "async")))]
+    impl Clone for StdinInner {
+        fn clone(&self) -> Self {
+            Self {
+                terminal: self.terminal.clone(),
+                is_blocking: self.is_blocking.clone(),
+                stdin: std::io::stdin(),
+            }
+        }
+    }
+}
+
+#[cfg(all(windows, feature = "polling", not(feature = "async")))]
+impl Clone for Stdin {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }

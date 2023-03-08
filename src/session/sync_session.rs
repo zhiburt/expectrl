@@ -2,11 +2,15 @@
 
 use std::{
     io::{self, BufRead, BufReader, Read, Write},
-    ops::{Deref, DerefMut},
     time::{self, Duration},
 };
 
-use crate::{error::Error, needle::Needle, process::NonBlocking, Captures};
+use crate::{
+    error::Error,
+    needle::Needle,
+    process::{Healthcheck, NonBlocking},
+    Captures,
+};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -66,6 +70,28 @@ impl<P, S> Session<P, S> {
     /// Get a reference to original stream.
     pub fn get_stream(&self) -> &S {
         self.stream.as_ref()
+    }
+
+    /// Get a mut reference to original stream.
+    pub fn get_stream_mut(&mut self) -> &mut S {
+        self.stream.as_mut()
+    }
+
+    /// Get a reference to a process running program.
+    pub fn get_process(&self) -> &P {
+        &self.proc
+    }
+
+    /// Get a mut reference to a process running program.
+    pub fn get_process_mut(&mut self) -> &mut P {
+        &mut self.proc
+    }
+}
+
+impl<P: Healthcheck, S> Session<P, S> {
+    /// Verifies whether process is still alive.
+    pub fn is_alive(&mut self) -> Result<bool, Error> {
+        self.proc.is_alive().map_err(|err| err.into())
     }
 }
 
@@ -397,20 +423,6 @@ impl<P, S: Read> BufRead for Session<P, S> {
     }
 }
 
-impl<P, S> Deref for Session<P, S> {
-    type Target = P;
-
-    fn deref(&self) -> &Self::Target {
-        &self.proc
-    }
-}
-
-impl<P, S> DerefMut for Session<P, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.proc
-    }
-}
-
 #[derive(Debug)]
 struct TryStream<S> {
     stream: ControlledReader<S>,
@@ -423,6 +435,10 @@ impl<S> TryStream<S> {
 
     fn as_ref(&self) -> &S {
         &self.stream.inner.get_ref().inner
+    }
+
+    fn as_mut(&mut self) -> &mut S {
+        &mut self.stream.inner.get_mut().inner
     }
 }
 

@@ -23,7 +23,10 @@ fn bash() {
 
     p.send(ControlCode::EOT).unwrap();
 
-    assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+    assert_eq!(
+        p.get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_process().pid(), 0)
+    );
 }
 
 #[cfg(not(feature = "async"))]
@@ -43,7 +46,10 @@ fn bash_with_log() {
     thread::sleep(Duration::from_millis(300));
     p.send(ControlCode::EOT).unwrap();
 
-    assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+    assert_eq!(
+        p.get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_process().pid(), 0)
+    );
 }
 
 #[cfg(feature = "async")]
@@ -139,7 +145,10 @@ fn python() {
 
     p.send(ControlCode::EndOfTransmission).unwrap();
 
-    assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+    assert_eq!(
+        p.get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_process().pid(), 0)
+    );
 }
 
 #[cfg(feature = "async")]

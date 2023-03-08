@@ -2,10 +2,11 @@ use expectrl::{
     interact::{actions::lookup::Lookup, InteractOptions},
     spawn,
     stream::stdin::Stdin,
-    ControlCode, Error, Regex, WaitStatus,
+    ControlCode, Error, Regex,
 };
 use std::io::stdout;
 
+#[cfg(not(all(windows, feature = "polling")))]
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
     let mut auth = false;
@@ -40,9 +41,8 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send(ControlCode::EndOfTransmission)?;
     p.expect("Goodbye.")?;
-    assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
     Ok(())
 }
 
-#[cfg(feature = "async")]
+#[cfg(any(all(windows, feature = "polling"), feature = "async"))]
 fn main() {}

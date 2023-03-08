@@ -83,7 +83,7 @@ fn send_multiline() {
 
     assert_eq!(buf, "Hello World\r");
 
-    session.exit(true).unwrap();
+    session.get_process_mut().exit(true).unwrap();
 }
 
 #[cfg(unix)]
@@ -159,7 +159,7 @@ fn send_line() {
 
     assert_eq!(buf, "Hello World\r");
 
-    session.exit(true).unwrap();
+    session.get_process_mut().exit(true).unwrap();
 }
 
 #[cfg(unix)]
