@@ -12,7 +12,7 @@ use futures_lite::{
     ready, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
 };
 
-use crate::{Captures, Error, Needle};
+use crate::{process::Healthcheck, Captures, Error, Needle};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
@@ -32,6 +32,26 @@ impl<P, S> Session<P, S> {
         })
     }
 
+    /// Get a reference to original stream.
+    pub fn get_stream(&self) -> &S {
+        self.stream.as_ref()
+    }
+
+    /// Get a mut reference to original stream.
+    pub fn get_stream_mut(&mut self) -> &mut S {
+        self.stream.as_mut()
+    }
+
+    /// Get a reference to a process running program.
+    pub fn get_process(&self) -> &P {
+        &self.process
+    }
+
+    /// Get a mut reference to a process running program.
+    pub fn get_process_mut(&mut self) -> &mut P {
+        &mut self.process
+    }
+
     /// Set the pty session's expect timeout.
     pub fn set_expect_timeout(&mut self, expect_timeout: Option<Duration>) {
         self.stream.set_expect_timeout(expect_timeout);
@@ -46,11 +66,6 @@ impl<P, S> Session<P, S> {
         self.stream.expect_lazy = is_lazy;
     }
 
-    /// Get a mut reference to original stream.
-    pub fn get_stream_mut(&mut self) -> &mut S {
-        self.stream.get_mut()
-    }
-
     pub(crate) fn swap_stream<F: FnOnce(S) -> R, R>(
         mut self,
         new_stream: F,
@@ -62,6 +77,13 @@ impl<P, S> Session<P, S> {
         let mut session = Session::new(self.process, stream)?;
         session.stream.keep(&buf);
         Ok(session)
+    }
+}
+
+impl<P: Healthcheck, S> Session<P, S> {
+    /// Verifies whether process is still alive.
+    pub fn is_alive(&mut self) -> Result<bool, Error> {
+        self.process.is_alive().map_err(|err| err.into())
     }
 }
 
@@ -278,8 +300,13 @@ impl<S> Stream<S> {
         }
     }
 
-    /// Returns a mut ref to original stream.
-    fn get_mut(&mut self) -> &mut S {
+    /// Returns a reference to original stream.
+    fn as_ref(&self) -> &S {
+        &self.stream.stream
+    }
+
+    /// Returns a mut reference to original stream.
+    fn as_mut(&mut self) -> &mut S {
         &mut self.stream.stream
     }
 

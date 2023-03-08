@@ -49,5 +49,5 @@ fn main() {
     });
 }
 
-#[cfg(all(windows, feature = "polling"))]
+#[cfg(all(windows, feature = "polling", not(feature = "async")))]
 fn main() {}

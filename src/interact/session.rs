@@ -248,7 +248,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact.session.is_alive() {
+            if !interact.session.is_alive()? {
                 return Ok(false);
             }
         }
@@ -503,8 +503,7 @@ where
         // fill buffer to run callbacks if there was something in.
         //
         // We ignore errors because there might be errors like EOCHILD etc.
-        let status = interact.session.is_alive();
-        if status {
+        if interact.session.is_alive()? {
             return Ok(false);
         }
 
@@ -628,7 +627,7 @@ where
 
         #[cfg(windows)]
         {
-            if !interact.session.is_alive() {
+            if !interact.session.is_alive()? {
                 return Ok(false);
             }
         }

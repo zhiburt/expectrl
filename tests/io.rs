@@ -31,7 +31,7 @@ fn send_controll() {
 
     _p_send_control(&mut proc, ControlCode::ETX).unwrap();
     assert!({
-        let code = proc.wait(None).unwrap();
+        let code = proc.get_process().wait(None).unwrap();
         code == 0 || code == 3221225786
     });
 }
@@ -64,7 +64,7 @@ fn send() {
     thread::sleep(Duration::from_millis(600));
 
     _p_expect(&mut proc, "hello cat").unwrap();
-    proc.exit(0).unwrap();
+    proc.get_process_mut().exit(0).unwrap();
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn send_line() {
     thread::sleep(Duration::from_millis(1000));
 
     _p_expect(&mut proc, "hello cat").unwrap();
-    proc.exit(0).unwrap();
+    proc.get_process_mut().exit(0).unwrap();
 }
 
 #[test]
@@ -368,7 +368,7 @@ fn try_read_after_process_exit() {
 
     let mut proc = Session::spawn(Command::new("cmd /C echo hello cat")).unwrap();
 
-    assert_eq!(proc.wait(None).unwrap(), 0);
+    assert_eq!(proc.get_process().wait(None).unwrap(), 0);
 
     let now = std::time::Instant::now();
 
@@ -383,7 +383,7 @@ fn try_read_after_process_exit() {
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_try_read(&mut proc, &mut [0; 128]).is_err());
                 assert!(_p_is_empty(&mut proc).unwrap());
-                assert_eq!(proc.wait(None).unwrap(), 0);
+                assert_eq!(proc.get_process().wait(None).unwrap(), 0);
                 return;
             }
             Err(err) => {
@@ -447,7 +447,7 @@ fn continues_try_reads() {
 
     let mut buf = [0; 128];
     loop {
-        if !proc.is_alive() {
+        if !proc.is_alive().unwrap() {
             panic!("Most likely python is not installed");
         }
 
