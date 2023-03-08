@@ -9,6 +9,7 @@ const SHELL: &str = "sh";
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 
+#[cfg(not(all(windows, feature = "polling")))]
 #[cfg(not(feature = "async"))]
 fn main() {
     let mut sh = spawn(SHELL).expect("Error while spawning sh");
@@ -47,3 +48,6 @@ fn main() {
         println!("Exiting");
     });
 }
+
+#[cfg(all(windows, feature = "polling"))]
+fn main() {}
