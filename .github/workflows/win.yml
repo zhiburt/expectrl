@@ -13,7 +13,7 @@ env:
 jobs:
   test:
     name: Test windows build
-    runs-on: windows-2019
+    runs-on: windows-2022
 
     strategy:
       matrix:
@@ -36,8 +36,5 @@ jobs:
         run: rustup target add ${{ matrix.target }}
       - name: Install clippy
         run: rustup component add clippy
-      - name: Fix environment
-        uses: ./.github/actions/fix-environment
       - name: Test
-        run: >
-          cargo test
+        run: cargo test
