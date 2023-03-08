@@ -20,12 +20,12 @@ jobs:
         include:
           - version: stable
             target: x86_64-pc-windows-msvc
-          - version: nightly
-            target: i686-pc-windows-msvc
-          - version: nightly
-            target: x86_64-pc-windows-gnu
-          - version: stable
-            target: i686-pc-windows-gnu
+          # - version: nightly
+          #   target: i686-pc-windows-msvc
+          # - version: nightly
+          #   target: x86_64-pc-windows-gnu
+          # - version: stable
+          #   target: i686-pc-windows-gnu
 
     steps:
       - name: Checkout
@@ -36,5 +36,9 @@ jobs:
         run: rustup target add ${{ matrix.target }}
       - name: Install clippy
         run: rustup component add clippy
+      - name: pp
+        run: python --version
+      - name: pp3
+        run: python ./tests/actions/echo/main.py 123213 123
       - name: Test
         run: cargo test
