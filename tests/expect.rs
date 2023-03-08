@@ -30,14 +30,11 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
-    let mut session = spawn("powershell -C type").unwrap();
-
-    // give shell some time
-    std::thread::sleep(Duration::from_millis(300));
+    let mut session = spawn("python ./tests/cat/main.py").unwrap();
 
     #[cfg(not(feature = "async"))]
     {
-        session.send_line("Hello World").unwrap();
+        session.send_line("Hello World\n\r").unwrap();
         session.expect("Hello World").unwrap();
     }
 

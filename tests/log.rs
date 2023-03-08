@@ -17,7 +17,7 @@ use expectrl::spawn;
 #[cfg(not(feature = "async"))]
 fn log() {
     let writer = StubWriter::default();
-    let mut session = spawn("powershell -C type".to_string())
+    let mut session = spawn("python ./tests/cat/main.py")
         .unwrap()
         .with_log(writer.clone())
         .unwrap();
@@ -43,7 +43,7 @@ fn log() {
 fn log() {
     futures_lite::future::block_on(async {
         let writer = StubWriter::default();
-        let mut session = spawn("powershell -C type".to_string())
+        let mut session = spawn("python ./tests/cat/main.py")
             .unwrap()
             .with_log(writer.clone())
             .unwrap();

@@ -58,14 +58,8 @@ fn send() {
 #[test]
 #[cfg(windows)]
 fn send() {
-    let mut proc = Session::spawn(Command::new("powershell -C type")).unwrap();
-    thread::sleep(Duration::from_millis(1000));
-
+    let mut proc = Session::spawn(Command::new("python ./tests/cat/main.py")).unwrap();
     _p_send(&mut proc, "hello cat\r\n").unwrap();
-
-    // give cat a time to react on input
-    thread::sleep(Duration::from_millis(600));
-
     _p_expect(&mut proc, "hello cat").unwrap();
     proc.get_process_mut().exit(0).unwrap();
 }
@@ -90,12 +84,8 @@ fn send_line() {
 #[test]
 #[cfg(windows)]
 fn send_line() {
-    let mut proc = Session::spawn(Command::new("powershell -C type")).unwrap();
-
-    thread::sleep(Duration::from_millis(1000));
+    let mut proc = Session::spawn(Command::new("python ./tests/cat/main.py")).unwrap();
     _p_send_line(&mut proc, "hello cat").unwrap();
-    thread::sleep(Duration::from_millis(1000));
-
     _p_expect(&mut proc, "hello cat").unwrap();
     proc.get_process_mut().exit(0).unwrap();
 }
