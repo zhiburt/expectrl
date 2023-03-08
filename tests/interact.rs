@@ -91,8 +91,8 @@ fn interact_callbacks_called_after_exit() {
     let mut session = expectrl::spawn("echo 'Hello World'").unwrap();
 
     assert_eq!(
-        session.wait().unwrap(),
-        WaitStatus::Exited(session.pid(), 0)
+        session.get_process().wait().unwrap(),
+        WaitStatus::Exited(session.get_process().pid(), 0)
     );
 
     let mut stdin = Stdin::open().unwrap();

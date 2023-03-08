@@ -142,7 +142,7 @@ fn read_after_check_str() {
 
     // we stop process so read operation will fail.
     // other wise read call would block.
-    session.exit(false).unwrap();
+    session.get_process_mut().exit(false).unwrap();
 
     let mut buf = [0; 6];
     session.read_exact(&mut buf).unwrap();
@@ -166,7 +166,7 @@ fn read_after_check_str() {
 
         // we stop process so read operation will fail.
         // other wise read call would block.
-        session.exit(false).unwrap();
+        session.get_process_mut().exit(false).unwrap();
 
         let mut buf = [0; 6];
         session.read_exact(&mut buf).await.unwrap();
@@ -256,8 +256,8 @@ fn check_macro_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
     assert_eq!(
-        WaitStatus::Exited(session.pid(), 0),
-        session.wait().unwrap()
+        WaitStatus::Exited(session.get_process().pid(), 0),
+        session.get_process().wait().unwrap()
     );
 
     expectrl::check!(

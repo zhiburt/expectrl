@@ -86,17 +86,18 @@ where
         {
             let is_echo = self
                 .session
+                .get_process()
                 .get_echo()
                 .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
             if !is_echo {
-                let _ = self.session.set_echo(true, None);
+                let _ = self.session.get_process_mut().set_echo(true, None);
             }
 
             self.status = None;
             let is_alive = interact_buzy_loop(self, ops.borrow_mut())?;
 
             if !is_echo {
-                let _ = self.session.set_echo(false, None);
+                let _ = self.session.get_process_mut().set_echo(false, None);
             }
 
             Ok(is_alive)
@@ -132,17 +133,18 @@ where
     {
         let is_echo = self
             .session
+            .get_process()
             .get_echo()
             .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
         if !is_echo {
-            let _ = self.session.set_echo(true, None);
+            let _ = self.session.get_process_mut().set_echo(true, None);
         }
 
         self.status = None;
         let is_alive = interact_polling(self, ops.borrow_mut())?;
 
         if !is_echo {
-            let _ = self.session.set_echo(false, None);
+            let _ = self.session.get_process_mut().set_echo(false, None);
         }
 
         Ok(is_alive)
@@ -798,7 +800,7 @@ where
 
 #[cfg(unix)]
 fn get_status<S>(session: &Session<Proc, S>) -> Result<Option<crate::WaitStatus>, Error> {
-    match session.status() {
+    match session.get_process().status() {
         Ok(status) => Ok(Some(status)),
         Err(ptyprocess::errno::Errno::ECHILD | ptyprocess::errno::Errno::ESRCH) => Ok(None),
         Err(err) => Err(Error::IO(std::io::Error::new(ErrorKind::Other, err))),

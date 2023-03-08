@@ -18,7 +18,10 @@ use std::io::{BufRead, Read, Write};
 fn send_controll() {
     let mut proc = Session::spawn(Command::new("cat")).unwrap();
     _p_send_control(&mut proc, ControlCode::EOT).unwrap();
-    assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0),);
+    assert_eq!(
+        proc.get_process().wait().unwrap(),
+        WaitStatus::Exited(proc.get_process().pid(), 0),
+    );
 }
 
 #[test]
@@ -49,7 +52,7 @@ fn send() {
     let n = _p_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"hello cat\r\n");
 
-    assert!(proc.exit(true).unwrap());
+    assert!(proc.get_process_mut().exit(true).unwrap());
 }
 
 #[test]
@@ -81,7 +84,7 @@ fn send_line() {
     let n = _p_read(&mut proc, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"hello cat\r\n");
 
-    assert!(proc.exit(true).unwrap());
+    assert!(proc.get_process_mut().exit(true).unwrap());
 }
 
 #[test]
@@ -340,7 +343,10 @@ fn try_read_after_process_exit() {
     command.arg("hello cat");
     let mut proc = Session::spawn(command).unwrap();
 
-    assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
+    assert_eq!(
+        proc.get_process().wait().unwrap(),
+        WaitStatus::Exited(proc.get_process().pid(), 0)
+    );
 
     #[cfg(target_os = "linux")]
     assert_eq!(_p_try_read(&mut proc, &mut [0; 128]).unwrap(), 11);
@@ -483,7 +489,10 @@ fn spawn_after_interact() {
     _p_interact(&mut p).unwrap();
 
     let p = Session::spawn(Command::new("ls")).unwrap();
-    assert!(matches!(p.wait().unwrap(), WaitStatus::Exited(_, 0)));
+    assert!(matches!(
+        p.get_process().wait().unwrap(),
+        WaitStatus::Exited(_, 0)
+    ));
 }
 
 #[test]
@@ -501,7 +510,7 @@ fn read_line_test() {
     let line = _p_read_line(&mut proc).unwrap();
     assert_eq!(&line, "123\r\n");
 
-    proc.exit(true).unwrap();
+    proc.get_process_mut().exit(true).unwrap();
 }
 
 fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {

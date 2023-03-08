@@ -85,8 +85,8 @@ fn is_matched_eof() {
     let mut session = spawn("echo 'Hello World'").unwrap();
 
     assert_eq!(
-        WaitStatus::Exited(session.pid(), 0),
-        session.wait().unwrap()
+        session.get_process().wait().unwrap(),
+        WaitStatus::Exited(session.get_process().pid(), 0),
     );
 
     assert!(session.is_matched(Eof).unwrap());
@@ -124,7 +124,7 @@ fn read_after_is_matched() {
 
     // we stop process so read operation will end up with EOF.
     // other wise read call would block.
-    session.exit(false).unwrap();
+    session.get_process_mut().exit(false).unwrap();
 
     let mut buf = [0; 128];
     let n = session.read(&mut buf).unwrap();
@@ -147,7 +147,7 @@ fn read_after_is_matched() {
 
         // we stop process so read operation will end up with EOF.
         // other wise read call would block.
-        session.exit(false).unwrap();
+        session.get_process_mut().exit(false).unwrap();
 
         let mut buf = [0; 128];
         let n = session.read(&mut buf).await.unwrap();
@@ -160,7 +160,10 @@ fn read_after_is_matched() {
 #[test]
 fn check_after_is_matched_eof() {
     let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-    assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
+    assert_eq!(
+        WaitStatus::Exited(p.get_process().pid(), 0),
+        p.get_process().wait().unwrap()
+    );
     assert!(p.is_matched(Eof).unwrap());
 
     let m = p.check(Eof).unwrap();
@@ -198,7 +201,10 @@ fn check_after_is_matched_eof() {
 #[test]
 fn expect_after_is_matched_eof() {
     let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-    assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
+    assert_eq!(
+        WaitStatus::Exited(p.get_process().pid(), 0),
+        p.get_process().wait().unwrap()
+    );
     assert!(p.is_matched(Eof).unwrap());
 
     let m = p.expect(Eof).unwrap();
