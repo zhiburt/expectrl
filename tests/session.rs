@@ -48,7 +48,7 @@ fn send() {
 fn send() {
     use std::io::Write;
 
-    let mut session = spawn("python ./tests/cat/main.py").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.write(b"Hello World").unwrap();
@@ -101,7 +101,7 @@ fn send_multiline() {
 #[cfg(windows)]
 #[test]
 fn send_multiline() {
-    let mut session = spawn("python ./tests/cat/main.py").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.send("Hello World\r\n").unwrap();
@@ -164,7 +164,7 @@ fn send_line() {
 #[cfg(windows)]
 #[test]
 fn send_line() {
-    let mut session = spawn("python ./tests/cat/main.py").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.send_line("Hello World").unwrap();

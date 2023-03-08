@@ -12,7 +12,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: Test windows build
     runs-on: windows-2019
 
     strategy:
@@ -41,32 +41,3 @@ jobs:
       - name: Test
         run: >
           cargo test
-          
-  test-python:
-    name: Type
-    runs-on: windows-2022
-
-    strategy:
-      matrix:
-        include:
-          - version: stable
-            target: x86_64-pc-windows-msvc
-          - version: nightly
-            target: i686-pc-windows-msvc
-          - version: nightly
-            target: x86_64-pc-windows-gnu
-          - version: stable
-            target: i686-pc-windows-gnu
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Update toolchain
-        run: rustup update --no-self-update ${{ matrix.version }} && rustup default ${{ matrix.version }}-${{ matrix.target }}
-      - name: Add toolchain target
-        run: rustup target add ${{ matrix.target }}
-      - name: Install clippy
-        run: rustup component add clippy
-      - name: Test
-        run: >
-          python --version

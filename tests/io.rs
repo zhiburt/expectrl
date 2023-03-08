@@ -58,7 +58,7 @@ fn send() {
 #[test]
 #[cfg(windows)]
 fn send() {
-    let mut proc = Session::spawn(Command::new("python ./tests/cat/main.py")).unwrap();
+    let mut proc = Session::spawn(Command::new("python ./tests/actions/cat/main.py")).unwrap();
     _p_send(&mut proc, "hello cat\r\n").unwrap();
     _p_expect(&mut proc, "hello cat").unwrap();
     proc.get_process_mut().exit(0).unwrap();
@@ -84,7 +84,7 @@ fn send_line() {
 #[test]
 #[cfg(windows)]
 fn send_line() {
-    let mut proc = Session::spawn(Command::new("python ./tests/cat/main.py")).unwrap();
+    let mut proc = Session::spawn(Command::new("python ./tests/actions/cat/main.py")).unwrap();
     _p_send_line(&mut proc, "hello cat").unwrap();
     _p_expect(&mut proc, "hello cat").unwrap();
     proc.get_process_mut().exit(0).unwrap();
@@ -417,12 +417,10 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc = Session::spawn(Command::new("cmd /C echo Hello World")).unwrap();
+    let mut proc = Session::spawn(Command::new("python ./tests/actions/echo/main.py Hello World")).unwrap();
 
     let mut buf: Vec<u8> = Vec::new();
-
     let now = std::time::Instant::now();
-
     while now.elapsed() < Duration::from_secs(1) {
         let mut b = [0; 1];
         match _p_try_read(&mut proc, &mut b) {
