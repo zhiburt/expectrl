@@ -86,6 +86,7 @@ fn send_multiline() {
         let mut session = spawn("cat").unwrap();
         session.send("Hello World\n").await.unwrap();
 
+        thread::sleep(Duration::from_millis(300));
         session.write_all(&[3]).await.unwrap(); // Ctrl+C
         session.flush().await.unwrap();
 
