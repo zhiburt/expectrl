@@ -41,4 +41,4 @@ jobs:
       - name: pp3
         run: python ./tests/actions/echo/main.py 123213 123
       - name: Test
-        run: cargo test
+        run: pwsh -c 'cargo test'

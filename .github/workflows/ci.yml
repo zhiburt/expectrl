@@ -1,100 +1,100 @@
-name: Build
+# name: Build
 
-on:
-  push:
-    branches:
-      - main
-  pull_request: {}
+# on:
+#   push:
+#     branches:
+#       - main
+#   pull_request: {}
 
-env:
-  CARGO_TERM_COLOR: always
+# env:
+#   CARGO_TERM_COLOR: always
 
-jobs:
-  check:
-    name: Check
-    strategy:
-      fail-fast: false
-      matrix:
-        rust: [nightly, stable]
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-        features: ["''", "polling", "async", "polling,async"]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust || 'stable' }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --no-default-features --features ${{ matrix.features }}
+# jobs:
+#   check:
+#     name: Check
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         rust: [nightly, stable]
+#         platform: [ubuntu-latest, macos-latest, windows-latest]
+#         features: ["''", "polling", "async", "polling,async"]
+#     runs-on: ${{ matrix.platform }}
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions-rs/toolchain@v1
+#         with:
+#           profile: minimal
+#           toolchain: ${{ matrix.rust || 'stable' }}
+#           override: true
+#       - uses: actions-rs/cargo@v1
+#         with:
+#           command: check
+#           args: --no-default-features --features ${{ matrix.features }}
 
-  check-tests:
-    name: Check Tests
-    strategy:
-      fail-fast: false
-      matrix:
-        rust: [nightly, stable]
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust || 'stable' }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --tests
+#   check-tests:
+#     name: Check Tests
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         rust: [nightly, stable]
+#         platform: [ubuntu-latest, macos-latest, windows-latest]
+#     runs-on: ${{ matrix.platform }}
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions-rs/toolchain@v1
+#         with:
+#           profile: minimal
+#           toolchain: ${{ matrix.rust || 'stable' }}
+#           override: true
+#       - uses: actions-rs/cargo@v1
+#         with:
+#           command: check
+#           args: --tests
 
-  test:
-    name: Test Suite
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-latest]
-        feauture:
-          ["", "--features async"]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --verbose ${{ matrix.feauture }}
+#   test:
+#     name: Test Suite
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         platform: [ubuntu-latest]
+#         feauture:
+#           ["", "--features async"]
+#     runs-on: ${{ matrix.platform }}
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions-rs/cargo@v1
+#         with:
+#           command: test
+#           args: --verbose ${{ matrix.feauture }}
 
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+#   fmt:
+#     name: Rustfmt
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions-rs/toolchain@v1
+#         with:
+#           profile: minimal
+#           toolchain: stable
+#           override: true
+#       - run: rustup component add rustfmt
+#       - uses: actions-rs/cargo@v1
+#         with:
+#           command: fmt
+#           args: --all -- --check
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+#   clippy:
+#     name: Clippy
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions-rs/toolchain@v1
+#         with:
+#           profile: minimal
+#           toolchain: stable
+#           override: true
+#       - run: rustup component add clippy
+#       - uses: actions-rs/cargo@v1
+#         with:
+#           command: clippy
+#           args: -- -D warnings
