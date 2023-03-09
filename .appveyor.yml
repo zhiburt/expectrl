@@ -26,6 +26,5 @@ test_script:
   - pwsh -command "$PSVersionTable"
   - pwsh -command Get-InstalledModule
   - python ./tests/actions/echo/main.py 123 4 5
-  - pwsh -command 'cargo test --all --verbose --no-fail-fast'
   - pwsh -command "cargo test --all --verbose --no-fail-fast"
 
