@@ -38,7 +38,7 @@ fn expect_str() {
             .output()
     );
 
-    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
+    let mut session = spawn("powershell -C python ./tests/actions/cat/main.py").unwrap();
     eprintln!("{:?}", session.get_process().pid());
     eprintln!("{:?}", session.is_alive());
     eprintln!("{:?}", session.is_empty());
