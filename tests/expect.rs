@@ -44,12 +44,15 @@ fn expect_str() {
     eprintln!("{:?}", session.is_alive());
     eprintln!("{:?}", session.is_empty());
     session.send_line("Hello World\n\r").unwrap();
+
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
     eprintln!("{:?}", session.is_alive());
     eprintln!("{:?}", session.is_empty());
 
-    let mut buf = vec![0; 200];
-    println!("xx {:?}", session.read(&mut buf));
-    eprintln!("xx {:?}", String::from_utf8_lossy(&buf));
+    // let mut buf = vec![0; 200];
+    // println!("xx {:?}", session.read(&mut buf));
+    // eprintln!("xx {:?}", String::from_utf8_lossy(&buf));
 
     let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
 
