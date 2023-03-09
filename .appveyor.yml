@@ -22,7 +22,9 @@ install:
 build: false
 
 test_script:
+  - powershell -C Get-Host
+  - powershell -C $PSVersionTable
   - powershell -C Get-InstalledModule
   - python ./tests/actions/echo/main.py 123 4 5
-  - powershell -C cargo test --all --verbose
+  - powershell -C cargo test --all --verbose --no-fail-fast
 
