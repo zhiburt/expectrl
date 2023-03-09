@@ -22,7 +22,8 @@ install:
 build: false
 
 test_script:
-  - winget install --id Microsoft.Powershell --source winget
+  - pwsh
+  - pwsh -C Get-Host
   - powershell -C Get-Host
   - powershell -C $PSVersionTable
   - powershell -C Get-InstalledModule
