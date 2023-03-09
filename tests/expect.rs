@@ -30,15 +30,7 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
-    println!("{:?}", std::fs::metadata("./tests/actions/cat/main.py"));
-    println!(
-        "{:?}",
-        std::process::Command::new("python")
-            .args(["./tests/actions/echo/main.py", "1231", "1231xx"])
-            .output()
-    );
-
-    let mut session = spawn("powershell -C python ./tests/actions/cat/main.py").unwrap();
+    let mut session = spawn("powershell").unwrap();
     eprintln!("{:?}", session.get_process().pid());
     eprintln!("{:?}", session.is_alive());
     eprintln!("{:?}", session.is_empty());
