@@ -30,6 +30,21 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
+    println!("{:?}", std::fs::metadata("./tests/actions/cat/main.py"));
+    eprintln!("{:?}", std::fs::metadata("./tests/actions/cat/main.py"));
+    println!(
+        "{:?}",
+        std::process::Command::new("python")
+            .args(["./tests/actions/echo/main.py"])
+            .output()
+    );
+    eprintln!(
+        "{:?}",
+        std::process::Command::new("python")
+            .args(["./tests/actions/echo/main.py"])
+            .output()
+    );
+
     let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
 
     #[cfg(not(feature = "async"))]
@@ -148,7 +163,10 @@ fn expect_n_bytes() {
     use expectrl::Session;
     use std::process::Command;
 
-    let mut session = Session::spawn(Command::new("python ./tests/actions/echo/main.py Hello World")).unwrap();
+    let mut session = Session::spawn(Command::new(
+        "python ./tests/actions/echo/main.py Hello World",
+    ))
+    .unwrap();
     #[cfg(not(feature = "async"))]
     {
         let m = session.expect(NBytes(14)).unwrap();

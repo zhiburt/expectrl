@@ -417,7 +417,10 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn try_read_to_end() {
-    let mut proc = Session::spawn(Command::new("python ./tests/actions/echo/main.py Hello World")).unwrap();
+    let mut proc = Session::spawn(Command::new(
+        "python ./tests/actions/echo/main.py Hello World",
+    ))
+    .unwrap();
 
     let mut buf: Vec<u8> = Vec::new();
     let now = std::time::Instant::now();
