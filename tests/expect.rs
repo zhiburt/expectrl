@@ -35,13 +35,13 @@ fn expect_str() {
     println!(
         "{:?}",
         std::process::Command::new("python")
-            .args(["./tests/actions/echo/main.py"])
+            .args(["./tests/actions/echo/main.py", "1231", "1231xx"])
             .output()
     );
     eprintln!(
         "{:?}",
         std::process::Command::new("python")
-            .args(["./tests/actions/echo/main.py"])
+            .args(["./tests/actions/echo/main.py", "1231", "1231xx"])
             .output()
     );
 
