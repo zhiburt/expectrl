@@ -22,7 +22,7 @@ install:
 build: false
 
 test_script:
-  - Get-InstalledModule
+  - powershell -C Get-InstalledModule
   - python ./tests/actions/echo/main.py 123 4 5
   - powershell -C cargo test --all --verbose
 
