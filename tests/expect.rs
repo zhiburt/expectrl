@@ -38,7 +38,6 @@ fn expect_str() {
             .output()
     );
 
-    use std::io::Read;
     let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     eprintln!("{:?}", session.get_process().pid());
     eprintln!("{:?}", session.is_alive());
