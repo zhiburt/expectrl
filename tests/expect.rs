@@ -30,7 +30,7 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
-    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
+    let mut session = spawn(r#"pwsh -c "python ./tests/actions/cat/main.py""#).unwrap();
 
     #[cfg(not(feature = "async"))]
     {
