@@ -22,11 +22,10 @@ install:
 build: false
 
 test_script:
-  - pwsh
-  - pwsh -C Get-Host
-  - powershell -C Get-Host
-  - powershell -C $PSVersionTable
-  - powershell -C Get-InstalledModule
+  - pwsh -command Get-Host 
+  - pwsh -command Get-Host
+  - pwsh -command '$PSVersionTable'
+  - pwsh -command Get-InstalledModule
   - python ./tests/actions/echo/main.py 123 4 5
-  - powershell -C cargo test --all --verbose --no-fail-fast
+  - pwsh -command 'cargo test --all --verbose --no-fail-fast'
 
