@@ -43,6 +43,8 @@ fn expect_str() {
     eprintln!("{:?}", session.is_alive());
     eprintln!("{:?}", session.is_empty());
     session.send_line("Hello World\n\r").unwrap();
+    eprintln!("{:?}", session.is_alive());
+    eprintln!("{:?}", session.is_empty());
 
     std::thread::sleep(std::time::Duration::from_secs(5));
 
