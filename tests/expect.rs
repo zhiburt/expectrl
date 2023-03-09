@@ -31,19 +31,25 @@ fn expect_str() {
 #[test]
 fn expect_str() {
     println!("{:?}", std::fs::metadata("./tests/actions/cat/main.py"));
-    eprintln!("{:?}", std::fs::metadata("./tests/actions/cat/main.py"));
     println!(
         "{:?}",
         std::process::Command::new("python")
             .args(["./tests/actions/echo/main.py", "1231", "1231xx"])
             .output()
     );
-    eprintln!(
-        "{:?}",
-        std::process::Command::new("python")
-            .args(["./tests/actions/echo/main.py", "1231", "1231xx"])
-            .output()
-    );
+
+    use std::io::Read;
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
+    eprintln!("{:?}", session.get_process().pid());
+    eprintln!("{:?}", session.is_alive());
+    eprintln!("{:?}", session.is_empty());
+    session.send_line("Hello World\n\r").unwrap();
+    eprintln!("{:?}", session.is_alive());
+    eprintln!("{:?}", session.is_empty());
+
+    let mut buf = vec![0; 200];
+    println!("xx {:?}", session.read(&mut buf));
+    eprintln!("xx {:?}", String::from_utf8_lossy(&buf));
 
     let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
 
