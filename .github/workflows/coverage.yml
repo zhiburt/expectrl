@@ -1,31 +1,31 @@
-# name: Code Coverage
+name: Code Coverage
 
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request: {}
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
 
-# env:
-#   CARGO_TERM_COLOR: always
+env:
+  CARGO_TERM_COLOR: always
 
-# jobs:
-#   coverage:
-#     name: Coveralls
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v2
-#       - uses: actions-rs/toolchain@v1
-#         with:
-#           profile: minimal
-#           toolchain: stable
-#           override: true
-#       - name: Run cargo-tarpaulin
-#         uses: actions-rs/tarpaulin@v0.1
-#         with:
-#           version: "0.15.0"
-#           args: "--workspace --out Lcov --output-dir ./coverage"
-#       - name: Upload to Coveralls
-#         uses: coverallsapp/github-action@master
-#         with:
-#           github-token: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  coverage:
+    name: Coveralls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: "0.15.0"
+          args: "--workspace --out Lcov --output-dir ./coverage"
+      - name: Upload to Coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
