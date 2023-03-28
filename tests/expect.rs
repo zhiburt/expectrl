@@ -30,14 +30,11 @@ fn expect_str() {
 #[cfg(windows)]
 #[test]
 fn expect_str() {
-    let mut session = spawn("powershell -C type").unwrap();
-
-    // give shell some time
-    std::thread::sleep(Duration::from_millis(300));
+    let mut session = spawn(r#"pwsh -c "python ./tests/actions/cat/main.py""#).unwrap();
 
     #[cfg(not(feature = "async"))]
     {
-        session.send_line("Hello World").unwrap();
+        session.send_line("Hello World\n\r").unwrap();
         session.expect("Hello World").unwrap();
     }
 
@@ -103,11 +100,7 @@ fn expect_lazy_regex() {
 #[cfg(windows)]
 #[test]
 fn expect_regex() {
-    let mut session = spawn("echo Hello World").unwrap();
-
-    // give shell some time
-    std::thread::sleep(Duration::from_millis(300));
-
+    let mut session = spawn("python ./tests/actions/echo/main.py Hello World").unwrap();
     #[cfg(not(feature = "async"))]
     {
         let m = session.expect(Regex("lo.*")).unwrap();
@@ -155,14 +148,12 @@ fn expect_n_bytes() {
     use expectrl::Session;
     use std::process::Command;
 
-    let mut session = Session::spawn(Command::new("cmd /C echo Hello World")).unwrap();
-
-    // give shell some time
-    std::thread::sleep(Duration::from_millis(300));
-
+    let mut session = Session::spawn(Command::new(
+        "python ./tests/actions/echo/main.py Hello World",
+    ))
+    .unwrap();
     #[cfg(not(feature = "async"))]
     {
-        // ignore spawned command
         let m = session.expect(NBytes(14)).unwrap();
         assert_eq!(m.matches().count(), 1);
         assert_eq!(m.get(0).unwrap().len(), 14);
@@ -172,7 +163,6 @@ fn expect_n_bytes() {
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
-            // ignore spawned command
             let m = session.expect(NBytes(14)).await.unwrap();
             assert_eq!(m.matches().count(), 1);
             assert_eq!(m.get(0).unwrap().len(), 14);

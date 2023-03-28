@@ -1,5 +1,4 @@
 use expectrl::{spawn, Session};
-use std::{thread, time::Duration};
 
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
@@ -8,9 +7,6 @@ use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(windows))]
 use std::io::{Read, Write};
 
-#[cfg(windows)]
-use std::io::BufRead;
-
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
@@ -18,7 +14,6 @@ fn send() {
     let mut session = spawn("cat").unwrap();
     session.send("Hello World").unwrap();
 
-    thread::sleep(Duration::from_millis(300));
     session.write_all(&[3]).unwrap(); // Ctrl+C
     session.flush().unwrap();
 
@@ -37,7 +32,6 @@ fn send() {
         let mut session = spawn("cat").unwrap();
         session.send("Hello World").await.unwrap();
 
-        thread::sleep(Duration::from_millis(300));
         session.write_all(&[3]).await.unwrap(); // Ctrl+C
         session.flush().await.unwrap();
 
@@ -54,18 +48,16 @@ fn send() {
 fn send() {
     use std::io::Write;
 
-    let mut session = spawn("powershell -C type").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.write(b"Hello World").unwrap();
-        thread::sleep(Duration::from_millis(300));
         session.expect("Hello World").unwrap();
     }
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {
             session.write(b"Hello World").await.unwrap();
-            thread::sleep(Duration::from_millis(300));
             session.expect("Hello World").await.unwrap();
         })
     }
@@ -94,7 +86,7 @@ fn send_multiline() {
         let mut session = spawn("cat").unwrap();
         session.send("Hello World\n").await.unwrap();
 
-        thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(std::time::Duration::from_millis(300));
         session.write_all(&[3]).await.unwrap(); // Ctrl+C
         session.flush().await.unwrap();
 
@@ -110,21 +102,14 @@ fn send_multiline() {
 #[cfg(windows)]
 #[test]
 fn send_multiline() {
-    let mut session = spawn("powershell -C type").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.send("Hello World\r\n").unwrap();
-
-        thread::sleep(Duration::from_millis(300));
-
-        let buf = session.lines().nth(2).unwrap().unwrap();
-
-        if !buf.contains("Hello World") {
-            panic!(
-                "Expected to get {:?} in the output, but got {:?}",
-                "Hello World", buf
-            );
-        }
+        let m = session.expect('\n').unwrap();
+        let buf = String::from_utf8_lossy(m.before());
+        assert!(buf.contains("Hello World"), "{:?}", buf);
+        session.get_process_mut().exit(0).unwrap();
     }
     #[cfg(feature = "async")]
     {
@@ -132,17 +117,10 @@ fn send_multiline() {
 
         futures_lite::future::block_on(async {
             session.send("Hello World\r\n").await.unwrap();
-
-            thread::sleep(Duration::from_millis(300));
-
-            let buf = session.lines().nth(2).await.unwrap().unwrap();
-
-            if !buf.contains("Hello World") {
-                panic!(
-                    "Expected to get {:?} in the output, but got {:?}",
-                    "Hello World", buf
-                );
-            }
+            let m = session.expect('\n').unwrap();
+            let buf = String::from_utf8_lossy(m.before());
+            assert!(buf.contains("Hello World"), "{:?}", buf);
+            session.get_process_mut().exit(0).unwrap();
         })
     }
 }
@@ -170,9 +148,7 @@ fn send_line() {
         let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
 
-        thread::sleep(Duration::from_millis(300));
         session.exit(true).unwrap();
-        thread::sleep(Duration::from_millis(300));
 
         let mut buf = String::new();
         session.read_to_string(&mut buf).await.unwrap();
@@ -189,21 +165,14 @@ fn send_line() {
 #[cfg(windows)]
 #[test]
 fn send_line() {
-    let mut session = spawn("powershell -C type").unwrap();
+    let mut session = spawn("python ./tests/actions/cat/main.py").unwrap();
     #[cfg(not(feature = "async"))]
     {
         session.send_line("Hello World").unwrap();
-
-        thread::sleep(Duration::from_millis(300));
-
-        let buf = session.lines().nth(2).unwrap().unwrap();
-
-        if !buf.contains("Hello World") {
-            panic!(
-                "Expected to get {:?} in the output, but got {:?}",
-                "Hello World", buf
-            );
-        }
+        let m = session.expect('\n').unwrap();
+        let buf = String::from_utf8_lossy(m.before());
+        assert!(buf.contains("Hello World"), "{:?}", buf);
+        session.get_process_mut().exit(0).unwrap();
     }
     #[cfg(feature = "async")]
     {
@@ -211,17 +180,10 @@ fn send_line() {
 
         futures_lite::future::block_on(async {
             session.send_line("Hello World").await.unwrap();
-
-            thread::sleep(Duration::from_millis(300));
-
-            let buf = session.lines().nth(2).await.unwrap().unwrap();
-
-            if !buf.contains("Hello World") {
-                panic!(
-                    "Expected to get {:?} in the output, but got {:?}",
-                    "Hello World", buf
-                );
-            }
+            let m = session.expect('\n').unwrap();
+            let buf = String::from_utf8_lossy(m.before());
+            assert!(buf.contains("Hello World"), "{:?}", buf);
+            session.get_process_mut().exit(0).unwrap();
         })
     }
 }
