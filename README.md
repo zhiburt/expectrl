@@ -25,13 +25,13 @@ Add `expectrl` to your Cargo.toml.
 ```toml
 # Cargo.toml
 [dependencies]
-pg-embed = { version = "0.7", default-features = false, features = ["rt_tokio"] }
+expectrl = "0.7"
 ```
 
 An example where the program simulates a used interacting with `ftp`.
 
 ```rust
-use expectrl::{spawn, Regex, Eof, WaitStatus, Error};
+use expectrl::{spawn, Regex, Eof, Error};
 
 fn main() -> Result<(), Error> {
     let mut p = spawn("ftp speedtest.tele2.net")?;
@@ -46,23 +46,19 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send_line("exit")?;
     p.expect(Eof)?;
-    assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
     Ok(())
 }
 ```
 
-*The example inspired by the one in [philippkeller/rexpect].*
-
 The same example but the password will be read from stdin.
 
 ```rust
+use std::io::stdout;
 use expectrl::{
     interact::{actions::lookup::Lookup, InteractOptions},
-    spawn,
-    stream::stdin::Stdin,
-    ControlCode, Error, Regex, WaitStatus,
+    spawn, stream::stdin::Stdin,
+    ControlCode, Error, Regex,
 };
-use std::io::stdout;
 
 fn main() -> Result<(), Error> {
     let mut auth = false;
@@ -97,7 +93,6 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send(ControlCode::EndOfTransmission)?;
     p.expect("Goodbye.")?;
-    assert_eq!(p.wait(), Ok(WaitStatus::Exited(p.pid(), 0)));
     Ok(())
 }
 ```

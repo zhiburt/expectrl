@@ -148,17 +148,11 @@ fn send_line() {
         let mut session = spawn("cat").unwrap();
         session.send_line("Hello World").await.unwrap();
 
-        session.exit(true).unwrap();
+        let m = session.expect('\n').await.unwrap();
+        let buf = String::from_utf8_lossy(m.before());
 
-        let mut buf = String::new();
-        session.read_to_string(&mut buf).await.unwrap();
-
-        // cat repeats a send line after <enter> is presend
-        // <enter> is basically a new line
-        //
-        // NOTE: in debug mode though it equals 'Hello World\r\n'
-        // : stty -a are the same
-        assert_eq!(buf, "Hello World\r\n");
+        assert_eq!(buf, "Hello World\r");
+        session.get_process_mut().exit(true).unwrap();
     })
 }
 
