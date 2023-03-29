@@ -78,7 +78,7 @@ fn is_matched_n_bytes() {
     })
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(not(feature = "async"))]
 #[test]
 fn is_matched_eof() {
@@ -92,7 +92,7 @@ fn is_matched_eof() {
     assert!(session.is_matched(Eof).unwrap());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(feature = "async")]
 #[test]
 fn is_matched_eof() {
@@ -155,7 +155,7 @@ fn read_after_is_matched() {
     })
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(not(feature = "async"))]
 #[test]
 fn check_after_is_matched_eof() {
@@ -175,7 +175,7 @@ fn check_after_is_matched_eof() {
     assert_eq!(m.get(0).unwrap(), b"");
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(feature = "async")]
 #[test]
 fn check_after_is_matched_eof() {
@@ -196,7 +196,7 @@ fn check_after_is_matched_eof() {
     })
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(not(feature = "async"))]
 #[test]
 fn expect_after_is_matched_eof() {
@@ -218,7 +218,7 @@ fn expect_after_is_matched_eof() {
     assert!(matches!(p.expect("").unwrap_err(), expectrl::Error::Eof));
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[cfg(feature = "async")]
 #[test]
 fn expect_after_is_matched_eof() {

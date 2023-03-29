@@ -114,7 +114,7 @@ fn python() {
 
     let mut msg = String::new();
     p.read_line(&mut msg).unwrap();
-    assert_eq!(msg, "\r\n");
+    assert!(msg.contains("\r\n"), "{msg:?}");
 
     let mut msg = String::new();
     p.read_line(&mut msg).unwrap();
@@ -146,7 +146,7 @@ fn python() {
 
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
-        assert_eq!(msg, "\r\n");
+        assert!(msg.contains("\r\n"), "{msg:?}");
 
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();

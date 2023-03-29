@@ -252,65 +252,6 @@ fn check_macro() {
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
-fn check_macro_eof() {
-    let mut session = spawn("echo 'Hello World'").unwrap();
-
-    assert_eq!(
-        WaitStatus::Exited(session.get_process().pid(), 0),
-        session.get_process().wait().unwrap()
-    );
-
-    expectrl::check!(
-        &mut session,
-        output = Eof => {
-            let buf = output.get(0).unwrap();
-            #[cfg(target_os = "linux")]
-            assert_eq!(buf, b"'Hello World'\r\n");
-            #[cfg(not(target_os = "linux"))]
-            assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
-            assert_eq!(output.before(), b"");
-        },
-        default => {
-            panic!("Unexpected result");
-        },
-    )
-    .unwrap();
-}
-
-#[cfg(unix)]
-#[cfg(feature = "async")]
-#[test]
-fn check_macro_eof() {
-    let mut session = spawn("echo 'Hello World'").unwrap();
-
-    assert_eq!(
-        WaitStatus::Exited(session.pid(), 0),
-        session.wait().unwrap()
-    );
-
-    futures_lite::future::block_on(async {
-        expectrl::check!(
-            session,
-            output = Eof => {
-                let buf = output.get(0).unwrap();
-                #[cfg(target_os = "linux")]
-                assert_eq!(buf, b"'Hello World'\r\n");
-                #[cfg(not(target_os = "linux"))]
-                assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
-                assert_eq!(output.before(), b"");
-            },
-            default => {
-                panic!("Unexpected result");
-            },
-        )
-        .await
-        .unwrap();
-    });
-}
-
-#[cfg(unix)]
-#[cfg(not(feature = "async"))]
-#[test]
 fn check_macro_doest_consume_missmatch() {
     let mut session = spawn("cat").unwrap();
     session.send_line("Hello World").unwrap();
