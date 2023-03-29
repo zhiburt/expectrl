@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use expectrl::{spawn, Any, Eof, NBytes, Regex, WaitStatus};
+use expectrl::{spawn, Any, Eof, NBytes, Regex};
 use std::thread;
 use std::time::Duration;
 

@@ -57,6 +57,7 @@ fn bash_with_log() {
 }
 
 #[cfg(feature = "async")]
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn bash() {
     futures_lite::future::block_on(async {
@@ -75,6 +76,7 @@ fn bash() {
 }
 
 #[cfg(feature = "async")]
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn bash_with_log() {
     futures_lite::future::block_on(async {

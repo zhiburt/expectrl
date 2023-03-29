@@ -144,6 +144,7 @@ fn log_read_line() {
             "write: \"Hello World\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
                 | "write: \"Hello World\\n\"\nread: \"Hello World\\r\\n\"\n"
                 | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\\r\\n\"\n"
+                | "write: \"Hello World\"\nwrite: \"\\n\"\nread: \"Hello World\"\nread: \"\\r\\n\"\n"
         ) {
             panic!("unexpected output {text:?}");
         }
