@@ -44,8 +44,8 @@ pub trait NonBlocking {
 pub trait IntoAsyncStream {
     /// AsyncStream type.
     /// Like [Process::Stream] but it represents an async IO stream.
-    type AsyncsStream;
+    type AsyncStream;
 
     /// Turns an object into a async stream.
-    fn into_async_stream(self) -> Result<Self::AsyncsStream>;
+    fn into_async_stream(self) -> Result<Self::AsyncStream>;
 }

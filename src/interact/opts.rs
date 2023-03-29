@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use super::Context;
-use crate::{session::Proc, Error, Session};
+use crate::{session::OsProcess, Error, Session};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -20,9 +20,9 @@ type DefaultOps<S, I, O, C> = InteractOptions<
     C,
     NoFilter,
     NoFilter,
-    NoAction<Session<Proc, S>, I, O, C>,
-    NoAction<Session<Proc, S>, I, O, C>,
-    NoAction<Session<Proc, S>, I, O, C>,
+    NoAction<Session<OsProcess, S>, I, O, C>,
+    NoAction<Session<OsProcess, S>, I, O, C>,
+    NoAction<Session<OsProcess, S>, I, O, C>,
 >;
 
 impl<S, I, O> Default for DefaultOps<S, I, O, ()> {
@@ -100,7 +100,7 @@ impl<C, IF, OF, IA, OA, WA> InteractOptions<C, IF, OF, IA, OA, WA> {
 }
 
 impl<S, I, O, C, IF, OF, OA, WA>
-    InteractOptions<C, IF, OF, NoAction<Session<Proc, S>, I, O, C>, OA, WA>
+    InteractOptions<C, IF, OF, NoAction<Session<OsProcess, S>, I, O, C>, OA, WA>
 {
     /// Puts a hanlder which will be called when users input is detected.
     ///
@@ -108,7 +108,7 @@ impl<S, I, O, C, IF, OF, OA, WA>
     /// See <https://github.com/zhiburt/expectrl/issues/16>.
     pub fn on_input<F>(self, action: F) -> InteractOptions<C, IF, OF, F, OA, WA>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
+        F: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -122,7 +122,7 @@ impl<S, I, O, C, IF, OF, OA, WA>
 }
 
 impl<S, I, O, C, IF, OF, IA, WA>
-    InteractOptions<C, IF, OF, IA, NoAction<Session<Proc, S>, I, O, C>, WA>
+    InteractOptions<C, IF, OF, IA, NoAction<Session<OsProcess, S>, I, O, C>, WA>
 {
     /// Puts a hanlder which will be called when process output is detected.
     ///
@@ -132,7 +132,7 @@ impl<S, I, O, C, IF, OF, IA, WA>
     /// will cause the read bytes not to apeard in the output stream!
     pub fn on_output<F>(self, action: F) -> InteractOptions<C, IF, OF, IA, F, WA>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
+        F: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -146,12 +146,12 @@ impl<S, I, O, C, IF, OF, IA, WA>
 }
 
 impl<S, I, O, C, IF, OF, IA, OA>
-    InteractOptions<C, IF, OF, IA, OA, NoAction<Session<Proc, S>, I, O, C>>
+    InteractOptions<C, IF, OF, IA, OA, NoAction<Session<OsProcess, S>, I, O, C>>
 {
     /// Puts a handler which will be called on each interaction when no input is detected.
     pub fn on_idle<F>(self, action: F) -> InteractOptions<C, IF, OF, IA, OA, F>
     where
-        F: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool>,
+        F: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool>,
     {
         InteractOptions {
             input_filter: self.input_filter,
@@ -165,7 +165,11 @@ impl<S, I, O, C, IF, OF, IA, OA>
 }
 
 /// A helper type to set a default action to [`InteractSession`].
+///
+/// [`InteractSession`]: crate::interact::InteractSession
 pub type NoAction<S, I, O, C> = fn(Context<'_, S, I, O, C>) -> Result<bool>;
 
 /// A helper type to set a default filter to [`InteractSession`].
+///
+/// [`InteractSession`]: crate::interact::InteractSession
 pub type NoFilter = fn(&[u8]) -> Result<Cow<'_, [u8]>>;

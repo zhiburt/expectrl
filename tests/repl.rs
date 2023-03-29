@@ -33,10 +33,14 @@ fn bash() {
 #[cfg(target_os = "linux")]
 #[test]
 fn bash_with_log() {
-    let mut p = spawn_bash()
-        .unwrap()
-        .upgrade_session(|s| s.with_log(std::io::stderr()))
-        .unwrap();
+    use expectrl::{repl::ReplSession, session};
+
+    let p = spawn_bash().unwrap();
+    let prompt = p.get_prompt().to_owned();
+    let quit_cmd = p.get_quit_command().map(|c| c.to_owned());
+    let is_echo = p.is_echo();
+    let session = session::log(p.into_session(), std::io::stderr()).unwrap();
+    let mut p = ReplSession::new(session, prompt, quit_cmd, is_echo);
 
     p.send_line("echo Hello World").unwrap();
     let mut msg = String::new();
@@ -74,11 +78,14 @@ fn bash() {
 #[test]
 fn bash_with_log() {
     futures_lite::future::block_on(async {
-        let mut p = spawn_bash()
-            .await
-            .unwrap()
-            .upgrade_session(|s| s.with_log(std::io::stderr()))
-            .unwrap();
+        use expectrl::{repl::ReplSession, session};
+
+        let p = spawn_bash().await.unwrap();
+        let prompt = p.get_prompt().to_owned();
+        let quit_cmd = p.get_quit_command().map(|c| c.to_owned());
+        let is_echo = p.is_echo();
+        let session = session::log(p.into_session(), std::io::stderr()).unwrap();
+        let mut p = ReplSession::new(session, prompt, quit_cmd, is_echo);
 
         p.send_line("echo Hello World").await.unwrap();
         let mut msg = String::new();

@@ -15,7 +15,7 @@ use crate::{
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P, S> {
+pub struct Session<P = super::OsProcess, S = super::OsProcessStream> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
@@ -26,7 +26,8 @@ impl<P, S> Session<P, S>
 where
     S: Read,
 {
-    pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
+    /// Creates a new session.
+    pub fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
         Ok(Self {
             proc: process,
@@ -36,10 +37,11 @@ where
         })
     }
 
-    pub(crate) fn swap_stream<F: FnOnce(S) -> R, R: Read>(
-        mut self,
-        new_stream: F,
-    ) -> Result<Session<P, R>, Error> {
+    pub(crate) fn swap_stream<F, R>(mut self, new_stream: F) -> Result<Session<P, R>, Error>
+    where
+        F: FnOnce(S) -> R,
+        R: Read,
+    {
         self.stream.flush_in_buffer();
         let buf = self.stream.get_available().to_owned();
 

@@ -136,9 +136,9 @@ impl AsRawFd for PtyStream {
 
 #[cfg(feature = "async")]
 impl IntoAsyncStream for PtyStream {
-    type AsyncsStream = AsyncPtyStream;
+    type AsyncStream = AsyncPtyStream;
 
-    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
+    fn into_async_stream(self) -> Result<Self::AsyncStream> {
         AsyncPtyStream::new(self)
     }
 }

@@ -128,9 +128,9 @@ impl NonBlocking for ProcessStream {
 
 #[cfg(feature = "async")]
 impl IntoAsyncStream for ProcessStream {
-    type AsyncsStream = AsyncProcessStream;
+    type AsyncStream = AsyncProcessStream;
 
-    fn into_async_stream(self) -> Result<Self::AsyncsStream> {
+    fn into_async_stream(self) -> Result<Self::AsyncStream> {
         AsyncProcessStream::new(self)
     }
 }

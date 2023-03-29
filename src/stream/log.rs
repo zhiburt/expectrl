@@ -1,4 +1,4 @@
-//! This module container a [LoggedStream]
+//! This module container a [LogStream]
 //! which can wrap other streams in order to log a read/write operations.
 
 use std::{
@@ -16,22 +16,22 @@ use std::{
 
 use crate::process::NonBlocking;
 
-/// LoggedStream a IO stream wrapper,
+/// LogStream a IO stream wrapper,
 /// which logs each write/read operation.
 #[derive(Debug)]
-pub struct LoggedStream<S, W> {
+pub struct LogStream<S, W> {
     stream: S,
     logger: W,
 }
 
-impl<S, W> LoggedStream<S, W> {
+impl<S, W> LogStream<S, W> {
     /// Creates a new instance of the stream.
     pub fn new(stream: S, logger: W) -> Self {
         Self { stream, logger }
     }
 }
 
-impl<S, W: Write> LoggedStream<S, W> {
+impl<S, W: Write> LogStream<S, W> {
     fn log_write(&mut self, buf: &[u8]) {
         log(&mut self.logger, "write", buf);
     }
@@ -41,7 +41,7 @@ impl<S, W: Write> LoggedStream<S, W> {
     }
 }
 
-impl<S: Write, W: Write> Write for LoggedStream<S, W> {
+impl<S: Write, W: Write> Write for LogStream<S, W> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let n = self.stream.write(buf)?;
         self.log_write(&buf[..n]);
@@ -74,7 +74,7 @@ impl<S: Write, W: Write> Write for LoggedStream<S, W> {
     }
 }
 
-impl<S: Read, W: Write> Read for LoggedStream<S, W> {
+impl<S: Read, W: Write> Read for LogStream<S, W> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let n = self.stream.read(buf)?;
         self.log_read(&buf[..n]);
@@ -82,7 +82,7 @@ impl<S: Read, W: Write> Read for LoggedStream<S, W> {
     }
 }
 
-impl<S: NonBlocking, W> NonBlocking for LoggedStream<S, W> {
+impl<S: NonBlocking, W> NonBlocking for LogStream<S, W> {
     fn set_non_blocking(&mut self) -> Result<()> {
         self.stream.set_non_blocking()
     }
@@ -92,7 +92,7 @@ impl<S: NonBlocking, W> NonBlocking for LoggedStream<S, W> {
     }
 }
 
-impl<S, W> Deref for LoggedStream<S, W> {
+impl<S, W> Deref for LogStream<S, W> {
     type Target = S;
 
     fn deref(&self) -> &Self::Target {
@@ -100,14 +100,14 @@ impl<S, W> Deref for LoggedStream<S, W> {
     }
 }
 
-impl<S, W> DerefMut for LoggedStream<S, W> {
+impl<S, W> DerefMut for LogStream<S, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
 
 #[cfg(feature = "async")]
-impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LoggedStream<S, W> {
+impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LogStream<S, W> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -135,7 +135,7 @@ impl<S: AsyncWrite + Unpin, W: Write + Unpin> AsyncWrite for LoggedStream<S, W> 
 }
 
 #[cfg(feature = "async")]
-impl<S: AsyncRead + Unpin, W: Write + Unpin> AsyncRead for LoggedStream<S, W> {
+impl<S: AsyncRead + Unpin, W: Write + Unpin> AsyncRead for LogStream<S, W> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

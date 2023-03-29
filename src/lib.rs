@@ -73,12 +73,9 @@
 //!
 //! ```no_run,ignore
 //! use std::io::{stdout, prelude::*};
-//! use expectrl::spawn;
+//! use expectrl::{spawn, session::log};
 //!
-//! let mut sh = spawn("sh")
-//!     .unwrap()
-//!     .with_log(stdout())
-//!     .unwrap();
+//! let mut sh = log(spawn("sh").unwrap(), stdout()).unwrap();
 //!
 //! writeln!(sh, "Hello World").unwrap();
 //! ```

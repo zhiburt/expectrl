@@ -10,6 +10,7 @@ use futures_lite::AsyncBufReadExt;
 #[cfg(feature = "async")]
 use futures_lite::AsyncReadExt;
 
+use expectrl::session;
 use expectrl::spawn;
 
 #[test]
@@ -17,10 +18,11 @@ use expectrl::spawn;
 #[cfg(not(feature = "async"))]
 fn log() {
     let writer = StubWriter::default();
-    let mut session = spawn("python ./tests/actions/cat/main.py")
-        .unwrap()
-        .with_log(writer.clone())
-        .unwrap();
+    let mut session = session::log(
+        spawn("python ./tests/actions/cat/main.py").unwrap(),
+        writer.clone(),
+    )
+    .unwrap();
 
     thread::sleep(Duration::from_millis(300));
 
@@ -43,10 +45,11 @@ fn log() {
 fn log() {
     futures_lite::future::block_on(async {
         let writer = StubWriter::default();
-        let mut session = spawn("python ./tests/actions/cat/main.py")
-            .unwrap()
-            .with_log(writer.clone())
-            .unwrap();
+        let mut session = session::log(
+            spawn("python ./tests/actions/cat/main.py").unwrap(),
+            writer.clone(),
+        )
+        .unwrap();
         thread::sleep(Duration::from_millis(300));
 
         session.send_line("Hello World").await.unwrap();
@@ -70,7 +73,7 @@ fn log() {
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+        let mut session = session::log(spawn("cat").unwrap(), writer.clone()).unwrap();
 
         session.send_line("Hello World").await.unwrap();
 
@@ -95,7 +98,7 @@ fn log() {
 
     #[cfg(not(feature = "async"))]
     {
-        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+        let mut session = session::log(spawn("cat").unwrap(), writer.clone()).unwrap();
 
         session.send_line("Hello World").unwrap();
 
@@ -126,7 +129,7 @@ fn log_read_line() {
 
     #[cfg(feature = "async")]
     futures_lite::future::block_on(async {
-        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+        let mut session = session::log(spawn("cat").unwrap(), writer.clone()).unwrap();
 
         session.send_line("Hello World").await.unwrap();
 
@@ -148,7 +151,7 @@ fn log_read_line() {
 
     #[cfg(not(feature = "async"))]
     {
-        let mut session = spawn("cat").unwrap().with_log(writer.clone()).unwrap();
+        let mut session = session::log(spawn("cat").unwrap(), writer.clone()).unwrap();
 
         session.send_line("Hello World").unwrap();
 

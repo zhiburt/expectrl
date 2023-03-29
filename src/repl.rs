@@ -2,7 +2,7 @@
 
 use crate::{
     error::Error,
-    session::{Proc, Stream},
+    session::{OsProcess, OsProcessStream},
     Captures, Session,
 };
 use std::ops::{Deref, DerefMut};
@@ -190,7 +190,7 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
 #[derive(Debug)]
-pub struct ReplSession<P = Proc, S = Stream> {
+pub struct ReplSession<P = OsProcess, S = OsProcessStream> {
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.
     prompt: String,
@@ -214,30 +214,34 @@ impl<P, S> ReplSession<P, S> {
         session: Session<P, S>,
         prompt: String,
         quit_command: Option<String>,
-        is_echo_on: bool,
+        is_echo: bool,
     ) -> Self {
         Self {
             session,
             prompt,
             quit_command,
-            is_echo_on,
+            is_echo_on: is_echo,
         }
     }
 
-    /// Update an underlying session.
-    ///
-    /// Can be used to set a logger for example.
-    pub fn upgrade_session<NP, NS, F>(self, build_session: F) -> Result<ReplSession<NP, NS>, Error>
-    where
-        F: FnOnce(Session<P, S>) -> Result<Session<NP, NS>, Error>,
-    {
-        let session = build_session(self.session)?;
-        Ok(ReplSession::new(
-            session,
-            self.prompt,
-            self.quit_command,
-            self.is_echo_on,
-        ))
+    /// Get a used prompt.
+    pub fn get_prompt(&self) -> &str {
+        &self.prompt
+    }
+
+    /// Get a used quit command.
+    pub fn get_quit_command(&self) -> Option<&str> {
+        self.quit_command.as_deref()
+    }
+
+    /// Get a echo settings.
+    pub fn is_echo(&self) -> bool {
+        self.is_echo_on
+    }
+
+    /// Get an inner session.
+    pub fn into_session(self) -> Session<P, S> {
+        self.session
     }
 }
 

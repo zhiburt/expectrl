@@ -17,7 +17,7 @@ use crate::{process::Healthcheck, Captures, Error, Needle};
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P, S> {
+pub struct Session<P = super::OsProcess, S = super::OsProcessStream> {
     process: P,
     stream: Stream<S>,
 }
@@ -25,7 +25,8 @@ pub struct Session<P, S> {
 // GEt back to the solution where Logger is just dyn Write instead of all these magic with type system.....
 
 impl<P, S> Session<P, S> {
-    pub(crate) fn new(process: P, stream: S) -> io::Result<Self> {
+    /// Create a new session.
+    pub fn new(process: P, stream: S) -> io::Result<Self> {
         Ok(Self {
             process,
             stream: Stream::new(stream),

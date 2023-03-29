@@ -5,7 +5,7 @@ use std::{
     io::{ErrorKind, Write},
 };
 
-use crate::{session::Proc, Error, Session};
+use crate::{session::OsProcess, Error, Session};
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -62,7 +62,7 @@ impl<S, I, O> InteractSession<S, I, O> {
 }
 
 #[cfg(not(any(feature = "async", feature = "polling")))]
-impl<S, I, O> InteractSession<&mut Session<Proc, S>, I, O>
+impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
 where
     I: Read,
     O: Write,
@@ -78,9 +78,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
     {
         #[cfg(unix)]
         {
@@ -111,7 +111,7 @@ where
 }
 
 #[cfg(all(unix, feature = "polling", not(feature = "async")))]
-impl<S, I, O> InteractSession<&mut Session<Proc, S>, I, O>
+impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
 where
     I: Read + std::os::unix::io::AsRawFd,
     O: Write,
@@ -127,9 +127,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
     {
         let is_echo = self
             .session
@@ -152,7 +152,7 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<S, I, O> InteractSession<&mut Session<Proc, S>, I, O>
+impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
 where
     I: futures_lite::AsyncRead + Unpin,
     O: Write,
@@ -168,9 +168,9 @@ where
         OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
         IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
         OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
     {
         #[cfg(unix)]
         {
@@ -224,7 +224,7 @@ where
 
 #[cfg(all(not(feature = "async"), not(feature = "polling")))]
 fn interact_buzy_loop<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<Proc, S>, I, O>,
+    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
     opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
 ) -> Result<bool, Error>
 where
@@ -233,9 +233,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
 {
     let mut buf = [0; 512];
     loop {
@@ -339,7 +339,7 @@ where
 
 #[cfg(all(unix, not(feature = "async"), feature = "polling"))]
 fn interact_polling<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<Proc, S>, I, O>,
+    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
     opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
 ) -> Result<bool, Error>
 where
@@ -348,9 +348,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
 {
     use polling::{Event, Poller};
 
@@ -598,7 +598,7 @@ where
 
 #[cfg(feature = "async")]
 async fn interact_async<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<Proc, S>, I, O>,
+    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
     opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
 ) -> Result<bool, Error>
 where
@@ -607,9 +607,9 @@ where
     O: Write,
     IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
     OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<Proc, S>, I, O, C>) -> Result<bool, Error>,
+    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
 {
     use std::io;
 
@@ -637,13 +637,13 @@ where
         #[derive(Debug)]
         enum ReadFrom {
             Stdin,
-            Process,
+            OsProcessess,
             Timeout,
         }
 
         let read_process = async {
             (
-                ReadFrom::Process,
+                ReadFrom::OsProcessess,
                 interact.session.read(&mut proc_buf).await,
             )
         };
@@ -663,7 +663,7 @@ where
         let (read_from, result) = futures_lite::future::or(read_fut, timeout).await;
 
         match read_from {
-            ReadFrom::Process => {
+            ReadFrom::OsProcessess => {
                 let n = result?;
                 let eof = n == 0;
                 let buf = &proc_buf[..n];
@@ -799,7 +799,7 @@ where
 }
 
 #[cfg(unix)]
-fn get_status<S>(session: &Session<Proc, S>) -> Result<Option<crate::WaitStatus>, Error> {
+fn get_status<S>(session: &Session<OsProcess, S>) -> Result<Option<crate::WaitStatus>, Error> {
     match session.get_process().status() {
         Ok(status) => Ok(Some(status)),
         Err(ptyprocess::errno::Errno::ECHILD | ptyprocess::errno::Errno::ESRCH) => Ok(None),
