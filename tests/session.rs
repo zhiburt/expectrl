@@ -86,16 +86,12 @@ fn send_multiline() {
         let mut session = spawn("cat").unwrap();
         session.send("Hello World\n").await.unwrap();
 
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        session.write_all(&[3]).await.unwrap(); // Ctrl+C
-        session.flush().await.unwrap();
-
         let mut buf = String::new();
         session.read_to_string(&mut buf).await.unwrap();
 
-        // cat repeats a send line after <enter> is presend
-        // <enter> is basically a new line
         assert_eq!(buf, "Hello World\r\n");
+
+        session.get_process_mut().exit(true).unwrap();
     })
 }
 

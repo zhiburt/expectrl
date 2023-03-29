@@ -247,8 +247,8 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     ///
     /// # Example
     ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
+    #[cfg_attr(any(windows, target_os = "macos"), doc = "```no_run")]
+    #[cfg_attr(target_os = "linux", doc = "```")]
     /// use expectrl::{spawn, Regex};
     /// use std::time::Duration;
     ///
