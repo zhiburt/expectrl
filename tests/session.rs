@@ -86,7 +86,7 @@ fn send_multiline() {
         let mut session = spawn("cat").unwrap();
         session.send("Hello World\n").await.unwrap();
 
-        let m = session.expect('\n').unwrap();
+        let m = session.expect('\n').await.unwrap();
         let buf = String::from_utf8_lossy(m.before());
 
         assert_eq!(buf, "Hello World\r");
