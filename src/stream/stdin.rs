@@ -131,6 +131,10 @@ mod inner {
             #[cfg(feature = "async")]
             let stdin = async_io::Async::new(stdin)?;
 
+            #[cfg(target_os = "macos")]
+            let orig_flags = None;
+
+            #[cfg(not(target_os = "macos"))]
             let orig_flags = Self::prepare()?;
 
             Ok(Self { stdin, orig_flags })
