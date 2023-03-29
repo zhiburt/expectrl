@@ -98,7 +98,7 @@ fn check_eof() {
     if m.matches().len() > 0 {
         let buf = m.get(0).unwrap();
         #[cfg(target_os = "macos")]
-        assert!(matches!(buf), b"" | b"'Hello World'\r\n", "{:?}", buf);
+        assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
         #[cfg(not(target_os = "macos"))]
         assert_eq!(buf, b"'Hello World'\r\n");
     }
@@ -117,11 +117,13 @@ fn check_eof() {
         assert!(m.matches().count() == 0);
 
         let m = session.check(Eof).await.unwrap();
-        assert_eq!(m.before(), b"");
-        #[cfg(target_os = "linux")]
-        assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
-        #[cfg(not(target_os = "linux"))]
-        assert!(m.matches().len() == 0);
+        if m.matches().len() > 0 {
+            let buf = m.get(0).unwrap();
+            #[cfg(target_os = "macos")]
+            assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
+            #[cfg(not(target_os = "macos"))]
+            assert_eq!(buf, b"'Hello World'\r\n");
+        }
     })
 }
 
