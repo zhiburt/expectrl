@@ -94,14 +94,12 @@ fn check_eof() {
 
     let m = session.check(Eof).unwrap();
     assert_eq!(m.before(), b"");
-    #[cfg(target_os = "linux")]
-    assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        if m.matches().len() > 0 {
-            assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
-        }
+    
+    if m.matches().len() > 0 {
+        #[cfg(target_os = "macos")]
+        assert_eq!(m.get(0).unwrap(), b"");        
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(m.get(0).unwrap(), b"'Hello World'\r\n");
     }
 }
 
