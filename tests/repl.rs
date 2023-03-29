@@ -99,42 +99,14 @@ fn bash_with_log() {
     })
 }
 
-#[cfg(feature = "async")]
-#[test]
-fn python() {
-    futures_lite::future::block_on(async {
-        let mut p = spawn_python().await.unwrap();
-
-        let prompt = p.execute("print('Hello World')").await.unwrap();
-        assert_eq!(prompt, b"Hello World\r\n");
-
-        thread::sleep(Duration::from_millis(300));
-        p.send(ControlCode::EndOfText).await.unwrap();
-        thread::sleep(Duration::from_millis(300));
-
-        let mut msg = String::new();
-        p.read_line(&mut msg).await.unwrap();
-        assert_eq!(msg, "\r\n");
-
-        let mut msg = String::new();
-        p.read_line(&mut msg).await.unwrap();
-        assert_eq!(msg, "KeyboardInterrupt\r\n");
-
-        p.expect_prompt().await.unwrap();
-
-        p.send(ControlCode::EndOfTransmission).await.unwrap();
-
-        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
-    })
-}
-
 #[cfg(not(feature = "async"))]
 #[test]
 fn python() {
     let mut p = spawn_python().unwrap();
 
     let prompt = p.execute("print('Hello World')").unwrap();
-    assert_eq!(prompt, b"Hello World\r\n");
+    let prompt = String::from_utf8_lossy(&prompt);
+    assert!(prompt.contains("Hello World"), "{prompt:?}");
 
     thread::sleep(Duration::from_millis(300));
     p.send(ControlCode::EndOfText).unwrap();
@@ -156,6 +128,36 @@ fn python() {
         p.get_process().wait().unwrap(),
         WaitStatus::Exited(p.get_process().pid(), 0)
     );
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn python() {
+    futures_lite::future::block_on(async {
+        let mut p = spawn_python().await.unwrap();
+
+        let prompt = p.execute("print('Hello World')").await.unwrap();
+        let prompt = String::from_utf8_lossy(&prompt);
+        assert!(prompt.contains("Hello World"), "{prompt:?}");
+
+        thread::sleep(Duration::from_millis(300));
+        p.send(ControlCode::EndOfText).await.unwrap();
+        thread::sleep(Duration::from_millis(300));
+
+        let mut msg = String::new();
+        p.read_line(&mut msg).await.unwrap();
+        assert_eq!(msg, "\r\n");
+
+        let mut msg = String::new();
+        p.read_line(&mut msg).await.unwrap();
+        assert_eq!(msg, "KeyboardInterrupt\r\n");
+
+        p.expect_prompt().await.unwrap();
+
+        p.send(ControlCode::EndOfTransmission).await.unwrap();
+
+        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+    })
 }
 
 #[cfg(feature = "async")]

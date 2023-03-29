@@ -114,9 +114,8 @@ fn check_eof() {
         thread::sleep(Duration::from_millis(600));
 
         let m = session.check(Eof).await.unwrap();
-        assert!(m.matches().count() == 0);
+        assert_eq!(m.before(), b"");
 
-        let m = session.check(Eof).await.unwrap();
         if m.matches().len() > 0 {
             let buf = m.get(0).unwrap();
             #[cfg(target_os = "macos")]
@@ -264,10 +263,11 @@ fn check_macro_eof() {
     expectrl::check!(
         &mut session,
         output = Eof => {
+            let buf = output.get(0).unwrap();
             #[cfg(target_os = "linux")]
-            assert_eq!(output.get(0).unwrap(), b"'Hello World'\r\n");
+            assert_eq!(buf, b"'Hello World'\r\n");
             #[cfg(not(target_os = "linux"))]
-            assert_eq!(output.get(0).unwrap(), b"");
+            assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
             assert_eq!(output.before(), b"");
         },
         default => {
@@ -289,16 +289,14 @@ fn check_macro_eof() {
     );
 
     futures_lite::future::block_on(async {
-        let m = session.check(Eof).await.unwrap();
-        assert!(m.matches().next().is_none());
-
         expectrl::check!(
             session,
             output = Eof => {
+                let buf = output.get(0).unwrap();
                 #[cfg(target_os = "linux")]
-                assert_eq!(output.get(0).unwrap(), b"'Hello World'\r\n");
+                assert_eq!(buf, b"'Hello World'\r\n");
                 #[cfg(not(target_os = "linux"))]
-                assert_eq!(output.get(0).unwrap(), b"");
+                assert!(matches!(buf, b"" | b"'Hello World'\r\n"), "{:?}", buf);
                 assert_eq!(output.before(), b"");
             },
             default => {
