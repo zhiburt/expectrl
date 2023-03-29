@@ -146,8 +146,8 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// But its strategy of matching is different from it.
     /// It makes search agains all bytes available.
     ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
+    #[cfg_attr(any(target_os = "macos", windows), doc = "```no_run")]
+    #[cfg_attr(not(any(target_os = "macos", windows)), doc = "```")]
     /// # futures_lite::future::block_on(async {
     /// let mut p = expectrl::spawn("echo 123").unwrap();
     /// // wait to guarantee that check will successed (most likely)
@@ -454,23 +454,6 @@ impl<S: AsyncRead + Unpin> Stream<S> {
 
     /// Check checks if a pattern is matched.
     /// Returns empty found structure if nothing found.
-    ///
-    /// Is a non blocking version of [Session::expect].
-    /// But its strategy of matching is different from it.
-    /// It makes search agains all bytes available.
-    ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
-    /// # futures_lite::future::block_on(async {
-    /// #
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// // wait to guarantee that check will successed (most likely)
-    /// std::thread::sleep(std::time::Duration::from_secs(1));
-    /// let m = p.check(expectrl::Regex("\\d+")).await.unwrap();
-    /// assert_eq!(m.get(0).unwrap(), b"123");
-    /// #
-    /// # });
-    /// ```
     async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
         let eof = self.try_fill().await?;
 

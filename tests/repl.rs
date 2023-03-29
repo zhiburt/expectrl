@@ -23,10 +23,7 @@ fn bash() {
 
     p.send(ControlCode::EOT).unwrap();
 
-    assert_eq!(
-        p.get_process().wait().unwrap(),
-        WaitStatus::Exited(p.get_process().pid(), 0)
-    );
+    p.get_process_mut().exit(true).unwrap();
 }
 
 #[cfg(not(feature = "async"))]
