@@ -30,18 +30,19 @@ fn exec(shell: &mut ReplSession, cmd: &str) -> Result<String> {
 }
 
 #[cfg(all(unix, feature = "async"))]
-fn main() -> Result<()>{
+fn main() -> Result<()> {
     futures_lite::future::block_on(async {
         let mut p = expectrl::spawn("sh")?;
         p.get_process_mut().set_echo(true, None)?;
-    
-        let mut shell = ReplSession::new(p, String::from("sh-5.1$"), Some(String::from("exit")), true);
-    
+
+        let mut shell =
+            ReplSession::new(p, String::from("sh-5.1$"), Some(String::from("exit")), true);
+
         shell.expect_prompt().await?;
-    
+
         let output = exec(&mut shell, "echo Hello World").await?;
         println!("{:?}", output);
-    
+
         let output = exec(&mut shell, "echo '2 + 3' | bc").await?;
         println!("{:?}", output);
 
