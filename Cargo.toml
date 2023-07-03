@@ -1,6 +1,6 @@
 [package]
 name = "expectrl"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
 edition = "2021"
 resolver = "2"
