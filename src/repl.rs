@@ -254,8 +254,7 @@ impl<P, S: Read + NonBlocking> ReplSession<P, S> {
     }
 
     fn _expect_prompt(&mut self) -> Result<Captures, Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt)
+        self.session.expect(&self.prompt)
     }
 }
 
@@ -268,8 +267,7 @@ impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
     }
 
     async fn _expect_prompt(&mut self) -> Result<Captures, Error> {
-        let prompt = self.prompt.clone();
-        self.expect(prompt).await
+        self.session.expect(&self.prompt).await
     }
 }
 
@@ -301,7 +299,7 @@ impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
     /// In async version we it won't be send on Drop so,
     /// If you wan't it to be send you must do it yourself.
     pub fn exit(&mut self) -> Result<(), Error> {
-        if let Some(quit_command) = self.quit_command.clone() {
+        if let Some(quit_command) = &self.quit_command {
             self.session.send_line(quit_command)?;
         }
 
@@ -334,7 +332,7 @@ impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
     /// In async version we it won't be send on Drop so,
     /// If you wan't it to be send you must do it yourself.
     pub async fn exit(&mut self) -> Result<(), Error> {
-        if let Some(quit_command) = self.quit_command.clone() {
+        if let Some(quit_command) = &self.quit_command {
             self.session.send_line(quit_command).await?;
         }
 

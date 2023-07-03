@@ -57,6 +57,12 @@ impl From<io::Error> for Error {
     }
 }
 
+impl From<Error> for io::Error {
+    fn from(err: Error) -> Self {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
+}
+
 pub(crate) fn to_io_error<E: Display>(message: &'static str) -> impl FnOnce(E) -> io::Error {
     move |e: E| io::Error::new(io::ErrorKind::Other, format!("{}; {}", message, e))
 }
