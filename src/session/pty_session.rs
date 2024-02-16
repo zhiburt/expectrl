@@ -103,7 +103,7 @@ mod sync {
 
 #[cfg(feature = "async")]
 mod async_pty {
-    use std::io::{self, BufRead, Read, Stdout, Write, Result};
+    use std::io::{Stdout, Result};
     use crate::{
         process::unix::{AsyncPtyStream, UnixProcess},
         session::{Session, OsProcess},

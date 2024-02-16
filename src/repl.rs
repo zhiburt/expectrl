@@ -3,23 +3,15 @@
 use crate::{
     error::Error,
     stream::StreamSink,
-    session::{OsProcess, OsProcessStream, PtySession},
+    session::PtySession,
     Captures, Session,
 };
 use std::ops::{Deref, DerefMut};
-
-#[cfg(not(feature = "async"))]
-use crate::process::NonBlocking;
-#[cfg(not(feature = "async"))]
-use std::io::{Read, Write};
 
 #[cfg(unix)]
 use std::process::Command;
 
 use crate::spawn;
-
-#[cfg(feature = "async")]
-use futures_lite::{AsyncRead, AsyncWrite};
 
 /// Spawn a bash session.
 ///
