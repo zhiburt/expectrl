@@ -2,7 +2,8 @@
 
 use crate::{
     error::Error,
-    session::{OsProcess, OsProcessStream},
+    stream::StreamSink,
+    session::{OsProcess, OsProcessStream, PtySession},
     Captures, Session,
 };
 use std::ops::{Deref, DerefMut};
@@ -190,19 +191,19 @@ pub async fn spawn_powershell() -> Result<ReplSession, Error> {
 /// you have a prompt where a user inputs commands and the shell
 /// which executes them and manages IO streams.
 #[derive(Debug)]
-pub struct ReplSession<P = OsProcess, S = OsProcessStream> {
+pub struct ReplSession {
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.
     prompt: String,
     /// A pseudo-teletype session with a spawned process.
-    session: Session<P, S>,
+    session: PtySession,
     /// A command which will be called before termination.
     quit_command: Option<String>,
     /// Flag to see if a echo is turned on.
     is_echo_on: bool,
 }
 
-impl<P, S> ReplSession<P, S> {
+impl ReplSession {
     /// Spawn function creates a repl session.
     ///
     /// The argument list is:
@@ -210,8 +211,8 @@ impl<P, S> ReplSession<P, S> {
     ///     - prompt; a string which will identify that the command was run.
     ///     - quit_command; a command which will be called when [ReplSession] instance is dropped.
     ///     - is_echo_on; determines whether the prompt check will be done twice.
-    pub fn new(
-        session: Session<P, S>,
+    pub fn new_pty(
+        session: PtySession,
         prompt: String,
         quit_command: Option<String>,
         is_echo: bool,
@@ -222,6 +223,21 @@ impl<P, S> ReplSession<P, S> {
             quit_command,
             is_echo_on: is_echo,
         }
+    }
+    
+    /// Spawn a session.
+    pub fn new(
+        session: Session,
+        prompt: String,
+        quit_command: Option<String>,
+        is_echo: bool,
+    ) -> Self {
+        Self::new_pty(
+            PtySession::Default(session),
+            prompt,
+            quit_command,
+            is_echo,
+        )
     }
 
     /// Get a used prompt.
@@ -240,13 +256,13 @@ impl<P, S> ReplSession<P, S> {
     }
 
     /// Get an inner session.
-    pub fn into_session(self) -> Session<P, S> {
+    pub fn into_session(self) -> PtySession {
         self.session
     }
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S: Read + NonBlocking> ReplSession<P, S> {
+impl ReplSession {
     /// Block until prompt is found
     pub fn expect_prompt(&mut self) -> Result<(), Error> {
         let _ = self._expect_prompt()?;
@@ -259,7 +275,7 @@ impl<P, S: Read + NonBlocking> ReplSession<P, S> {
 }
 
 #[cfg(feature = "async")]
-impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
+impl ReplSession {
     /// Block until prompt is found
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
         let _ = self._expect_prompt().await?;
@@ -272,10 +288,10 @@ impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
 }
 
 #[cfg(not(feature = "async"))]
-impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
+impl ReplSession {
     /// Send a command to a repl and verifies that it exited.
     /// Returning it's output.
-    pub fn execute<SS: AsRef<str> + Clone>(&mut self, cmd: SS) -> Result<Vec<u8>, Error> {
+    pub fn execute<S: AsRef<str> + Clone>(&mut self, cmd: S) -> Result<Vec<u8>, Error> {
         self.send_line(cmd)?;
         let found = self._expect_prompt()?;
         Ok(found.before().to_vec())
@@ -308,7 +324,7 @@ impl<P, S: Read + NonBlocking + Write> ReplSession<P, S> {
 }
 
 #[cfg(feature = "async")]
-impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
+impl ReplSession {
     /// Send a command to a repl and verifies that it exited.
     pub async fn execute(&mut self, cmd: impl AsRef<str>) -> Result<Vec<u8>, Error> {
         self.send_line(cmd).await?;
@@ -340,16 +356,69 @@ impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
     }
 }
 
-impl<P, S> Deref for ReplSession<P, S> {
-    type Target = Session<P, S>;
+impl Deref for ReplSession {
+    type Target = PtySession;
 
     fn deref(&self) -> &Self::Target {
         &self.session
     }
 }
 
-impl<P, S> DerefMut for ReplSession<P, S> {
+impl DerefMut for ReplSession {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.session
+    }
+}
+
+#[cfg(not(feature = "async"))]
+mod sync {
+    use super::ReplSession ;
+    use crate::{Error, Needle, Captures, stream::StreamSink};
+    use std::io::{Write, Read, Result, BufRead};
+
+    impl StreamSink for ReplSession {
+        fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> Result<()> {
+            self.session.send(buf)
+        }
+
+        fn send_line(&mut self, text: &str) -> Result<()> {
+            self.session.send_line(text)
+        }
+
+        fn expect<N>(
+            &mut self,
+            needle: N,
+        ) -> std::result::Result<Captures, Error>
+        where
+            N: Needle,
+        {
+            self.session.expect(needle)
+        }
+    }
+
+    impl Write for ReplSession {
+        fn write(&mut self, buf: &[u8]) -> Result<usize> {
+            self.session.write(buf)
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            self.session.flush()
+        }
+    }
+
+    impl BufRead for ReplSession {
+        fn fill_buf(&mut self) -> Result<&[u8]> {
+            self.session.fill_buf()
+        }
+
+        fn consume(&mut self, amt: usize) {
+            self.session.consume(amt)
+        }
+    }
+
+    impl Read for ReplSession {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+            self.session.read(buf)
+        }
     }
 }

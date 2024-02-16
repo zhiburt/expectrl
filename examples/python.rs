@@ -1,4 +1,4 @@
-use expectrl::{repl::spawn_python, Regex};
+use expectrl::{repl::spawn_python, Regex, StreamSink};
 
 #[cfg(not(feature = "async"))]
 fn main() {

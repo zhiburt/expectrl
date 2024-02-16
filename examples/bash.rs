@@ -1,7 +1,7 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
 #[cfg(unix)]
-use expectrl::{repl::spawn_bash, ControlCode, Regex};
+use expectrl::{repl::spawn_bash, ControlCode, Regex, StreamSink};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
