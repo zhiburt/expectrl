@@ -9,7 +9,6 @@ mod sync {
 
     /// Wraps a session that may be logged to stdout.
     #[derive(Debug)]
-    #[doc(hidden)]
     pub enum PtySession {
         /// Default pty session.
         Default(Session),
@@ -112,7 +111,6 @@ mod async_pty {
 
     /// Wraps a session that may be logged to stdout.
     #[derive(Debug)]
-    #[doc(hidden)]
     pub enum PtySession {
         /// Default pty session.
         Default(Session),

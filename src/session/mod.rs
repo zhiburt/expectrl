@@ -17,11 +17,10 @@
 
 #[cfg(feature = "async")]
 mod async_session;
-mod pty_session;
+#[doc(hidden)]
+pub mod pty_session;
 #[cfg(not(feature = "async"))]
 mod sync_session;
-
-pub use pty_session::PtySession;
 
 use std::{io::Write, process::Command};
 

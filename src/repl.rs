@@ -1,6 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{error::Error, session::{PtySession, LogSession}, stream::StreamSink, Captures, Session};
+use crate::{error::Error, session::{pty_session::PtySession, LogSession}, stream::StreamSink, Captures, Session};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
