@@ -3,29 +3,26 @@
 pub mod log;
 pub mod stdin;
 
-use crate::{Captures, Needle, Error};
+use crate::{Captures, Error, Needle};
 use std::io;
 
 #[cfg(not(feature = "async"))]
-use std::io::{Write, Read, BufRead};
+use std::io::{BufRead, Read, Write};
 
 #[cfg(feature = "async")]
-use futures_lite::{AsyncRead, AsyncWrite, AsyncBufRead};
+use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite};
 
 /// Trait for types that can read and write to child programs.
 #[cfg(not(feature = "async"))]
 pub trait StreamSink: Write + Read + BufRead {
     /// Send a buffer to the child program.
     fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()>;
-    
+
     /// Send a line to the child program.
     fn send_line(&mut self, text: &str) -> io::Result<()>;
-    
+
     /// Expect output from the child program.
-    fn expect<N>(
-        &mut self,
-        needle: N,
-    ) -> Result<Captures, Error>
+    fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle;
 }
@@ -36,15 +33,12 @@ pub trait StreamSink: Write + Read + BufRead {
 pub trait StreamSink: AsyncRead + AsyncWrite + AsyncBufRead + Unpin {
     /// Send a buffer to the child program.
     async fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()>;
-    
+
     /// Send a line to the child program.
     async fn send_line(&mut self, text: &str) -> io::Result<()>;
-    
+
     /// Expect output from the child program.
-    async fn expect<N>(
-        &mut self,
-        needle: N,
-    ) -> Result<Captures, Error>
+    async fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle;
 }

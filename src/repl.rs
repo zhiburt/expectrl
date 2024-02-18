@@ -1,11 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use crate::{
-    error::Error,
-    stream::StreamSink,
-    session::PtySession,
-    Captures, Session,
-};
+use crate::{error::Error, session::{PtySession, LogSession}, stream::StreamSink, Captures, Session};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(unix)]
@@ -196,40 +191,46 @@ pub struct ReplSession {
 }
 
 impl ReplSession {
-    /// Spawn function creates a repl session.
+    /// Creates a repl session that logs I/O.
     ///
     /// The argument list is:
     ///     - session; a spawned session which repl will wrap.
     ///     - prompt; a string which will identify that the command was run.
     ///     - quit_command; a command which will be called when [ReplSession] instance is dropped.
     ///     - is_echo_on; determines whether the prompt check will be done twice.
-    pub fn new_pty(
-        session: PtySession,
+    pub fn new_log(
+        session: LogSession,
         prompt: String,
         quit_command: Option<String>,
         is_echo: bool,
     ) -> Self {
         Self {
-            session,
+            session: PtySession::Logger(session),
             prompt,
             quit_command,
             is_echo_on: is_echo,
         }
     }
-    
-    /// Spawn a session.
+
+    /// Creates a repl session.
+    ///
+    /// The argument list is:
+    ///     - session; a spawned session which repl will wrap.
+    ///     - prompt; a string which will identify that the command was run.
+    ///     - quit_command; a command which will be called when [ReplSession] instance is dropped.
+    ///     - is_echo_on; determines whether the prompt check will be done twice.
     pub fn new(
         session: Session,
         prompt: String,
         quit_command: Option<String>,
         is_echo: bool,
     ) -> Self {
-        Self::new_pty(
-            PtySession::Default(session),
+        Self {
+            session: PtySession::Default(session),
             prompt,
             quit_command,
-            is_echo,
-        )
+            is_echo_on: is_echo,
+        }
     }
 
     /// Get a used prompt.
@@ -364,9 +365,9 @@ impl DerefMut for ReplSession {
 
 #[cfg(not(feature = "async"))]
 mod sync {
-    use super::ReplSession ;
-    use crate::{Error, Needle, Captures, stream::StreamSink};
-    use std::io::{Write, Read, Result, BufRead};
+    use super::ReplSession;
+    use crate::{stream::StreamSink, Captures, Error, Needle};
+    use std::io::{BufRead, Read, Result, Write};
 
     impl StreamSink for ReplSession {
         fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> Result<()> {
@@ -377,10 +378,7 @@ mod sync {
             self.session.send_line(text)
         }
 
-        fn expect<N>(
-            &mut self,
-            needle: N,
-        ) -> std::result::Result<Captures, Error>
+        fn expect<N>(&mut self, needle: N) -> std::result::Result<Captures, Error>
         where
             N: Needle,
         {
