@@ -3,8 +3,7 @@
 use crate::{
     error::Error,
     session::{pty_session::PtySession, LogSession},
-    stream::Expect,
-    Captures, Session,
+    Captures, Expect, Session,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -371,7 +370,7 @@ impl DerefMut for ReplSession {
 #[cfg(not(feature = "async"))]
 mod sync {
     use super::ReplSession;
-    use crate::{stream::Expect, Captures, Error, Needle};
+    use crate::{Captures, Error, Expect, Needle};
     use std::io::{BufRead, Read, Result, Write};
 
     impl Expect for ReplSession {

@@ -2,8 +2,7 @@
 mod sync {
     use crate::{
         session::{LogSession, OsProcess, Session},
-        stream::Expect,
-        Captures, Needle,
+        Captures, Expect, Needle,
     };
     use std::io::{self, BufRead, Read, Write};
 
