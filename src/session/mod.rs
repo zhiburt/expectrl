@@ -27,7 +27,7 @@ use std::{io::Write, process::Command};
 use crate::{
     interact::InteractSession,
     process::Process,
-    stream::log::{DefaultLogWriter, LogStream, LogWriter, TeeLogWriter},
+    stream::log::{DefaultLogWriter, LogStream, TeeLogWriter},
     Error,
 };
 

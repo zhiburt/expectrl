@@ -2,6 +2,3 @@
 
 pub mod log;
 pub mod stdin;
-
-use crate::{Captures, Error, Needle};
-use std::io;
