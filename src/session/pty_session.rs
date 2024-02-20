@@ -1,7 +1,7 @@
 #[cfg(not(feature = "async"))]
 mod sync {
     use crate::{
-        session::{OsProcess, Session, LogSession},
+        session::{LogSession, OsProcess, Session},
         stream::StreamSink,
         Captures, Needle,
     };
@@ -98,7 +98,7 @@ mod sync {
 mod async_pty {
     use crate::{
         process::unix::{AsyncPtyStream, UnixProcess},
-        session::{OsProcess, Session, LogSession},
+        session::{LogSession, OsProcess, Session},
         stream::{log::LogStream, StreamSink},
         Captures, Needle,
     };
