@@ -2,7 +2,7 @@
 mod sync {
     use crate::{
         session::{LogSession, OsProcess, Session},
-        stream::StreamSink,
+        stream::Expect,
         Captures, Needle,
     };
     use std::io::{self, BufRead, Read, Write};
@@ -26,7 +26,7 @@ mod sync {
         }
     }
 
-    impl StreamSink for PtySession {
+    impl Expect for PtySession {
         fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
             match self {
                 PtySession::Default(s) => s.send(buf),
@@ -99,7 +99,7 @@ mod async_pty {
     use crate::{
         process::unix::{AsyncPtyStream, UnixProcess},
         session::{LogSession, OsProcess, Session},
-        stream::{log::LogStream, StreamSink},
+        stream::{log::LogStream, Expect},
         Captures, Needle,
     };
     use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite};
@@ -129,7 +129,7 @@ mod async_pty {
     }
 
     #[async_trait::async_trait(?Send)]
-    impl StreamSink for PtySession {
+    impl Expect for PtySession {
         async fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> Result<()> {
             match self {
                 PtySession::Default(s) => s.send(buf).await,

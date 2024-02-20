@@ -14,7 +14,7 @@ use futures_lite::{AsyncBufRead, AsyncRead, AsyncWrite};
 
 /// Trait for types that can read and write to child programs.
 #[cfg(not(feature = "async"))]
-pub trait StreamSink: Write + Read + BufRead {
+pub trait Expect: Write + Read + BufRead {
     /// Send a buffer to the child program.
     fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()>;
 
@@ -30,7 +30,7 @@ pub trait StreamSink: Write + Read + BufRead {
 /// Trait for types that can read and write to child programs.
 #[cfg(feature = "async")]
 #[async_trait::async_trait(?Send)]
-pub trait StreamSink: AsyncRead + AsyncWrite + AsyncBufRead + Unpin {
+pub trait Expect: AsyncRead + AsyncWrite + AsyncBufRead + Unpin {
     /// Send a buffer to the child program.
     async fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()>;
 

@@ -134,7 +134,7 @@ pub use needle::{Any, Eof, NBytes, Needle, Regex};
 pub use ptyprocess::{Signal, WaitStatus};
 
 pub use session::Session;
-pub use stream::StreamSink;
+pub use stream::Expect;
 
 /// Spawn spawnes a new session.
 ///
