@@ -162,6 +162,10 @@ impl<P, S> Session<P, S> {
 
 /// Set a logger which formats and prefixes the IO.
 ///
+/// Be aware that if you are writing data that would be masked,
+/// for example, entering a password at an interactive prompt
+/// the plain text value will be logged.
+///
 /// # Example
 ///
 /// ```
@@ -184,6 +188,10 @@ where
 
 /// Set a logger which formats and prefixes the IO.
 ///
+/// Be aware that if you are writing data that would be masked,
+/// for example, entering a password at an interactive prompt
+/// the plain text value will be logged.
+///
 /// # Example
 ///
 /// ```
@@ -204,6 +212,10 @@ where
 }
 
 /// Set a logger which does not format the IO.
+///
+/// Be aware that if you are writing data that would be masked,
+/// for example, entering a password at an interactive prompt
+/// the plain text value will be logged.
 #[cfg(not(feature = "async"))]
 pub fn tee<W, P, S>(
     session: Session<P, S>,
@@ -217,6 +229,10 @@ where
 }
 
 /// Set a logger which does not format the IO.
+///
+/// Be aware that if you are writing data that would be masked,
+/// for example, entering a password at an interactive prompt
+/// the plain text value will be logged.
 #[cfg(feature = "async")]
 pub fn log<W, P, S>(
     session: Session<P, S>,
