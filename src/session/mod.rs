@@ -24,7 +24,12 @@ mod sync_session;
 
 use std::{io::Write, process::Command};
 
-use crate::{interact::InteractSession, process::Process, stream::log::LogStream, Error};
+use crate::{
+    interact::InteractSession,
+    process::Process,
+    stream::log::{DefaultLogWriter, LogStream, LogWriter, TeeLogWriter},
+    Error,
+};
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
@@ -47,7 +52,7 @@ type OsProcStream = crate::process::windows::ProcessStream;
 type OsProcStream = crate::process::windows::AsyncProcessStream;
 
 /// Session that is logged.
-pub type LogSession = Session<OsProc, LogStream<OsProcStream, std::io::Stdout>>;
+pub type LogSession = Session<OsProc, LogStream<OsProcStream, std::io::Stdout, DefaultLogWriter>>;
 
 /// A type alias for OS process which can run a [`Session`] and a default one.
 pub type OsProcess = OsProc;
@@ -151,7 +156,7 @@ impl<P, S> Session<P, S> {
     }
 }
 
-/// Set a logger which will write each Read/Write operation into the writter.
+/// Set a logger which formats and prefixes the IO.
 ///
 /// # Example
 ///
@@ -162,15 +167,18 @@ impl<P, S> Session<P, S> {
 /// let p = log(p, std::io::stdout());
 /// ```
 #[cfg(not(feature = "async"))]
-pub fn log<W, P, S>(session: Session<P, S>, dst: W) -> Result<Session<P, LogStream<S, W>>, Error>
+pub fn log<W, P, S>(
+    session: Session<P, S>,
+    dst: W,
+) -> Result<Session<P, LogStream<S, W, DefaultLogWriter>>, Error>
 where
     W: Write,
     S: Read,
 {
-    session.swap_stream(|s| LogStream::new(s, dst))
+    session.swap_stream(|s| LogStream::new(s, dst, DefaultLogWriter))
 }
 
-/// Set a logger which will write each Read/Write operation into the writter.
+/// Set a logger which formats and prefixes the IO.
 ///
 /// # Example
 ///
@@ -181,9 +189,37 @@ where
 /// let p = log(p, std::io::stdout());
 /// ```
 #[cfg(feature = "async")]
-pub fn log<W, P, S>(session: Session<P, S>, dst: W) -> Result<Session<P, LogStream<S, W>>, Error>
+pub fn log<W, P, S>(
+    session: Session<P, S>,
+    dst: W,
+) -> Result<Session<P, LogStream<S, W, DefaultLogWriter>>, Error>
 where
     W: Write,
 {
-    session.swap_stream(|s| LogStream::new(s, dst))
+    session.swap_stream(|s| LogStream::new(s, dst, DefaultLogWriter))
+}
+
+/// Set a logger which does not format the IO.
+#[cfg(not(feature = "async"))]
+pub fn tee<W, P, S>(
+    session: Session<P, S>,
+    dst: W,
+) -> Result<Session<P, LogStream<S, W, TeeLogWriter>>, Error>
+where
+    W: Write,
+    S: Read,
+{
+    session.swap_stream(|s| LogStream::new(s, dst, TeeLogWriter))
+}
+
+/// Set a logger which does not format the IO.
+#[cfg(feature = "async")]
+pub fn log<W, P, S>(
+    session: Session<P, S>,
+    dst: W,
+) -> Result<Session<P, LogStream<S, W, TeeLogWriter>>, Error>
+where
+    W: Write,
+{
+    session.swap_stream(|s| LogStream::new(s, dst, TeeLogWriter))
 }
