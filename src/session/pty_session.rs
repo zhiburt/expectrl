@@ -1,7 +1,7 @@
 #[cfg(not(feature = "async"))]
 mod sync {
     use crate::{
-        session::{LogSession, OsProcess, Session},
+        session::{DefaultLogSession, OsProcess, Session, TeeLogSession},
         Captures, Expect, Needle,
     };
     use std::io::{self, BufRead, Read, Write};
@@ -11,8 +11,10 @@ mod sync {
     pub enum PtySession {
         /// Default pty session.
         Default(Session),
-        /// Pty session that logs to stdout.
-        Logger(LogSession),
+        /// Pty session that logs formatted output to stdout.
+        Logger(DefaultLogSession),
+        /// Pty session that passes through I/O to stdout.
+        TeeLogger(TeeLogSession),
     }
 
     impl PtySession {
@@ -21,6 +23,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.get_process(),
                 PtySession::Logger(s) => s.get_process(),
+                PtySession::TeeLogger(s) => s.get_process(),
             }
         }
     }
@@ -30,6 +33,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.send(buf),
                 PtySession::Logger(s) => s.send(buf),
+                PtySession::TeeLogger(s) => s.send(buf),
             }
         }
 
@@ -37,6 +41,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.send_line(text),
                 PtySession::Logger(s) => s.send_line(text),
+                PtySession::TeeLogger(s) => s.send_line(text),
             }
         }
 
@@ -47,6 +52,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.expect(needle),
                 PtySession::Logger(s) => s.expect(needle),
+                PtySession::TeeLogger(s) => s.expect(needle),
             }
         }
     }
@@ -56,6 +62,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.write(buf),
                 PtySession::Logger(s) => s.write(buf),
+                PtySession::TeeLogger(s) => s.write(buf),
             }
         }
 
@@ -63,6 +70,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.flush(),
                 PtySession::Logger(s) => s.flush(),
+                PtySession::TeeLogger(s) => s.flush(),
             }
         }
     }
@@ -72,6 +80,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.fill_buf(),
                 PtySession::Logger(s) => s.fill_buf(),
+                PtySession::TeeLogger(s) => s.fill_buf(),
             }
         }
 
@@ -79,6 +88,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.consume(amt),
                 PtySession::Logger(s) => s.consume(amt),
+                PtySession::TeeLogger(s) => s.consume(amt),
             }
         }
     }
@@ -88,6 +98,7 @@ mod sync {
             match self {
                 PtySession::Default(s) => s.read(buf),
                 PtySession::Logger(s) => s.read(buf),
+                PtySession::TeeLogger(s) => s.read(buf),
             }
         }
     }
@@ -97,7 +108,7 @@ mod sync {
 mod async_pty {
     use crate::{
         process::unix::{AsyncPtyStream, UnixProcess},
-        session::{LogSession, OsProcess, Session},
+        session::{DefaultLogSession, OsProcess, Session, TeeLogSession},
         stream::{log::LogStream, Expect},
         Captures, Needle,
     };
@@ -113,8 +124,10 @@ mod async_pty {
     pub enum PtySession {
         /// Default pty session.
         Default(Session),
-        /// Pty session that logs to stdout.
-        Logger(LogSession),
+        /// Pty session that logs formatted output to stdout.
+        Logger(DefaultLogSession),
+        /// Pty session that passes through I/O to stdout.
+        TeeLogger(TeeLogSession),
     }
 
     impl PtySession {
@@ -123,6 +136,7 @@ mod async_pty {
             match self {
                 PtySession::Default(s) => s.get_process(),
                 PtySession::Logger(s) => s.get_process(),
+                PtySession::TeeLogger(s) => s.get_process(),
             }
         }
     }
@@ -133,6 +147,7 @@ mod async_pty {
             match self {
                 PtySession::Default(s) => s.send(buf).await,
                 PtySession::Logger(s) => s.send(buf).await,
+                PtySession::TeeLogger(s) => s.send(buf).await,
             }
         }
 
@@ -140,6 +155,7 @@ mod async_pty {
             match self {
                 PtySession::Default(s) => s.send_line(text).await,
                 PtySession::Logger(s) => s.send_line(text).await,
+                PtySession::TeeLogger(s) => s.send_line(text).await,
             }
         }
 
@@ -150,6 +166,7 @@ mod async_pty {
             match self {
                 PtySession::Default(s) => s.expect(needle).await,
                 PtySession::Logger(s) => s.expect(needle).await,
+                PtySession::TeeLogger(s) => s.expect(needle).await,
             }
         }
     }
@@ -163,6 +180,7 @@ mod async_pty {
             match &mut *self {
                 PtySession::Default(s) => Pin::new(s).poll_write(cx, buf),
                 PtySession::Logger(s) => Pin::new(s).poll_write(cx, buf),
+                PtySession::TeeLogger(s) => Pin::new(s).poll_write(cx, buf),
             }
         }
 
@@ -170,6 +188,7 @@ mod async_pty {
             match &mut *self {
                 PtySession::Default(s) => Pin::new(s).poll_flush(cx),
                 PtySession::Logger(s) => Pin::new(s).poll_flush(cx),
+                PtySession::TeeLogger(s) => Pin::new(s).poll_flush(cx),
             }
         }
 
@@ -177,6 +196,7 @@ mod async_pty {
             match &mut *self {
                 PtySession::Default(s) => Pin::new(s).poll_close(cx),
                 PtySession::Logger(s) => Pin::new(s).poll_close(cx),
+                PtySession::TeeLogger(s) => Pin::new(s).poll_close(cx),
             }
         }
     }
@@ -190,6 +210,7 @@ mod async_pty {
             match &mut *self {
                 PtySession::Default(s) => Pin::new(s).poll_read(cx, buf),
                 PtySession::Logger(s) => Pin::new(s).poll_read(cx, buf),
+                PtySession::TeeLogger(s) => Pin::new(s).poll_read(cx, buf),
             }
         }
     }
@@ -200,6 +221,7 @@ mod async_pty {
             match this {
                 PtySession::Default(s) => Pin::new(s).poll_fill_buf(cx),
                 PtySession::Logger(s) => Pin::new(s).poll_fill_buf(cx),
+                PtySession::TeeLogger(s) => Pin::new(s).poll_fill_buf(cx),
             }
         }
 
@@ -207,6 +229,7 @@ mod async_pty {
             match &mut *self {
                 PtySession::Default(s) => Pin::new(s).consume(amt),
                 PtySession::Logger(s) => Pin::new(s).consume(amt),
+                PtySession::TeeLogger(s) => Pin::new(s).consume(amt),
             }
         }
     }

@@ -2,7 +2,7 @@
 
 use crate::{
     error::Error,
-    session::{pty_session::PtySession, LogSession},
+    session::{pty_session::PtySession, DefaultLogSession, TeeLogSession},
     Captures, Expect, Session,
 };
 use std::ops::{Deref, DerefMut};
@@ -203,13 +203,28 @@ impl ReplSession {
     ///     - quit_command; a command which will be called when [ReplSession] instance is dropped.
     ///     - is_echo_on; determines whether the prompt check will be done twice.
     pub fn new_log(
-        session: LogSession,
+        session: DefaultLogSession,
         prompt: String,
         quit_command: Option<String>,
         is_echo: bool,
     ) -> Self {
         Self {
             session: PtySession::Logger(session),
+            prompt,
+            quit_command,
+            is_echo_on: is_echo,
+        }
+    }
+
+    /// Creates a repl session that logs I/O without formatting.
+    pub fn new_tee(
+        session: TeeLogSession,
+        prompt: String,
+        quit_command: Option<String>,
+        is_echo: bool,
+    ) -> Self {
+        Self {
+            session: PtySession::TeeLogger(session),
             prompt,
             quit_command,
             is_echo_on: is_echo,

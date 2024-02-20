@@ -51,8 +51,12 @@ type OsProcStream = crate::process::windows::ProcessStream;
 #[cfg(all(windows, feature = "async"))]
 type OsProcStream = crate::process::windows::AsyncProcessStream;
 
-/// Session that is logged.
-pub type LogSession = Session<OsProc, LogStream<OsProcStream, std::io::Stdout, DefaultLogWriter>>;
+/// Session that is logged using the default writer.
+pub type DefaultLogSession =
+    Session<OsProc, LogStream<OsProcStream, std::io::Stdout, DefaultLogWriter>>;
+
+/// Session that is logged using the tee writer.
+pub type TeeLogSession = Session<OsProc, LogStream<OsProcStream, std::io::Stdout, TeeLogWriter>>;
 
 /// A type alias for OS process which can run a [`Session`] and a default one.
 pub type OsProcess = OsProc;
