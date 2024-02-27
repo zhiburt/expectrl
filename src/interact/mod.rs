@@ -48,9 +48,7 @@
 
 pub mod actions;
 mod context;
-mod opts;
 mod session;
 
 pub use context::Context;
-pub use opts::{InteractOptions, NoAction, NoFilter};
 pub use session::InteractSession;

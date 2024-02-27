@@ -48,6 +48,8 @@ type OsProcStream = crate::process::windows::AsyncProcessStream;
 pub type OsProcess = OsProc;
 /// A type alias for OS process stream which is a default one for [`Session`].
 pub type OsProcessStream = OsProcStream;
+/// A type alias for OS session.
+pub type OsSession = Session<OsProc, OsProcStream>;
 
 #[cfg(feature = "async")]
 pub use async_session::Session;
@@ -55,7 +57,7 @@ pub use async_session::Session;
 #[cfg(not(feature = "async"))]
 pub use sync_session::Session;
 
-impl Session {
+impl Session<OsProc, OsProcStream> {
     /// Spawns a session on a platform process.
     ///
     /// # Example
@@ -141,8 +143,8 @@ impl<P, S> Session<P, S> {
     /// ```
     ///
     /// [`Read`]: std::io::Read
-    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O> {
-        InteractSession::new(self, input, output)
+    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O, ()> {
+        InteractSession::new(self, input, output, ())
     }
 }
 

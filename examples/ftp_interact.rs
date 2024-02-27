@@ -1,32 +1,33 @@
 use expectrl::{
-    interact::{actions::lookup::Lookup, InteractOptions},
-    spawn,
-    stream::stdin::Stdin,
-    ControlCode, Error, Regex,
+    interact::actions::lookup::Lookup, spawn, stream::stdin::Stdin, ControlCode, Error, Expect,
+    Regex,
 };
 use std::io::stdout;
 
 #[cfg(not(all(windows, feature = "polling")))]
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
-    let mut auth = false;
-    let mut login_lookup = Lookup::new();
-    let opts = InteractOptions::new(&mut auth).on_output(|ctx| {
-        if login_lookup
-            .on(ctx.buf, ctx.eof, "Login successful")?
-            .is_some()
-        {
-            **ctx.state = true;
-            return Ok(true);
-        }
-
-        Ok(false)
-    });
-
     let mut p = spawn("ftp bks4-speedtest-1.tele2.net")?;
 
+    let mut auth = false;
+    let mut login_lookup = Lookup::new();
     let mut stdin = Stdin::open()?;
-    p.interact(&mut stdin, stdout()).spawn(opts)?;
+
+    p.interact(&mut stdin, stdout())
+        .set_state(&mut auth)
+        .on_output(move |ctx| {
+            if login_lookup
+                .on(ctx.buf, ctx.eof, "Login successful")?
+                .is_some()
+            {
+                **ctx.state = true;
+                return Ok(true);
+            }
+
+            Ok(false)
+        })
+        .spawn()?;
+
     stdin.close()?;
 
     if !auth {

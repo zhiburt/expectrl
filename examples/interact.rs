@@ -1,6 +1,6 @@
 //! To run an example run `cargo run --example interact`.
 
-use expectrl::{interact::InteractOptions, spawn, stream::stdin::Stdin};
+use expectrl::{spawn, stream::stdin::Stdin};
 use std::io::stdout;
 
 #[cfg(unix)]
@@ -20,7 +20,7 @@ fn main() {
     let mut stdin = Stdin::open().expect("Failed to create stdin");
 
     sh.interact(&mut stdin, stdout())
-        .spawn(&mut InteractOptions::default())
+        .spawn()
         .expect("Failed to start interact");
 
     stdin.close().expect("Failed to close a stdin");

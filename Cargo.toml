@@ -36,3 +36,12 @@ crossbeam-channel = { version = "0.5.6", optional = true }
 
 [package.metadata.docs.rs]
 all-features = false
+
+[[target.'cfg(unix)'.example]]
+name = "log"
+path = "examples/log.rs"
+
+[[target.'cfg(windows)'.example]]
+name = "powershell"
+path = "examples/powershell.rs"
+

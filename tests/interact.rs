@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use expectrl::Expect;
+
 #[cfg(not(feature = "async"))]
 use std::io::sink;
 
@@ -12,7 +14,7 @@ use std::io::sink;
 use expectrl::{interact::actions::lookup::Lookup, spawn, stream::stdin::Stdin, NBytes};
 
 #[cfg(not(feature = "async"))]
-use expectrl::WaitStatus;
+use expectrl::process::unix::WaitStatus;
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]

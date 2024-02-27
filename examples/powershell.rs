@@ -1,7 +1,8 @@
 #[cfg(windows)]
-fn main() {
-    use expectrl::{repl::spawn_powershell, ControlCode, Regex};
+use expectrl::{repl::spawn_powershell, ControlCode, Regex};
 
+#[cfg(windows)]
+fn main() {
     #[cfg(feature = "async")]
     {
         futures_lite::future::block_on(async {

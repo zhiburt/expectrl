@@ -1,4 +1,4 @@
-use expectrl::{spawn, Session};
+use expectrl::{session::OsSession, spawn, Expect};
 
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
@@ -195,7 +195,7 @@ fn test_session_as_writer() {
         let _: Box<dyn std::io::Read> = Box::new(spawn("ls").unwrap());
         let _: Box<dyn std::io::BufRead> = Box::new(spawn("ls").unwrap());
 
-        fn _io_copy(mut session: Session) {
+        fn _io_copy(mut session: OsSession) {
             let _ = std::io::copy(&mut std::io::empty(), &mut session).unwrap();
         }
     }

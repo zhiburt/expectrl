@@ -1,4 +1,4 @@
-use expectrl::{spawn, Error};
+use expectrl::{spawn, Error, Expect};
 
 fn main() -> Result<(), Error> {
     let p = spawn("cat")?;

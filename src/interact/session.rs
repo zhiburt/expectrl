@@ -1,41 +1,73 @@
 //! This module contains a [`InteractSession`] which runs an interact session with IO.
 
+// todo: PtyProcess wait_echo optimize by not looping when timout is none
+
 use std::{
-    borrow::{BorrowMut, Cow},
+    borrow::Cow,
     io::{ErrorKind, Write},
 };
-
-use crate::{session::OsProcess, Error, Session};
 
 #[cfg(not(feature = "async"))]
 use std::io::Read;
 
-use super::{Context, InteractOptions};
+use crate::{
+    process::{Healthcheck, Termios},
+    Error, Expect,
+};
+
+use crate::interact::Context;
 #[cfg(all(not(feature = "async"), not(feature = "polling")))]
 use crate::process::NonBlocking;
 
+#[cfg(unix)]
+use crate::process::unix::WaitStatus;
+
+type ExpectResult<T> = Result<T, Error>;
+
 /// InteractConfig represents options of an interactive session.
-#[derive(Debug)]
-pub struct InteractSession<Session, Input, Output> {
+pub struct InteractSession<Session, Input, Output, State> {
     session: Session,
     input: Input,
     output: Output,
     escape_character: u8,
     #[cfg(unix)]
-    status: Option<crate::WaitStatus>,
+    status: Option<WaitStatus>,
+    opts: InteractOptions<Session, Input, Output, State>,
 }
 
-impl<S, I, O> InteractSession<S, I, O> {
-    /// Default escape character.
-    pub const ESCAPE: u8 = 29; // Ctrl-]
+/// Interact options (aka callbacks you can set to be callled being in an interactive mode).
+struct InteractOptions<S, I, O, C> {
+    state: C,
+    input_filter: Option<OptFilter>,
+    output_filter: Option<OptFilter>,
+    input_action: Option<OptAction<S, I, O, C>>,
+    output_action: Option<OptAction<S, I, O, C>>,
+    idle_action: Option<OptAction<S, I, O, C>>,
+}
 
-    /// Creates a new object of [InteractSession].
-    pub fn new(session: S, input: I, output: O) -> InteractSession<S, I, O> {
+type OptAction<S, I, O, C> = Box<dyn FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool>>;
+
+type OptFilter = Box<dyn FnMut(&[u8]) -> ExpectResult<Cow<'_, [u8]>>>;
+
+impl<S, I, O, C> InteractSession<S, I, O, C> {
+    /// Default escape character. <Ctrl-\]>
+    pub const ESCAPE: u8 = 29;
+
+    /// Creates a new object of [`InteractSession`].
+    pub fn new(session: S, input: I, output: O, state: C) -> InteractSession<S, I, O, C> {
         InteractSession {
             input,
             output,
             session,
             escape_character: Self::ESCAPE,
+            opts: InteractOptions {
+                state,
+                input_filter: None,
+                output_filter: None,
+                input_action: None,
+                output_action: None,
+                idle_action: None,
+            },
             #[cfg(unix)]
             status: None,
         }
@@ -54,50 +86,126 @@ impl<S, I, O> InteractSession<S, I, O> {
     /// Which sometimes happens and it's not considered to be a valid [`WaitStatus`], so None is returned.
     ///
     /// [`Self::spawn`]: crate::interact::InteractSession::spawn
-    /// [`WaitStatus`]: crate::WaitStatus
     #[cfg(unix)]
-    pub fn get_status(&self) -> Option<crate::WaitStatus> {
+    pub fn get_status(&self) -> Option<WaitStatus> {
         self.status
     }
 }
 
+impl<S, I, O, C> InteractSession<S, I, O, C> {
+    /// Set a state
+    pub fn set_state<State>(self, state: State) -> InteractSession<S, I, O, State> {
+        let mut s = InteractSession::new(self.session, self.input, self.output, state);
+        s.escape_character = self.escape_character;
+        #[cfg(unix)]
+        {
+            s.status = self.status;
+        }
+
+        s
+    }
+    
+    /// Get a reference on state
+    pub fn get_state(&self) -> &C {
+        &self.opts.state
+    }
+
+    /// Get a mut reference on state
+    pub fn get_state_mut(&mut self) -> &mut C {
+        &mut self.opts.state
+    }
+
+    /// Returns a inner state.
+    pub fn into_state(self) -> C {
+        self.opts.state
+    }
+
+    /// Sets the output filter.
+    /// The output_filter will be passed all the output from the child process.
+    ///
+    /// The filter isn't applied to user's `read` calls through the [`Context`] in callbacks.
+    pub fn output_filter<F>(&mut self, filter: F) -> &mut Self
+    where
+        F: FnMut(&[u8]) -> ExpectResult<Cow<'_, [u8]>> + 'static,
+    {
+        self.opts.output_filter = Some(Box::new(filter));
+        self
+    }
+
+    /// Sets the input filter.
+    /// The input_filter will be passed all the keyboard input from the user.
+    ///
+    /// The input_filter is run BEFORE the check for the escape_character.
+    /// The filter is called BEFORE calling a on_input callback if it's set.
+    pub fn input_filter<F>(&mut self, filter: F) -> &mut Self
+    where
+        F: FnMut(&[u8]) -> ExpectResult<Cow<'_, [u8]>> + 'static,
+    {
+        self.opts.input_filter = Some(Box::new(filter));
+        self
+    }
+
+    /// Puts a hanlder which will be called when users input is detected.
+    ///
+    /// Be aware that currently async version doesn't take a Session as an argument.
+    /// See <https://github.com/zhiburt/expectrl/issues/16>.
+    pub fn on_input<F>(&mut self, action: F) -> &mut Self
+    where
+        F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
+    {
+        self.opts.input_action = Some(Box::new(action));
+        self
+    }
+
+    /// Puts a hanlder which will be called when process output is detected.
+    ///
+    /// IMPORTANT:
+    ///
+    /// Please be aware that your use of [Session::expect], [Session::check] and any `read` operation on session
+    /// will cause the read bytes not to apeard in the output stream!
+    pub fn on_output<F>(&mut self, action: F) -> &mut Self
+    where
+        F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
+    {
+        self.opts.output_action = Some(Box::new(action));
+        self
+    }
+
+    /// Puts a handler which will be called on each interaction when no input is detected.
+    pub fn on_idle<F>(&mut self, action: F) -> &mut Self
+    where
+        F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
+    {
+        self.opts.idle_action = Some(Box::new(action));
+        self
+    }
+}
+
 #[cfg(not(any(feature = "async", feature = "polling")))]
-impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
+impl<S, I, O, C> InteractSession<S, I, O, C>
 where
     I: Read,
     O: Write,
-    S: NonBlocking + Write + Read,
+    S: Expect + Termios + Healthcheck<Status = WaitStatus> + NonBlocking + Write + Read,
 {
     /// Runs the session.
     ///
     /// See [`Session::interact`].
     ///
     /// [`Session::interact`]: crate::session::Session::interact
-    pub fn spawn<C, IF, OF, IA, OA, WA, OPS>(&mut self, mut ops: OPS) -> Result<bool, Error>
-    where
-        OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
-        IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    {
+    pub fn spawn(&mut self) -> ExpectResult<bool> {
         #[cfg(unix)]
         {
-            let is_echo = self
-                .session
-                .get_process()
-                .get_echo()
-                .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
+            let is_echo = self.session.is_echo()?;
             if !is_echo {
-                let _ = self.session.get_process_mut().set_echo(true, None);
+                let _ = self.session.set_echo(true);
             }
 
             self.status = None;
-            let is_alive = interact_buzy_loop(self, ops.borrow_mut())?;
+            let is_alive = interact_buzy_loop(self)?;
 
             if !is_echo {
-                let _ = self.session.get_process_mut().set_echo(false, None);
+                let _ = self.session.set_echo(false);
             }
 
             Ok(is_alive)
@@ -105,7 +213,7 @@ where
 
         #[cfg(windows)]
         {
-            interact_buzy_loop(self, ops.borrow_mut())
+            interact_buzy_loop(self)
         }
     }
 }
@@ -222,98 +330,92 @@ where
     }
 }
 
-#[cfg(all(not(feature = "async"), not(feature = "polling")))]
-fn interact_buzy_loop<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
-    opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
-) -> Result<bool, Error>
+impl<S, I, O, C> std::fmt::Debug for InteractSession<S, I, O, C>
 where
-    S: NonBlocking + Write + Read,
-    I: Read,
+    S: std::fmt::Debug,
+    I: std::fmt::Debug,
+    O: std::fmt::Debug,
+    C: std::fmt::Debug,
+{
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InteractSession")
+            .field("session", &self.session)
+            .field("input", &self.input)
+            .field("output", &self.output)
+            .field("escape_character", &self.escape_character)
+            .field("status", &self.status)
+            .field("state", &std::ptr::addr_of!(self.opts.state))
+            .field("opts:on_idle", &get_pointer(&self.opts.idle_action))
+            .field("opts:on_input", &get_pointer(&self.opts.input_action))
+            .field("opts:on_output", &get_pointer(&self.opts.output_action))
+            .field("opts:input_filter", &get_pointer(&self.opts.input_filter))
+            .field("opts:output_filter", &get_pointer(&self.opts.output_filter))
+            .finish()
+    }
+}
+
+#[cfg(all(unix, not(feature = "async"), not(feature = "polling")))]
+fn interact_buzy_loop<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> ExpectResult<bool>
+where
+    S: Healthcheck<Status = WaitStatus> + NonBlocking + Write + Read,
     O: Write,
-    IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    I: Read,
 {
     let mut buf = [0; 512];
+
     loop {
-        #[cfg(unix)]
-        {
-            let status = get_status(interact.session)?;
-            if !matches!(status, Some(crate::WaitStatus::StillAlive)) {
-                interact.status = status;
-                return Ok(false);
-            }
+        let status = get_status(&s.session)?;
+        if !matches!(status, Some(WaitStatus::StillAlive)) {
+            s.status = status;
+            return Ok(false);
         }
 
-        #[cfg(windows)]
-        {
-            if !interact.session.is_alive()? {
-                return Ok(false);
+        if let Some(n) = try_read(&mut s.session, &mut buf)? {
+            let eof = n == 0;
+            let buf = &buf[..n];
+            let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
+
+            #[rustfmt::skip]
+            let exit = opt_action(
+                Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof),
+                &mut s.opts.output_action,
+            )?;
+            if eof || exit {
+                return Ok(true);
             }
-        }
 
-        match interact.session.try_read(&mut buf) {
-            Ok(n) => {
-                let eof = n == 0;
-                let buf = &buf[..n];
-                let buf = call_filter(opts.output_filter.as_mut(), buf)?;
-
-                let exit = call_action(
-                    opts.output_action.as_mut(),
-                    interact.session,
-                    &mut interact.input,
-                    &mut interact.output,
-                    &mut opts.state,
-                    &buf,
-                    eof,
-                )?;
-
-                if eof || exit {
-                    return Ok(true);
-                }
-
-                spin_write(&mut interact.output, &buf)?;
-                spin_flush(&mut interact.output)?;
-            }
-            Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err.into()),
+            spin_write(&mut s.output, &buf)?;
+            spin_flush(&mut s.output)?;
         }
 
         // We dont't print user input back to the screen.
         // In terminal mode it will be ECHOed back automatically.
         // This way we preserve terminal seetings for example when user inputs password.
         // The terminal must have been prepared before.
-        match interact.input.read(&mut buf) {
+        match s.input.read(&mut buf) {
             Ok(n) => {
                 let eof = n == 0;
                 let buf = &buf[..n];
-                let buf = call_filter(opts.input_filter.as_mut(), buf)?;
+                let buf = call_filter(s.opts.input_filter.as_mut(), buf)?;
 
-                let exit = call_action(
-                    opts.input_action.as_mut(),
-                    interact.session,
-                    &mut interact.input,
-                    &mut interact.output,
-                    &mut opts.state,
-                    &buf,
-                    eof,
+                #[rustfmt::skip]
+                let exit = opt_action(
+                    Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof),
+                    &mut s.opts.input_action,
                 )?;
-
                 if eof | exit {
                     return Ok(true);
                 }
 
-                let escape_char_position = buf.iter().position(|c| *c == interact.escape_character);
+                let escape_char_position = buf.iter().position(|c| *c == s.escape_character);
                 match escape_char_position {
                     Some(pos) => {
-                        interact.session.write_all(&buf[..pos])?;
+                        s.session.write_all(&buf[..pos])?;
                         return Ok(true);
                     }
                     None => {
-                        interact.session.write_all(&buf[..])?;
+                        s.session.write_all(&buf[..])?;
                     }
                 }
             }
@@ -321,16 +423,11 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        let exit = call_action(
-            opts.idle_action.as_mut(),
-            interact.session,
-            &mut interact.input,
-            &mut interact.output,
-            &mut opts.state,
-            &[],
-            false,
+        #[rustfmt::skip]
+        let exit = opt_action(
+            Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, false),
+            &mut s.opts.idle_action,
         )?;
-
         if exit {
             return Ok(true);
         }
@@ -770,20 +867,12 @@ where
     }
 }
 
-fn call_action<F, S, I, O, C>(
-    action: Option<F>,
-    s: &mut S,
-    r: &mut I,
-    w: &mut O,
-    state: &mut C,
-    buf: &[u8],
-    eof: bool,
-) -> Result<bool, Error>
-where
-    F: FnMut(Context<'_, S, I, O, C>) -> Result<bool, Error>,
-{
-    match action {
-        Some(mut action) => (action)(Context::new(s, r, w, state, buf, eof)),
+fn opt_action<S, I, O, C>(
+    ctx: Context<'_, S, I, O, C>,
+    opt: &mut Option<OptAction<S, I, O, C>>,
+) -> ExpectResult<bool> {
+    match opt {
+        Some(action) => (action)(ctx),
         None => Ok(false),
     }
 }
@@ -799,10 +888,38 @@ where
 }
 
 #[cfg(unix)]
-fn get_status<S>(session: &Session<OsProcess, S>) -> Result<Option<crate::WaitStatus>, Error> {
-    match session.get_process().status() {
+fn get_status<S>(session: &S) -> Result<Option<S::Status>, Error>
+where
+    S: Healthcheck,
+{
+    match session.get_status() {
         Ok(status) => Ok(Some(status)),
-        Err(ptyprocess::errno::Errno::ECHILD | ptyprocess::errno::Errno::ESRCH) => Ok(None),
-        Err(err) => Err(Error::IO(std::io::Error::new(ErrorKind::Other, err))),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(None),
+        Err(err) => Err(Error::IO(err)),
     }
+}
+
+#[cfg(unix)]
+fn try_read<S>(session: &mut S, buf: &mut [u8]) -> ExpectResult<Option<usize>>
+where
+    S: NonBlocking + Read,
+{
+    session.set_blocking(false)?;
+
+    let result = session.read(buf);
+
+    session.set_blocking(true)?;
+
+    match result {
+        Ok(n) => Ok(Some(n)),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(None),
+        Err(err) => Err(Error::IO(err)),
+    }
+}
+
+fn get_pointer<T>(ptr: &Option<Box<T>>) -> usize
+where
+    T: ?Sized,
+{
+    ptr.as_ref().map_or(0, |f| std::ptr::addr_of!(f) as usize)
 }

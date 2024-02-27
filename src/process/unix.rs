@@ -1,8 +1,18 @@
 //! This module contains a Unix implementation of [crate::process::Process].
 
-use super::{Healthcheck, NonBlocking, Process};
-use crate::error::to_io_error;
-use ptyprocess::{stream::Stream, PtyProcess};
+use std::{
+    io::{self, ErrorKind, Read, Result, Write},
+    ops::{Deref, DerefMut},
+    os::unix::prelude::{AsRawFd, RawFd},
+    process::Command,
+};
+
+use crate::{
+    error::to_io_error,
+    process::{Healthcheck, NonBlocking, Process, Termios},
+};
+
+use ptyprocess::{errno::Errno, stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]
 use super::IntoAsyncStream;
@@ -14,12 +24,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use std::{
-    io::{self, Read, Result, Write},
-    ops::{Deref, DerefMut},
-    os::unix::prelude::{AsRawFd, RawFd},
-    process::Command,
-};
+pub use ptyprocess::{Signal, WaitStatus};
 
 /// A Unix representation of a [Process] via [PtyProcess]
 #[derive(Debug)]
@@ -31,13 +36,13 @@ impl Process for UnixProcess {
     type Command = Command;
     type Stream = PtyStream;
 
-    fn spawn<S: AsRef<str>>(cmd: S) -> Result<Self> {
+    fn spawn<S>(cmd: S) -> Result<Self>
+    where
+        S: AsRef<str>,
+    {
         let args = tokenize_command(cmd.as_ref());
         if args.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to parse a command",
-            ));
+            return Err(io_error("failed to parse a command"));
         }
 
         let mut command = std::process::Command::new(&args[0]);
@@ -63,10 +68,30 @@ impl Process for UnixProcess {
 }
 
 impl Healthcheck for UnixProcess {
-    fn is_alive(&mut self) -> Result<bool> {
+    type Status = WaitStatus;
+
+    fn get_status(&self) -> Result<Self::Status> {
+        get_status(&self.proc)
+    }
+
+    fn is_alive(&self) -> Result<bool> {
         self.proc
             .is_alive()
-            .map_err(to_io_error("Failed to call pty.is_alive()"))
+            .map_err(to_io_error("failed to determine if process is alive"))
+    }
+}
+
+impl Termios for UnixProcess {
+    fn is_echo(&self) -> Result<bool> {
+        let value = self.proc.get_echo()?;
+
+        Ok(value)
+    }
+
+    fn set_echo(&mut self, on: bool) -> Result<bool> {
+        let value = self.proc.set_echo(on, None)?;
+
+        Ok(value)
     }
 }
 
@@ -117,14 +142,12 @@ impl Read for PtyStream {
 }
 
 impl NonBlocking for PtyStream {
-    fn set_non_blocking(&mut self) -> Result<()> {
+    fn set_blocking(&mut self, on: bool) -> Result<()> {
         let fd = self.handle.as_raw_fd();
-        make_non_blocking(fd, true)
-    }
-
-    fn set_blocking(&mut self) -> Result<()> {
-        let fd = self.handle.as_raw_fd();
-        make_non_blocking(fd, false)
+        match on {
+            true => make_non_blocking(fd, false),
+            false => make_non_blocking(fd, true),
+        }
     }
 }
 
@@ -221,6 +244,20 @@ fn tokenize_command(program: &str) -> Vec<String> {
         res.push(cap[0].to_string());
     }
     res
+}
+
+fn get_status(proc: &PtyProcess) -> std::prelude::v1::Result<WaitStatus, io::Error> {
+    match proc.status() {
+        Ok(status) => Ok(status),
+        Err(err) => match err {
+            Errno::ECHILD | Errno::ESRCH => Err(io::Error::new(ErrorKind::WouldBlock, err)),
+            err => Err(io::Error::new(ErrorKind::Other, err)),
+        },
+    }
+}
+
+fn io_error(msg: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, msg)
 }
 
 #[cfg(test)]

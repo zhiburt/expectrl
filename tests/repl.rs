@@ -1,8 +1,9 @@
 #![cfg(unix)]
 
 use expectrl::{
+    process::unix::WaitStatus,
     repl::{spawn_bash, spawn_python},
-    ControlCode, WaitStatus,
+    ControlCode, Expect,
 };
 #[cfg(feature = "async")]
 use futures_lite::io::AsyncBufReadExt;

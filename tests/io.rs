@@ -407,7 +407,7 @@ fn try_read_to_end() {
             Ok(0) => break,
             Ok(n) => buf.extend(&b[..n]),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(err) => Err(err).unwrap(),
+            Err(err) => panic!("{:?}", err),
         }
     }
 
