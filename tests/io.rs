@@ -1,8 +1,8 @@
-use expectrl::{Captures, ControlCode, Needle, Session};
+use expectrl::{session::OsSession, Captures, ControlCode, Expect, Needle, Session};
 use std::{process::Command, thread, time::Duration};
 
 #[cfg(unix)]
-use expectrl::WaitStatus;
+use expectrl::process::unix::WaitStatus;
 
 #[cfg(feature = "async")]
 use futures_lite::{
@@ -504,7 +504,9 @@ fn read_line_test() {
     proc.get_process_mut().exit(true).unwrap();
 }
 
-fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
+// todo: Create test session?
+
+fn _p_read(proc: &mut OsSession, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.read(buf)
@@ -515,7 +517,7 @@ fn _p_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
     }
 }
 
-fn _p_write_all(proc: &mut Session, buf: &[u8]) -> std::io::Result<()> {
+fn _p_write_all(proc: &mut OsSession, buf: &[u8]) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.write_all(buf)
@@ -526,7 +528,7 @@ fn _p_write_all(proc: &mut Session, buf: &[u8]) -> std::io::Result<()> {
     }
 }
 
-fn _p_flush(proc: &mut Session) -> std::io::Result<()> {
+fn _p_flush(proc: &mut OsSession) -> std::io::Result<()> {
     #[cfg(not(feature = "async"))]
     {
         proc.flush()
@@ -537,7 +539,7 @@ fn _p_flush(proc: &mut Session) -> std::io::Result<()> {
     }
 }
 
-fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
+fn _p_send(proc: &mut OsSession, buf: &str) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.send(buf)
@@ -548,7 +550,7 @@ fn _p_send(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Captures, expectrl::Error> {
+fn _p_expect(proc: &mut OsSession, n: impl Needle) -> Result<Captures, expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.expect(n)
@@ -559,7 +561,7 @@ fn _p_expect(proc: &mut Session, n: impl Needle) -> Result<Captures, expectrl::E
     }
 }
 
-fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
+fn _p_send_line(proc: &mut OsSession, buf: &str) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.send_line(buf)
@@ -570,7 +572,7 @@ fn _p_send_line(proc: &mut Session, buf: &str) -> std::io::Result<()> {
     }
 }
 
-fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::Result<()> {
+fn _p_send_control(proc: &mut OsSession, buf: impl Into<ControlCode>) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.send(buf.into())
@@ -581,7 +583,7 @@ fn _p_send_control(proc: &mut Session, buf: impl Into<ControlCode>) -> std::io::
     }
 }
 
-fn _p_read_to_string(proc: &mut Session) -> std::io::Result<String> {
+fn _p_read_to_string(proc: &mut OsSession) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -594,7 +596,7 @@ fn _p_read_to_string(proc: &mut Session) -> std::io::Result<String> {
     Ok(buf)
 }
 
-fn _p_read_to_end(proc: &mut Session) -> std::io::Result<Vec<u8>> {
+fn _p_read_to_end(proc: &mut OsSession) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -607,7 +609,7 @@ fn _p_read_to_end(proc: &mut Session) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn _p_read_until(proc: &mut Session, ch: u8) -> std::io::Result<Vec<u8>> {
+fn _p_read_until(proc: &mut OsSession, ch: u8) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     #[cfg(not(feature = "async"))]
     {
@@ -622,7 +624,7 @@ fn _p_read_until(proc: &mut Session, ch: u8) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn _p_read_line(proc: &mut Session) -> std::io::Result<String> {
+fn _p_read_line(proc: &mut OsSession) -> std::io::Result<String> {
     let mut buf = String::new();
     #[cfg(not(feature = "async"))]
     {
@@ -635,7 +637,7 @@ fn _p_read_line(proc: &mut Session) -> std::io::Result<String> {
     Ok(buf)
 }
 
-fn _p_is_empty(proc: &mut Session) -> std::io::Result<bool> {
+fn _p_is_empty(proc: &mut OsSession) -> std::io::Result<bool> {
     #[cfg(not(feature = "async"))]
     {
         proc.is_empty()
@@ -646,7 +648,7 @@ fn _p_is_empty(proc: &mut Session) -> std::io::Result<bool> {
     }
 }
 
-fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
+fn _p_try_read(proc: &mut OsSession, buf: &mut [u8]) -> std::io::Result<usize> {
     #[cfg(not(feature = "async"))]
     {
         proc.try_read(buf)
@@ -662,8 +664,8 @@ fn _p_try_read(proc: &mut Session, buf: &mut [u8]) -> std::io::Result<usize> {
 }
 
 #[cfg(unix)]
-fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
-    use expectrl::{interact::InteractOptions, stream::stdin::Stdin};
+fn _p_interact(proc: &mut OsSession) -> Result<(), expectrl::Error> {
+    use expectrl::stream::stdin::Stdin;
     use std::io::stdout;
 
     let mut stdin = Stdin::open()?;
@@ -671,15 +673,11 @@ fn _p_interact(proc: &mut Session) -> Result<(), expectrl::Error> {
 
     #[cfg(not(feature = "async"))]
     {
-        proc.interact(&mut stdin, stdout)
-            .spawn(InteractOptions::default())?;
+        proc.interact(&mut stdin, stdout).spawn()?;
     }
     #[cfg(feature = "async")]
     {
-        block_on(
-            proc.interact(&mut stdin, stdout)
-                .spawn(InteractOptions::default()),
-        )?;
+        block_on(proc.interact(&mut stdin, stdout).spawn())?;
     }
 
     stdin.close()

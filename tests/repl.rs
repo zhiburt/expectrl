@@ -24,7 +24,7 @@ fn bash() {
 
     p.send(ControlCode::EOT).unwrap();
 
-    p.get_process_mut().exit(true).unwrap();
+    p.get_session_mut().get_process_mut().exit(true).unwrap();
 }
 
 #[cfg(not(feature = "async"))]
@@ -35,10 +35,15 @@ fn bash_with_log() {
 
     let p = spawn_bash().unwrap();
     let prompt = p.get_prompt().to_owned();
-    let quit_cmd = p.get_quit_command().map(|c| c.to_owned());
+    let quit_cmd = p
+        .get_quit_command()
+        .map(|c| c.to_owned())
+        .unwrap_or("exit".to_owned());
     let is_echo = p.is_echo();
     let session = session::log(p.into_session(), std::io::stderr()).unwrap();
-    let mut p = ReplSession::new(session, prompt, quit_cmd, is_echo);
+    let mut p = ReplSession::new(session, prompt);
+    p.set_quit_command(quit_cmd);
+    p.set_echo(is_echo);
 
     p.send_line("echo Hello World").unwrap();
     let mut msg = String::new();
@@ -49,8 +54,8 @@ fn bash_with_log() {
     p.send(ControlCode::EOT).unwrap();
 
     assert_eq!(
-        p.get_process().wait().unwrap(),
-        WaitStatus::Exited(p.get_process().pid(), 0)
+        p.get_session().get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_session().get_process().pid(), 0)
     );
 }
 
@@ -125,8 +130,8 @@ fn python() {
     p.send(ControlCode::EndOfTransmission).unwrap();
 
     assert_eq!(
-        p.get_process().wait().unwrap(),
-        WaitStatus::Exited(p.get_process().pid(), 0)
+        p.get_session().get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_session().get_process().pid(), 0)
     );
 }
 

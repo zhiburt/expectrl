@@ -1,7 +1,7 @@
 //! This module contains a list of special Sessions that can be spawned.
 
 use std::{
-    io,
+    io::{self, BufRead},
     ops::{Deref, DerefMut},
 };
 
@@ -441,5 +441,40 @@ where
         B: AsRef<[u8]>,
     {
         S::send_line(self.get_session_mut(), buf)
+    }
+}
+
+impl<S> Write for ReplSession<S>
+where
+    S: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        S::write(self.get_session_mut(), buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        S::flush(self.get_session_mut())
+    }
+}
+
+impl<S> Read for ReplSession<S>
+where
+    S: Read,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        S::read(self.get_session_mut(), buf)
+    }
+}
+
+impl<S> BufRead for ReplSession<S>
+where
+    S: BufRead,
+{
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        S::fill_buf(self.get_session_mut())
+    }
+
+    fn consume(&mut self, amt: usize) {
+        S::consume(self.get_session_mut(), amt)
     }
 }

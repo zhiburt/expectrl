@@ -94,7 +94,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
 
 impl<S, I, O, C> InteractSession<S, I, O, C> {
     /// Set a state
-    pub fn set_state<State>(self, state: State) -> InteractSession<S, I, O, State> {
+    pub fn with_state<State>(self, state: State) -> InteractSession<S, I, O, State> {
         let mut s = InteractSession::new(self.session, self.input, self.output, state);
         s.escape_character = self.escape_character;
         #[cfg(unix)]
@@ -124,7 +124,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     /// The output_filter will be passed all the output from the child process.
     ///
     /// The filter isn't applied to user's `read` calls through the [`Context`] in callbacks.
-    pub fn output_filter<F>(&mut self, filter: F) -> &mut Self
+    pub fn set_output_filter<F>(&mut self, filter: F) -> &mut Self
     where
         F: FnMut(&[u8]) -> ExpectResult<Cow<'_, [u8]>> + 'static,
     {
@@ -137,7 +137,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     ///
     /// The input_filter is run BEFORE the check for the escape_character.
     /// The filter is called BEFORE calling a on_input callback if it's set.
-    pub fn input_filter<F>(&mut self, filter: F) -> &mut Self
+    pub fn set_input_filter<F>(&mut self, filter: F) -> &mut Self
     where
         F: FnMut(&[u8]) -> ExpectResult<Cow<'_, [u8]>> + 'static,
     {
@@ -149,7 +149,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     ///
     /// Be aware that currently async version doesn't take a Session as an argument.
     /// See <https://github.com/zhiburt/expectrl/issues/16>.
-    pub fn on_input<F>(&mut self, action: F) -> &mut Self
+    pub fn set_input_action<F>(&mut self, action: F) -> &mut Self
     where
         F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
     {
@@ -163,7 +163,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     ///
     /// Please be aware that your use of [Session::expect], [Session::check] and any `read` operation on session
     /// will cause the read bytes not to apeard in the output stream!
-    pub fn on_output<F>(&mut self, action: F) -> &mut Self
+    pub fn set_output_action<F>(&mut self, action: F) -> &mut Self
     where
         F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
     {
@@ -172,7 +172,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     }
 
     /// Puts a handler which will be called on each interaction when no input is detected.
-    pub fn on_idle<F>(&mut self, action: F) -> &mut Self
+    pub fn set_idle_action<F>(&mut self, action: F) -> &mut Self
     where
         F: FnMut(Context<'_, S, I, O, C>) -> ExpectResult<bool> + 'static,
     {

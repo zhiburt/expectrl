@@ -1,10 +1,9 @@
 #![cfg(unix)]
 
-use expectrl::{spawn, Eof, NBytes, Regex, WaitStatus};
+use expectrl::{spawn, Eof, NBytes, Regex, process::unix::WaitStatus, Expect};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
 fn is_matched_str() {

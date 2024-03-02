@@ -20,9 +20,9 @@ fn main() {
     let stdout = std::io::stdout();
 
     let (is_alive, status) = {
-        let mut interact = session.interact(&mut stdin, stdout).set_state(&mut state);
+        let mut interact = session.interact(&mut stdin, stdout).with_state(&mut state);
         interact
-            .on_output(move |ctx| {
+            .set_output_action(move |ctx| {
                 let m = output_action.on(ctx.buf, ctx.eof, "Continue [y/n]:")?;
                 if m.is_some() {
                     ctx.state.wait_for_continue = Some(true);
@@ -37,7 +37,7 @@ fn main() {
 
                 Ok(false)
             })
-            .on_input(move |ctx| {
+            .set_input_action(move |ctx| {
                 let m = input_action.on(ctx.buf, ctx.eof, "y")?;
                 if m.is_some() {
                     if let Some(_a @ true) = ctx.state.wait_for_continue {

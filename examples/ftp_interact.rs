@@ -14,8 +14,8 @@ fn main() -> Result<(), Error> {
     let mut stdin = Stdin::open()?;
 
     p.interact(&mut stdin, stdout())
-        .set_state(&mut auth)
-        .on_output(move |ctx| {
+        .with_state(&mut auth)
+        .set_output_action(move |ctx| {
             if login_lookup
                 .on(ctx.buf, ctx.eof, "Login successful")?
                 .is_some()
