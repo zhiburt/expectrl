@@ -13,6 +13,9 @@ use futures_lite::{
 #[cfg(not(feature = "async"))]
 use std::io::{BufRead, Read, Write};
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 #[test]
 #[cfg(unix)]
 fn send_controll() {
@@ -572,7 +575,10 @@ fn _p_send_line(proc: &mut OsSession, buf: &str) -> Result<(), expectrl::Error> 
     }
 }
 
-fn _p_send_control(proc: &mut OsSession, buf: impl Into<ControlCode>) -> Result<(), expectrl::Error> {
+fn _p_send_control(
+    proc: &mut OsSession,
+    buf: impl Into<ControlCode>,
+) -> Result<(), expectrl::Error> {
     #[cfg(not(feature = "async"))]
     {
         proc.send(buf.into())
@@ -669,7 +675,7 @@ fn _p_interact(proc: &mut OsSession) -> Result<(), expectrl::Error> {
     use std::io::stdout;
 
     let mut stdin = Stdin::open()?;
-    let stdout = stdout();
+    let stdout = AsyncWriter(stdout());
 
     #[cfg(not(feature = "async"))]
     {
@@ -693,4 +699,35 @@ fn do_until(mut foo: impl FnMut() -> bool, timeout: Duration) -> bool {
     }
 
     return false;
+}
+
+#[cfg(feature = "async")]
+struct AsyncWriter<W>(W);
+
+#[cfg(feature = "async")]
+impl<T> futures_lite::AsyncWrite for AsyncWriter<T>
+where
+    T: std::io::Write + Unpin,
+{
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::task::Poll::Ready(self.get_mut().0.write(buf))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(self.get_mut().0.flush())
+    }
+
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
 }

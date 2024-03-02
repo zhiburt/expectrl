@@ -30,23 +30,23 @@ fn main() {
 
 #[cfg(feature = "async")]
 fn main() {
-    futures_lite::future::block_on(async {
-        let mut sh = spawn(SHELL).expect("Error while spawning sh");
+    // futures_lite::future::block_on(async {
+    //     let mut sh = spawn(SHELL).expect("Error while spawning sh");
 
-        println!("Now you're in interacting mode");
-        println!("To return control back to main type CTRL-] combination");
+    //     println!("Now you're in interacting mode");
+    //     println!("To return control back to main type CTRL-] combination");
 
-        let mut stdin = Stdin::open().expect("Failed to create stdin");
+    //     let mut stdin = Stdin::open().expect("Failed to create stdin");
 
-        sh.interact(&mut stdin, stdout())
-            .spawn(&mut InteractOptions::default())
-            .await
-            .expect("Failed to start interact");
+    //     sh.interact(&mut stdin, stdout())
+    //         .spawn()
+    //         .await
+    //         .expect("Failed to start interact");
 
-        stdin.close().expect("Failed to close a stdin");
+    //     stdin.close().expect("Failed to close a stdin");
 
-        println!("Exiting");
-    });
+    //     println!("Exiting");
+    // });
 }
 
 #[cfg(all(windows, feature = "polling", not(feature = "async")))]

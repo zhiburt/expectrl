@@ -14,6 +14,7 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
+default = ["async"]
 # "pooling" feature works only for not async version
 polling = ["dep:polling", "dep:crossbeam-channel"]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]

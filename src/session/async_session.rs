@@ -2,7 +2,6 @@
 
 use std::{
     io::{self, IoSliceMut},
-    ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -12,12 +11,15 @@ use futures_lite::{
     ready, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
 };
 
-use crate::{process::Healthcheck, Captures, Error, Needle};
+use crate::{
+    process::{Healthcheck, Termios},
+    AsyncExpect, Captures, Error, Expect, Needle,
+};
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P = super::OsProcess, S = super::OsProcessStream> {
+pub struct Session<P, S> {
     process: P,
     stream: Stream<S>,
 }
@@ -81,13 +83,6 @@ impl<P, S> Session<P, S> {
     }
 }
 
-impl<P: Healthcheck, S> Session<P, S> {
-    /// Verifies whether process is still alive.
-    pub fn is_alive(&mut self) -> Result<bool, Error> {
-        self.process.is_alive().map_err(|err| err.into())
-    }
-}
-
 impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// Expect waits until a pattern is matched.
     ///
@@ -132,7 +127,10 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     ///
     /// It returns an error if timeout is reached.
     /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    pub async fn expect<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
+    pub async fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
         match self.stream.expect_lazy {
             true => self.stream.expect_lazy(needle).await,
             false => self.stream.expect_gready(needle).await,
@@ -156,7 +154,10 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     /// assert_eq!(m.get(0).unwrap(), b"123");
     /// # });
     /// ```
-    pub async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
+    pub async fn check<E>(&mut self, needle: E) -> Result<Captures, Error>
+    where
+        E: Needle,
+    {
         self.stream.check(needle).await
     }
 
@@ -172,44 +173,45 @@ impl<P, S: AsyncRead + Unpin> Session<P, S> {
     }
 }
 
-impl<Proc, S: AsyncWrite + Unpin> Session<Proc, S> {
-    /// Send text to child’s STDIN.
-    ///
-    /// You can also use methods from [std::io::Write] instead.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use expectrl::{spawn, ControlCode};
-    ///
-    /// let mut proc = spawn("cat").unwrap();
-    ///
-    /// # futures_lite::future::block_on(async {
-    /// proc.send("Hello");
-    /// proc.send(b"World");
-    /// proc.send(ControlCode::try_from("^C").unwrap());
-    /// # });
-    /// ```
-    pub async fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
-        self.stream.write_all(buf.as_ref()).await
+impl<P, S> AsyncExpect for Session<P, S>
+where
+    S: AsyncWrite + AsyncRead + Unpin,
+{
+    async fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
+        match self.stream.expect_lazy {
+            true => self.stream.expect_lazy(needle).await,
+            false => self.stream.expect_gready(needle).await,
+        }
     }
 
-    /// Send a line to child’s STDIN.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use expectrl::{spawn, ControlCode};
-    ///
-    /// let mut proc = spawn("cat").unwrap();
-    ///
-    /// # futures_lite::future::block_on(async {
-    /// proc.send_line("Hello");
-    /// proc.send_line(b"World");
-    /// proc.send_line(ControlCode::try_from("^C").unwrap());
-    /// # });
-    /// ```
-    pub async fn send_line<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
+    async fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
+        self.stream.check(needle).await
+    }
+
+    async fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
+    where
+        N: Needle,
+    {
+        self.stream.is_matched(needle).await
+    }
+
+    async fn send<B>(&mut self, buf: B) -> Result<(), Error>
+    where
+        B: AsRef<[u8]>,
+    {
+        self.stream.write_all(buf.as_ref()).await.map_err(Error::IO)
+    }
+
+    async fn send_line<B>(&mut self, buf: B) -> Result<(), Error>
+    where
+        B: AsRef<[u8]>,
+    {
         #[cfg(windows)]
         const LINE_ENDING: &[u8] = b"\r\n";
         #[cfg(not(windows))]
@@ -222,21 +224,27 @@ impl<Proc, S: AsyncWrite + Unpin> Session<Proc, S> {
     }
 }
 
-impl<P, S> Deref for Session<P, S> {
-    type Target = P;
+impl<P, S> Healthcheck for Session<P, S>
+where
+    P: Healthcheck,
+{
+    type Status = P::Status;
 
-    fn deref(&self) -> &Self::Target {
-        &self.process
+    /// Verifies whether process is still alive.
+    fn is_alive(&self) -> io::Result<bool> {
+        P::is_alive(self.get_process())
+    }
+
+    fn get_status(&self) -> io::Result<Self::Status> {
+        P::get_status(self.get_process())
     }
 }
 
-impl<P, S> DerefMut for Session<P, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.process
-    }
-}
-
-impl<P: Unpin, S: AsyncWrite + Unpin> AsyncWrite for Session<P, S> {
+impl<P, S> AsyncWrite for Session<P, S>
+where
+    P: Unpin,
+    S: AsyncWrite + Unpin,
+{
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -262,7 +270,11 @@ impl<P: Unpin, S: AsyncWrite + Unpin> AsyncWrite for Session<P, S> {
     }
 }
 
-impl<P: Unpin, S: AsyncRead + Unpin> AsyncRead for Session<P, S> {
+impl<P, S> AsyncRead for Session<P, S>
+where
+    P: Unpin,
+    S: AsyncRead + Unpin,
+{
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -272,13 +284,30 @@ impl<P: Unpin, S: AsyncRead + Unpin> AsyncRead for Session<P, S> {
     }
 }
 
-impl<P: Unpin, S: AsyncRead + Unpin> AsyncBufRead for Session<P, S> {
+impl<P, S> AsyncBufRead for Session<P, S>
+where
+    P: Unpin,
+    S: AsyncRead + Unpin,
+{
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }
 
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
         Pin::new(&mut self.stream).consume(amt);
+    }
+}
+
+impl<P, S> Termios for Session<P, S>
+where
+    P: Termios,
+{
+    fn is_echo(&self) -> io::Result<bool> {
+        P::is_echo(self.get_process())
+    }
+
+    fn set_echo(&mut self, on: bool) -> io::Result<bool> {
+        P::set_echo(self.get_process_mut(), on)
     }
 }
 
@@ -333,7 +362,10 @@ impl<S> Stream<S> {
     }
 }
 
-impl<S: AsyncRead + Unpin> Stream<S> {
+impl<S> Stream<S>
+where
+    S: AsyncRead + Unpin,
+{
     async fn expect_gready<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
         let expect_timeout = self.expect_timeout;
 
@@ -372,7 +404,10 @@ impl<S: AsyncRead + Unpin> Stream<S> {
         }
     }
 
-    async fn expect_lazy<N: Needle>(&mut self, needle: N) -> Result<Captures, Error> {
+    async fn expect_lazy<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
         let expect_timeout = self.expect_timeout;
         let expect_future = async {
             // We read by byte to make things as lazy as possible.
@@ -454,7 +489,10 @@ impl<S: AsyncRead + Unpin> Stream<S> {
 
     /// Check checks if a pattern is matched.
     /// Returns empty found structure if nothing found.
-    async fn check<E: Needle>(&mut self, needle: E) -> Result<Captures, Error> {
+    async fn check<E>(&mut self, needle: E) -> Result<Captures, Error>
+    where
+        E: Needle,
+    {
         let eof = self.try_fill().await?;
 
         let buf = self.stream.buffer();
@@ -492,7 +530,10 @@ impl<S: AsyncRead + Unpin> Stream<S> {
     }
 }
 
-impl<S: AsyncWrite + Unpin> AsyncWrite for Stream<S> {
+impl<S> AsyncWrite for Stream<S>
+where
+    S: AsyncWrite + Unpin,
+{
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -518,7 +559,10 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Stream<S> {
     }
 }
 
-impl<S: AsyncRead + Unpin> AsyncRead for Stream<S> {
+impl<S> AsyncRead for Stream<S>
+where
+    S: AsyncRead + Unpin,
+{
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -526,9 +570,26 @@ impl<S: AsyncRead + Unpin> AsyncRead for Stream<S> {
     ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.stream).poll_read(cx, buf)
     }
+
+    fn poll_read_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
+        for b in bufs {
+            if !b.is_empty() {
+                return self.poll_read(cx, b);
+            }
+        }
+
+        self.poll_read(cx, &mut [])
+    }
 }
 
-impl<S: AsyncRead + Unpin> AsyncBufRead for Stream<S> {
+impl<S> AsyncBufRead for Stream<S>
+where
+    S: AsyncRead + Unpin,
+{
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         Pin::new(&mut self.get_mut().stream).poll_fill_buf(cx)
     }

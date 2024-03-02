@@ -5,16 +5,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use expectrl::Expect;
-
 #[cfg(not(feature = "async"))]
 use std::io::sink;
 
 #[cfg(not(feature = "async"))]
-use expectrl::{interact::actions::lookup::Lookup, spawn, stream::stdin::Stdin, NBytes};
+use expectrl::{
+    interact::actions::lookup::Lookup, process::unix::WaitStatus, spawn, stream::stdin::Stdin,
+    Expect, NBytes,
+};
 
-#[cfg(not(feature = "async"))]
-use expectrl::process::unix::WaitStatus;
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
@@ -330,23 +331,17 @@ fn interact_on_output_not_matched() {
 #[cfg(feature = "async")]
 #[test]
 fn interact_stream_redirection() {
-    use expectrl::interact::InteractOptions;
-
     futures_lite::future::block_on(async {
         let commands = "Hello World\nIt works :)\n";
 
         let reader = ReaderWithDelayEof::new(commands, Duration::from_secs(4));
-        let mut writer = io::Cursor::new(vec![0; 1024]);
+        let mut writer = AsyncWriter(io::Cursor::new(vec![0; 1024]));
 
         let mut session = expectrl::spawn("cat").unwrap();
 
-        session
-            .interact(reader, &mut writer)
-            .spawn(InteractOptions::default())
-            .await
-            .unwrap();
+        session.interact(reader, &mut writer).spawn().await.unwrap();
 
-        let buffer = String::from_utf8_lossy(writer.get_ref());
+        let buffer = String::from_utf8_lossy(writer.0.get_ref());
         let buffer = buffer.trim_end_matches(char::from(0));
 
         assert_eq!(
@@ -360,26 +355,26 @@ fn interact_stream_redirection() {
 #[test]
 fn interact_output_callback() {
     use expectrl::{
-        interact::{actions::lookup::Lookup, InteractOptions, InteractSession},
+        interact::{actions::lookup::Lookup, InteractSession},
         stream::stdin::Stdin,
     };
 
     let mut session = expectrl::spawn("sleep 1 && echo 'Hello World'").unwrap();
 
     let mut stdin = Stdin::open().unwrap();
-    let stdout = std::io::sink();
+    let stdout = AsyncWriter(std::io::sink());
 
-    let mut otps = InteractOptions::new((0, Lookup::new())).on_output(|ctx| {
+    let mut interact = InteractSession::new(&mut session, &mut stdin, stdout, (0, Lookup::new()));
+    interact.set_output_action(|ctx| {
         if ctx.state.1.on(ctx.buf, ctx.eof, "World")?.is_some() {
             ctx.state.0 += 1;
         }
 
         Ok(false)
     });
-    let mut interact = InteractSession::new(&mut session, &mut stdin, stdout);
-    futures_lite::future::block_on(interact.spawn(&mut otps)).unwrap();
+    futures_lite::future::block_on(interact.spawn()).unwrap();
 
-    let (state, _) = otps.into_inner();
+    let (state, _) = interact.into_state();
 
     stdin.close().unwrap();
 
@@ -476,5 +471,36 @@ where
     ) -> std::task::Poll<io::Result<usize>> {
         let result = self.get_mut().read(buf);
         std::task::Poll::Ready(result)
+    }
+}
+
+#[cfg(feature = "async")]
+struct AsyncWriter<W>(W);
+
+#[cfg(feature = "async")]
+impl<T> futures_lite::AsyncWrite for AsyncWriter<T>
+where
+    T: Write + Unpin,
+{
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::task::Poll::Ready(self.get_mut().0.write(buf))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::task::Poll::Ready(self.get_mut().0.flush())
+    }
+
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
     }
 }

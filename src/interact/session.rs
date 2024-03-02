@@ -10,10 +10,29 @@ use std::{
 #[cfg(not(feature = "async"))]
 use std::io::Read;
 
+#[cfg(feature = "async")]
+use std::{io, time::Duration};
+
+#[cfg(feature = "async")]
+use futures_timer::Delay;
+
+#[cfg(feature = "async")]
+use futures_lite::{
+    future,
+    io::{AsyncRead, AsyncWrite},
+    AsyncReadExt, AsyncWriteExt,
+};
+
 use crate::{
     process::{Healthcheck, Termios},
-    Error, Expect,
+    Error,
 };
+
+#[cfg(not(feature = "async"))]
+use crate::Expect;
+
+#[cfg(feature = "async")]
+use crate::AsyncExpect;
 
 use crate::interact::Context;
 #[cfg(all(not(feature = "async"), not(feature = "polling")))]
@@ -104,7 +123,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
 
         s
     }
-    
+
     /// Get a reference on state
     pub fn get_state(&self) -> &C {
         &self.opts.state
@@ -260,40 +279,29 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
+impl<S, I, O, C> InteractSession<S, I, O, C>
 where
-    I: futures_lite::AsyncRead + Unpin,
-    O: Write,
-    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
+    I: AsyncRead + Unpin,
+    O: AsyncWrite + Unpin,
+    S: AsyncExpect + Termios + Healthcheck<Status = WaitStatus> + AsyncWrite + AsyncRead + Unpin,
 {
     /// Runs the session.
     ///
     /// See [`Session::interact`].
     ///
     /// [`Session::interact`]: crate::session::Session::interact
-    pub async fn spawn<C, IF, OF, IA, OA, WA, OPS>(&mut self, mut opts: OPS) -> Result<bool, Error>
-    where
-        OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
-        IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    {
+    pub async fn spawn(&mut self) -> Result<bool, Error> {
         #[cfg(unix)]
         {
-            let is_echo = self
-                .session
-                .get_echo()
-                .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
+            let is_echo = self.session.is_echo().map_err(Error::IO)?;
             if !is_echo {
-                let _ = self.session.set_echo(true, None);
+                let _ = self.session.set_echo(true);
             }
 
-            let is_alive = interact_async(self, opts.borrow_mut()).await?;
+            let is_alive = interact_async(self).await?;
 
             if !is_echo {
-                let _ = self.session.set_echo(false, None);
+                let _ = self.session.set_echo(false);
             }
 
             Ok(is_alive)
@@ -693,129 +701,80 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-async fn interact_async<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
-    opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
-) -> Result<bool, Error>
+#[cfg(all(unix, feature = "async"))]
+async fn interact_async<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> Result<bool, Error>
 where
-    S: futures_lite::AsyncRead + futures_lite::AsyncWrite + Unpin,
-    I: futures_lite::AsyncRead + Unpin,
-    O: Write,
-    IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
+    S: Healthcheck<Status = WaitStatus> + AsyncRead + AsyncWrite + Unpin,
+    I: AsyncRead + Unpin,
+    O: AsyncWrite + Unpin,
 {
-    use std::io;
+    #[derive(Debug)]
+    enum ReadFrom {
+        Input,
+        Proc,
+        Timeout,
+    }
 
-    use futures_lite::{AsyncReadExt, AsyncWriteExt};
-
-    let mut stdin_buf = [0; 512];
+    const TIMEOUT: Duration = Duration::from_secs(5);
+    let mut input_buf = [0; 512];
     let mut proc_buf = [0; 512];
+
     loop {
-        #[cfg(unix)]
-        {
-            let status = get_status(interact.session)?;
-            if !matches!(status, Some(crate::WaitStatus::StillAlive)) {
-                interact.status = status;
-                return Ok(false);
-            }
+        let status = get_status(&s.session)?;
+        if !matches!(status, Some(WaitStatus::StillAlive)) {
+            s.status = status;
+            return Ok(false);
         }
 
-        #[cfg(windows)]
-        {
-            if !interact.session.is_alive()? {
-                return Ok(false);
-            }
-        }
+        let read_process = async { (ReadFrom::Proc, s.session.read(&mut proc_buf).await) };
+        let read_input = async { (ReadFrom::Input, s.input.read(&mut input_buf).await) };
+        let timeout = async { (ReadFrom::Timeout, async_timeout(TIMEOUT).await) };
 
-        #[derive(Debug)]
-        enum ReadFrom {
-            Stdin,
-            OsProcessess,
-            Timeout,
-        }
+        let read_any = future::or(read_process, read_input);
+        let read_output = future::or(read_any, timeout).await;
+        let read_target = read_output.0;
+        let read_result = read_output.1;
 
-        let read_process = async {
-            (
-                ReadFrom::OsProcessess,
-                interact.session.read(&mut proc_buf).await,
-            )
-        };
-        let read_stdin = async { (ReadFrom::Stdin, interact.input.read(&mut stdin_buf).await) };
-        let timeout = async {
-            (
-                ReadFrom::Timeout,
-                async {
-                    futures_timer::Delay::new(std::time::Duration::from_secs(5)).await;
-                    io::Result::Ok(0)
-                }
-                .await,
-            )
-        };
-
-        let read_fut = futures_lite::future::or(read_process, read_stdin);
-        let (read_from, result) = futures_lite::future::or(read_fut, timeout).await;
-
-        match read_from {
-            ReadFrom::OsProcessess => {
-                let n = result?;
+        match read_target {
+            ReadFrom::Proc => {
+                let n = read_result?;
                 let eof = n == 0;
                 let buf = &proc_buf[..n];
-                let buf = call_filter(opts.output_filter.as_mut(), buf)?;
+                let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
 
-                let exit = call_action(
-                    opts.output_action.as_mut(),
-                    interact.session,
-                    &mut interact.input,
-                    &mut interact.output,
-                    &mut opts.state,
-                    &buf,
-                    eof,
-                )?;
+                let exit = run_action_output(s, &buf, eof)?;
 
                 if eof || exit {
                     return Ok(true);
                 }
 
-                spin_write(&mut interact.output, &buf)?;
-                spin_flush(&mut interact.output)?;
+                s.output.write(&buf).await?;
+                s.output.flush().await?;
             }
-            ReadFrom::Stdin => {
+            ReadFrom::Input => {
                 // We dont't print user input back to the screen.
                 // In terminal mode it will be ECHOed back automatically.
                 // This way we preserve terminal seetings for example when user inputs password.
                 // The terminal must have been prepared before.
-                match result {
+                match read_result {
                     Ok(n) => {
                         let eof = n == 0;
-                        let buf = &stdin_buf[..n];
-                        let buf = call_filter(opts.output_filter.as_mut(), buf)?;
+                        let buf = &input_buf[..n];
+                        let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
 
-                        let exit = call_action(
-                            opts.input_action.as_mut(),
-                            interact.session,
-                            &mut interact.input,
-                            &mut interact.output,
-                            &mut opts.state,
-                            &buf,
-                            eof,
-                        )?;
+                        let exit = run_action_input(s, &buf, eof)?;
 
                         if eof || exit {
                             return Ok(true);
                         }
 
-                        let escape_char_pos =
-                            buf.iter().position(|c| *c == interact.escape_character);
+                        let escape_char_pos = buf.iter().position(|c| *c == s.escape_character);
                         match escape_char_pos {
                             Some(pos) => {
-                                interact.session.write_all(&buf[..pos]).await?;
+                                s.session.write_all(&buf[..pos]).await?;
                                 return Ok(true);
                             }
-                            None => interact.session.write_all(&buf[..]).await?,
+                            None => s.session.write_all(&buf[..]).await?,
                         }
                     }
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -823,22 +782,19 @@ where
                 }
             }
             ReadFrom::Timeout => {
-                let exit = call_action(
-                    opts.idle_action.as_mut(),
-                    interact.session,
-                    &mut interact.input,
-                    &mut interact.output,
-                    &mut opts.state,
-                    &[],
-                    false,
-                )?;
-
+                let exit = run_action_idle(s, &[], false)?;
                 if exit {
                     return Ok(true);
                 }
             }
         }
     }
+}
+
+#[cfg(feature = "async")]
+async fn async_timeout(timeout: Duration) -> io::Result<usize> {
+    Delay::new(timeout).await;
+    io::Result::Ok(0)
 }
 
 fn spin_write<W>(mut writer: W, buf: &[u8]) -> std::io::Result<()>
@@ -865,6 +821,24 @@ where
             Err(_) => (),
         }
     }
+}
+
+#[rustfmt::skip]
+fn run_action_input<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    opt_action(ctx, &mut s.opts.input_action)
+}
+
+#[rustfmt::skip]
+fn run_action_output<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    opt_action(ctx, &mut s.opts.output_action)
+}
+
+#[rustfmt::skip]
+fn run_action_idle<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    opt_action(ctx, &mut s.opts.idle_action)
 }
 
 fn opt_action<S, I, O, C>(
@@ -900,6 +874,7 @@ where
 }
 
 #[cfg(unix)]
+#[cfg(not(feature = "async"))]
 fn try_read<S>(session: &mut S, buf: &mut [u8]) -> ExpectResult<Option<usize>>
 where
     S: NonBlocking + Read,

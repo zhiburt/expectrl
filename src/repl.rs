@@ -1,8 +1,9 @@
 //! This module contains a list of special Sessions that can be spawned.
 
 use std::{
-    io::{self, BufRead},
-    ops::{Deref, DerefMut},
+    io::{self, BufRead, Read, Write},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 #[cfg(unix)]
@@ -11,17 +12,16 @@ use std::process::Command;
 use crate::{
     error::Error,
     process::{Healthcheck, Termios},
-    session::{OsProcess, OsProcessStream},
-    Captures, Expect, Needle, Session,
+    session::OsSession,
+    AsyncExpect, Captures, Expect, Needle,
 };
-
-#[cfg(not(feature = "async"))]
-use crate::process::NonBlocking;
-#[cfg(not(feature = "async"))]
-use std::io::{Read, Write};
 
 use crate::spawn;
 
+#[cfg(not(feature = "async"))]
+use crate::process::NonBlocking;
+
+use futures_lite::io::AsyncBufRead;
 #[cfg(feature = "async")]
 use futures_lite::{AsyncRead, AsyncWrite};
 
@@ -70,7 +70,7 @@ pub fn spawn_bash() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessStre
 /// It uses a custom prompt to be able to controll shell better.
 #[cfg(unix)]
 #[cfg(feature = "async")]
-pub async fn spawn_bash() -> ExpectResult<ReplSession> {
+pub async fn spawn_bash() -> ExpectResult<ReplSession<OsSession>> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     let _ = cmd.env("PS1", DEFAULT_PROMPT);
@@ -85,12 +85,9 @@ pub async fn spawn_bash() -> ExpectResult<ReplSession> {
 
     let session = crate::session::Session::spawn(cmd)?;
 
-    let mut bash = ReplSession::new(
-        session,
-        DEFAULT_PROMPT.to_string(),
-        Some("quit".to_string()),
-        false,
-    );
+    let mut bash = ReplSession::new(session, DEFAULT_PROMPT);
+    bash.set_quit_command("quit");
+    bash.set_echo(false);
 
     // read a prompt to make it not available on next read.
     bash.expect_prompt().await?;
@@ -115,13 +112,16 @@ pub fn spawn_python() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessSt
 
 /// Spawn default python's IDLE.
 #[cfg(feature = "async")]
-pub async fn spawn_python() -> ExpectResult<ReplSession> {
+pub async fn spawn_python() -> ExpectResult<ReplSession<OsSession>> {
     // todo: check windows here
     // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
 
     let session = spawn("python")?;
 
-    let mut idle = ReplSession::new(session, ">>> ".to_owned(), Some("quit()".to_owned()), false);
+    let mut idle = ReplSession::new(session, ">>> ");
+    idle.set_quit_command("quit()");
+    idle.set_echo(false);
+
     idle.expect_prompt().await?;
     Ok(idle)
 }
@@ -197,11 +197,11 @@ pub async fn spawn_powershell() -> ExpectResult<ReplSession> {
 /// which executes them and manages IO streams.
 #[derive(Debug)]
 pub struct ReplSession<S> {
+    /// A pseudo-teletype session with a spawned process.
+    session: S,
     /// The prompt, used for `wait_for_prompt`,
     /// e.g. ">>> " for python.
     prompt: String,
-    /// A pseudo-teletype session with a spawned process.
-    session: S,
     /// A command which will be called before termination.
     quit_command: Option<String>,
     /// Flag to see if a echo is turned on.
@@ -283,7 +283,10 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<P, S: AsyncRead + Unpin> ReplSession<P, S> {
+impl<S> ReplSession<S>
+where
+    S: AsyncExpect + Unpin,
+{
     /// Block until prompt is found
     pub async fn expect_prompt(&mut self) -> Result<(), Error> {
         let _ = self._expect_prompt().await?;
@@ -344,7 +347,10 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<P, S: AsyncRead + AsyncWrite + Unpin> ReplSession<P, S> {
+impl<S> ReplSession<S>
+where
+    S: AsyncExpect + Unpin,
+{
     /// Send a command to a repl and verifies that it exited.
     pub async fn execute(&mut self, cmd: impl AsRef<str>) -> Result<Vec<u8>, Error> {
         self.send_line(cmd).await?;
@@ -444,6 +450,47 @@ where
     }
 }
 
+#[cfg(feature = "async")]
+impl<S> AsyncExpect for ReplSession<S>
+where
+    S: AsyncExpect,
+{
+    async fn expect<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    where
+        N: Needle,
+    {
+        S::expect(self.get_session_mut(), needle).await
+    }
+
+    async fn check<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    where
+        N: Needle,
+    {
+        S::check(self.get_session_mut(), needle).await
+    }
+
+    async fn is_matched<N>(&mut self, needle: N) -> ExpectResult<bool>
+    where
+        N: Needle,
+    {
+        S::is_matched(self.get_session_mut(), needle).await
+    }
+
+    async fn send<B>(&mut self, buf: B) -> ExpectResult<()>
+    where
+        B: AsRef<[u8]>,
+    {
+        S::send(self.get_session_mut(), buf).await
+    }
+
+    async fn send_line<B>(&mut self, buf: B) -> ExpectResult<()>
+    where
+        B: AsRef<[u8]>,
+    {
+        S::send_line(self.get_session_mut(), buf).await
+    }
+}
+
 impl<S> Write for ReplSession<S>
 where
     S: Write,
@@ -476,5 +523,52 @@ where
 
     fn consume(&mut self, amt: usize) {
         S::consume(self.get_session_mut(), amt)
+    }
+}
+
+impl<S> AsyncWrite for ReplSession<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        S::poll_write(Pin::new(self.get_session_mut()), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        S::poll_flush(Pin::new(self.get_session_mut()), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        S::poll_close(Pin::new(self.get_session_mut()), cx)
+    }
+}
+
+impl<S> AsyncRead for ReplSession<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        S::poll_read(Pin::new(self.get_session_mut()), cx, buf)
+    }
+}
+
+impl<S> AsyncBufRead for ReplSession<S>
+where
+    S: AsyncBufRead + Unpin,
+{
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+        S::poll_fill_buf(Pin::new(self.get_mut().get_session_mut()), cx)
+    }
+
+    fn consume(mut self: Pin<&mut Self>, amt: usize) {
+        S::consume(Pin::new(self.get_session_mut()), amt)
     }
 }

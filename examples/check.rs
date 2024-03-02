@@ -24,6 +24,8 @@ fn main() {
 
 #[cfg(feature = "async")]
 fn main() {
+    use expectrl::AsyncExpect;
+
     futures_lite::future::block_on(async {
         let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
 

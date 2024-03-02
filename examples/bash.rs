@@ -41,6 +41,7 @@ fn main() {
 #[cfg(feature = "async")]
 fn main() {
     use futures_lite::io::AsyncBufReadExt;
+    use expectrl::AsyncExpect;
 
     futures_lite::future::block_on(async {
         let mut p = spawn_bash().await.unwrap();

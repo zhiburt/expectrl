@@ -1,5 +1,8 @@
 use expectrl::{spawn, Error, Expect};
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 fn main() -> Result<(), Error> {
     let p = spawn("cat")?;
     let mut p = expectrl::session::log(p, std::io::stdout())?;

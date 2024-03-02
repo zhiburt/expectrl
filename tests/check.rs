@@ -4,6 +4,9 @@ use expectrl::{spawn, Any, Eof, Expect, NBytes, Regex};
 use std::thread;
 use std::time::Duration;
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]

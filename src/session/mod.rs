@@ -47,9 +47,9 @@ type OsProcStream = crate::process::windows::AsyncProcessStream;
 /// A type alias for OS process which can run a [`Session`] and a default one.
 pub type OsProcess = OsProc;
 /// A type alias for OS process stream which is a default one for [`Session`].
-pub type OsProcessStream = OsProcStream;
+pub type OsStream = OsProcStream;
 /// A type alias for OS session.
-pub type OsSession = Session<OsProc, OsProcStream>;
+pub type OsSession = Session<OsProc, OsStream>;
 
 #[cfg(feature = "async")]
 pub use async_session::Session;

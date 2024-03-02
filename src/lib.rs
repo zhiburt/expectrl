@@ -134,8 +134,10 @@ pub use needle::{Any, Eof, NBytes, Needle, Regex};
 pub use expect::Expect;
 pub use session::Session;
 
-use process::Process;
-use session::OsProcess;
+#[cfg(feature = "async")]
+pub use expect::AsyncExpect;
+
+use session::OsSession;
 
 /// Spawn spawnes a new session.
 ///
@@ -161,7 +163,7 @@ use session::OsProcess;
 /// ```
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
-pub fn spawn<S>(cmd: S) -> Result<Session<OsProcess, <OsProcess as Process>::Stream>, Error>
+pub fn spawn<S>(cmd: S) -> Result<OsSession, Error>
 where
     S: AsRef<str>,
 {

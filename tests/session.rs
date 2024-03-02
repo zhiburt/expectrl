@@ -7,6 +7,9 @@ use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(windows))]
 use std::io::{Read, Write};
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 #[test]
@@ -208,7 +211,7 @@ fn test_session_as_writer() {
         let _: Box<dyn futures_lite::AsyncBufRead> =
             Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
 
-        async fn _io_copy(mut session: Session) {
+        async fn _io_copy(mut session: OsSession) {
             futures_lite::io::copy(futures_lite::io::empty(), &mut session)
                 .await
                 .unwrap();

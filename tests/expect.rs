@@ -6,6 +6,9 @@ use expectrl::{spawn, Eof, NBytes, Regex, Expect};
 use std::io::Read;
 
 #[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
+#[cfg(feature = "async")]
 use futures_lite::io::AsyncReadExt;
 
 #[cfg(unix)]

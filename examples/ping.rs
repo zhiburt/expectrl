@@ -1,6 +1,9 @@
 #[cfg(unix)]
 use expectrl::{repl::spawn_bash, ControlCode, Error, Expect};
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {

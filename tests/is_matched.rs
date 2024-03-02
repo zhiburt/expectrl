@@ -4,6 +4,9 @@ use expectrl::{spawn, Eof, NBytes, Regex, process::unix::WaitStatus, Expect};
 use std::thread;
 use std::time::Duration;
 
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
+
 #[cfg(not(feature = "async"))]
 #[test]
 fn is_matched_str() {
@@ -99,8 +102,8 @@ fn is_matched_eof() {
         let mut session = spawn("echo 'Hello World'").unwrap();
 
         assert_eq!(
-            WaitStatus::Exited(session.pid(), 0),
-            session.wait().unwrap()
+            WaitStatus::Exited(session.get_process().pid(), 0),
+            session.get_process().wait().unwrap()
         );
 
         assert!(!session.is_matched(Eof).await.unwrap());
@@ -180,7 +183,7 @@ fn check_after_is_matched_eof() {
 fn check_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-        assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
+        assert_eq!(WaitStatus::Exited(p.get_process().pid(), 0), p.get_process().wait().unwrap());
 
         assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());
@@ -223,7 +226,7 @@ fn expect_after_is_matched_eof() {
 fn expect_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-        assert_eq!(WaitStatus::Exited(p.pid(), 0), p.wait().unwrap());
+        assert_eq!(WaitStatus::Exited(p.get_process().pid(), 0), p.get_process().wait().unwrap());
 
         assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());
