@@ -116,7 +116,7 @@ fn send_multiline() {
 
         futures_lite::future::block_on(async {
             session.send("Hello World\r\n").await.unwrap();
-            let m = session.expect('\n').unwrap();
+            let m = session.expect('\n').await.unwrap();
             let buf = String::from_utf8_lossy(m.before());
             assert!(buf.contains("Hello World"), "{:?}", buf);
             session.get_process_mut().exit(0).unwrap();
@@ -173,7 +173,7 @@ fn send_line() {
 
         futures_lite::future::block_on(async {
             session.send_line("Hello World").await.unwrap();
-            let m = session.expect('\n').unwrap();
+            let m = session.expect('\n').await.unwrap();
             let buf = String::from_utf8_lossy(m.before());
             assert!(buf.contains("Hello World"), "{:?}", buf);
             session.get_process_mut().exit(0).unwrap();

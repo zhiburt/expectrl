@@ -1,10 +1,6 @@
 //! This module contains a list of special Sessions that can be spawned.
 
-use std::{
-    io::{self, BufRead, Read, Write},
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::io::{self, BufRead, Read, Write};
 
 #[cfg(unix)]
 use std::process::Command;
@@ -13,19 +9,21 @@ use crate::{
     error::Error,
     process::{Healthcheck, Termios},
     session::OsSession,
-    AsyncExpect, Captures, Expect, Needle,
+    Captures, Expect, Needle,
+    spawn,
 };
 
-use crate::spawn;
-
-#[cfg(not(feature = "async"))]
-use crate::process::NonBlocking;
-
-use futures_lite::io::AsyncBufRead;
 #[cfg(feature = "async")]
-use futures_lite::{AsyncRead, AsyncWrite};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-type ExpectResult<T> = Result<T, Error>;
+#[cfg(feature = "async")]
+use futures_lite::{AsyncRead, AsyncWrite, io::AsyncBufRead};
+
+#[cfg(feature = "async")]
+use crate::AsyncExpect;
 
 /// Spawn a bash session.
 ///
@@ -35,7 +33,7 @@ type ExpectResult<T> = Result<T, Error>;
 /// Because we don't handle echoes here (currently). Ideally we need to.
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
-pub fn spawn_bash() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessStream>>> {
+pub fn spawn_bash() -> Result<ReplSession<Session<OsProcess, OsProcessStream>>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
 
     let mut cmd = Command::new("bash");
@@ -70,7 +68,7 @@ pub fn spawn_bash() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessStre
 /// It uses a custom prompt to be able to controll shell better.
 #[cfg(unix)]
 #[cfg(feature = "async")]
-pub async fn spawn_bash() -> ExpectResult<ReplSession<OsSession>> {
+pub async fn spawn_bash() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
     let mut cmd = Command::new("bash");
     let _ = cmd.env("PS1", DEFAULT_PROMPT);
@@ -97,7 +95,7 @@ pub async fn spawn_bash() -> ExpectResult<ReplSession<OsSession>> {
 
 /// Spawn default python's IDLE.
 #[cfg(not(feature = "async"))]
-pub fn spawn_python() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessStream>>> {
+pub fn spawn_python() -> Result<ReplSession<OsSession>, Error> {
     // todo: check windows here
     // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
 
@@ -112,7 +110,7 @@ pub fn spawn_python() -> ExpectResult<ReplSession<Session<OsProcess, OsProcessSt
 
 /// Spawn default python's IDLE.
 #[cfg(feature = "async")]
-pub async fn spawn_python() -> ExpectResult<ReplSession<OsSession>> {
+pub async fn spawn_python() -> Result<ReplSession<OsSession>, Error> {
     // todo: check windows here
     // If we spawn it as ProcAttr::default().commandline("python") it will spawn processes endlessly....
 
@@ -131,15 +129,15 @@ pub async fn spawn_python() -> ExpectResult<ReplSession<OsSession>> {
 /// It uses a custom prompt to be able to controll the shell.
 #[cfg(windows)]
 #[cfg(not(feature = "async"))]
-pub fn spawn_powershell() -> ExpectResult<ReplSession> {
+pub fn spawn_powershell() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
     let mut powershell = ReplSession::new(
         session,
-        DEFAULT_PROMPT.to_owned(),
-        Some("exit".to_owned()),
-        true,
+        DEFAULT_PROMPT,
     );
+    powershell.set_quit_command("exit");
+    powershell.set_echo(true);
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
     let _ = powershell.execute(format!(
@@ -162,15 +160,15 @@ pub fn spawn_powershell() -> ExpectResult<ReplSession> {
 /// It uses a custom prompt to be able to controll the shell.
 #[cfg(windows)]
 #[cfg(feature = "async")]
-pub async fn spawn_powershell() -> ExpectResult<ReplSession> {
+pub async fn spawn_powershell() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
     let mut powershell = ReplSession::new(
         session,
-        DEFAULT_PROMPT.to_owned(),
-        Some("exit".to_owned()),
-        true,
+        DEFAULT_PROMPT,
     );
+    powershell.set_quit_command("exit");
+    powershell.set_echo(true);
 
     // https://stackoverflow.com/questions/5725888/windows-powershell-changing-the-command-prompt
     let _ = powershell
@@ -414,35 +412,35 @@ impl<S> Expect for ReplSession<S>
 where
     S: Expect,
 {
-    fn expect<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle,
     {
         S::expect(self.get_session_mut(), needle)
     }
 
-    fn check<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle,
     {
         S::check(self.get_session_mut(), needle)
     }
 
-    fn is_matched<N>(&mut self, needle: N) -> ExpectResult<bool>
+    fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
     where
         N: Needle,
     {
         S::is_matched(self.get_session_mut(), needle)
     }
 
-    fn send<B>(&mut self, buf: B) -> ExpectResult<()>
+    fn send<B>(&mut self, buf: B) -> Result<(), Error>
     where
         B: AsRef<[u8]>,
     {
         S::send(self.get_session_mut(), buf)
     }
 
-    fn send_line<B>(&mut self, buf: B) -> ExpectResult<()>
+    fn send_line<B>(&mut self, buf: B) -> Result<(), Error>
     where
         B: AsRef<[u8]>,
     {
@@ -455,35 +453,35 @@ impl<S> AsyncExpect for ReplSession<S>
 where
     S: AsyncExpect,
 {
-    async fn expect<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    async fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle,
     {
         S::expect(self.get_session_mut(), needle).await
     }
 
-    async fn check<N>(&mut self, needle: N) -> ExpectResult<Captures>
+    async fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle,
     {
         S::check(self.get_session_mut(), needle).await
     }
 
-    async fn is_matched<N>(&mut self, needle: N) -> ExpectResult<bool>
+    async fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
     where
         N: Needle,
     {
         S::is_matched(self.get_session_mut(), needle).await
     }
 
-    async fn send<B>(&mut self, buf: B) -> ExpectResult<()>
+    async fn send<B>(&mut self, buf: B) -> Result<(), Error>
     where
         B: AsRef<[u8]>,
     {
         S::send(self.get_session_mut(), buf).await
     }
 
-    async fn send_line<B>(&mut self, buf: B) -> ExpectResult<()>
+    async fn send_line<B>(&mut self, buf: B) -> Result<(), Error>
     where
         B: AsRef<[u8]>,
     {
@@ -526,6 +524,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<S> AsyncWrite for ReplSession<S>
 where
     S: AsyncWrite + Unpin,
@@ -547,6 +546,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<S> AsyncRead for ReplSession<S>
 where
     S: AsyncRead + Unpin,
@@ -560,6 +560,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<S> AsyncBufRead for ReplSession<S>
 where
     S: AsyncBufRead + Unpin,

@@ -9,6 +9,7 @@ struct State {
 
 #[cfg(not(all(windows, feature = "polling")))]
 #[cfg(not(feature = "async"))]
+#[cfg(unix)]
 fn main() {
     let mut output_action = Lookup::new();
     let mut input_action = Lookup::new();
@@ -79,7 +80,7 @@ fn main() {
     );
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(unix, feature = "async"))]
 fn main() {
     // let mut output_action = Lookup::new();
     // let mut input_action = Lookup::new();
@@ -147,5 +148,5 @@ fn main() {
     // );
 }
 
-#[cfg(all(windows, feature = "polling", not(feature = "async")))]
+#[cfg(windows)]
 fn main() {}

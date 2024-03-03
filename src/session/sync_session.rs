@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     expect::Expect,
     needle::Needle,
-    process::{Healthcheck, NonBlocking, Process, Termios},
+    process::{Healthcheck, NonBlocking, Termios},
     Captures,
 };
 

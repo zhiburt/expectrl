@@ -442,6 +442,8 @@ fn try_read_to_end() {
 #[test]
 #[cfg(windows)]
 fn continues_try_reads() {
+    use expectrl::process::Healthcheck;
+
     let cmd = Command::new("python3 -c \"import time; print('Start Sleep'); time.sleep(0.1); print('End of Sleep'); yn=input('input');\"");
     let mut proc = Session::spawn(cmd).unwrap();
 

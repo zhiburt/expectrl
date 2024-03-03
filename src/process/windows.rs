@@ -54,7 +54,14 @@ impl ProcessTrait for WinProcess {
 }
 
 impl Healthcheck for WinProcess {
-    fn is_alive(&mut self) -> Result<bool> {
+    // todo: We could implement it by using WaitForObject and return -> u32 code
+    type Status = ();
+
+    fn get_status(&self) -> Result<Self::Status> {
+        Ok(())
+    }
+
+    fn is_alive(&self) -> Result<bool> {
         Ok(self.proc.is_alive())
     }
 }
@@ -115,13 +122,8 @@ impl Read for ProcessStream {
 }
 
 impl NonBlocking for ProcessStream {
-    fn set_non_blocking(&mut self) -> Result<()> {
-        self.output.blocking(false);
-        Ok(())
-    }
-
-    fn set_blocking(&mut self) -> Result<()> {
-        self.output.blocking(true);
+    fn set_blocking(&mut self, on: bool) -> Result<()> {
+        self.output.blocking(on);
         Ok(())
     }
 }

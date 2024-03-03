@@ -1,10 +1,12 @@
 #[cfg(windows)]
-use expectrl::{repl::spawn_powershell, ControlCode, Regex};
+use expectrl::{repl::spawn_powershell, ControlCode, Regex, Expect};
 
 #[cfg(windows)]
 fn main() {
     #[cfg(feature = "async")]
     {
+        use expectrl::AsyncExpect;
+
         futures_lite::future::block_on(async {
             let mut p = spawn_powershell().await.unwrap();
 

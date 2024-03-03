@@ -24,9 +24,12 @@ use futures_lite::{
 };
 
 use crate::{
-    process::{Healthcheck, Termios},
+    process::Healthcheck,
     Error,
 };
+
+#[cfg(unix)]
+use crate::process::Termios;
 
 #[cfg(not(feature = "async"))]
 use crate::Expect;
@@ -200,12 +203,49 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     }
 }
 
-#[cfg(not(any(feature = "async", feature = "polling")))]
+#[cfg(all(unix, not(any(feature = "async", feature = "polling"))))]
 impl<S, I, O, C> InteractSession<S, I, O, C>
 where
     I: Read,
     O: Write,
     S: Expect + Termios + Healthcheck<Status = WaitStatus> + NonBlocking + Write + Read,
+{
+    /// Runs the session.
+    ///
+    /// See [`Session::interact`].
+    ///
+    /// [`Session::interact`]: crate::session::Session::interact
+    pub fn spawn(&mut self) -> ExpectResult<bool> {
+        #[cfg(unix)]
+        {
+            let is_echo = self.session.is_echo()?;
+            if !is_echo {
+                let _ = self.session.set_echo(true);
+            }
+
+            self.status = None;
+            let is_alive = interact_buzy_loop(self)?;
+
+            if !is_echo {
+                let _ = self.session.set_echo(false);
+            }
+
+            Ok(is_alive)
+        }
+
+        #[cfg(windows)]
+        {
+            interact_buzy_loop(self)
+        }
+    }
+}
+
+#[cfg(all(windows, not(any(feature = "async", feature = "polling"))))]
+impl<S, I, O, C> InteractSession<S, I, O, C>
+where
+    I: Read,
+    O: Write,
+    S: Expect + Healthcheck + NonBlocking + Write + Read,
 {
     /// Runs the session.
     ///
@@ -278,7 +318,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(unix, feature = "async"))]
 impl<S, I, O, C> InteractSession<S, I, O, C>
 where
     I: AsyncRead + Unpin,
@@ -291,26 +331,35 @@ where
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     pub async fn spawn(&mut self) -> Result<bool, Error> {
-        #[cfg(unix)]
-        {
-            let is_echo = self.session.is_echo().map_err(Error::IO)?;
-            if !is_echo {
-                let _ = self.session.set_echo(true);
-            }
-
-            let is_alive = interact_async(self).await?;
-
-            if !is_echo {
-                let _ = self.session.set_echo(false);
-            }
-
-            Ok(is_alive)
+        let is_echo = self.session.is_echo().map_err(Error::IO)?;
+        if !is_echo {
+            let _ = self.session.set_echo(true);
         }
 
-        #[cfg(windows)]
-        {
-            interact_async(self, opts.borrow_mut()).await
+        let is_alive = interact_async(self).await?;
+
+        if !is_echo {
+            let _ = self.session.set_echo(false);
         }
+
+        Ok(is_alive)
+    }
+}
+
+#[cfg(all(windows, feature = "async"))]
+impl<S, I, O, C> InteractSession<S, I, O, C>
+where
+    I: AsyncRead + Unpin,
+    O: AsyncWrite + Unpin,
+    S: AsyncExpect + Healthcheck + AsyncWrite + AsyncRead + Unpin,
+{
+    /// Runs the session.
+    ///
+    /// See [`Session::interact`].
+    ///
+    /// [`Session::interact`]: crate::session::Session::interact
+    pub async fn spawn(&mut self) -> Result<bool, Error> {
+        interact_async(self).await
     }
 }
 
@@ -347,19 +396,26 @@ where
 {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InteractSession")
-            .field("session", &self.session)
+        let mut s = f.debug_struct("InteractSession");
+        let _ = s.field("session", &self.session)
             .field("input", &self.input)
             .field("output", &self.output)
-            .field("escape_character", &self.escape_character)
-            .field("status", &self.status)
+            .field("escape_character", &self.escape_character);
+
+        #[cfg(unix)]
+        {
+            s.field("status", &self.status);
+        }
+
+        let _ = s
             .field("state", &std::ptr::addr_of!(self.opts.state))
             .field("opts:on_idle", &get_pointer(&self.opts.idle_action))
             .field("opts:on_input", &get_pointer(&self.opts.input_action))
             .field("opts:on_output", &get_pointer(&self.opts.output_action))
             .field("opts:input_filter", &get_pointer(&self.opts.input_filter))
-            .field("opts:output_filter", &get_pointer(&self.opts.output_filter))
-            .finish()
+            .field("opts:output_filter", &get_pointer(&self.opts.output_filter));
+        
+        s.finish()
     }
 }
 
@@ -384,11 +440,7 @@ where
             let buf = &buf[..n];
             let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
 
-            #[rustfmt::skip]
-            let exit = opt_action(
-                Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof),
-                &mut s.opts.output_action,
-            )?;
+            let exit = run_action_output(s, &buf, eof)?;
             if eof || exit {
                 return Ok(true);
             }
@@ -408,10 +460,7 @@ where
                 let buf = call_filter(s.opts.input_filter.as_mut(), buf)?;
 
                 #[rustfmt::skip]
-                let exit = opt_action(
-                    Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof),
-                    &mut s.opts.input_action,
-                )?;
+                let exit = run_action_input(s, &buf, eof)?;
                 if eof | exit {
                     return Ok(true);
                 }
@@ -431,11 +480,72 @@ where
             Err(err) => return Err(err.into()),
         }
 
-        #[rustfmt::skip]
-        let exit = opt_action(
-            Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, false),
-            &mut s.opts.idle_action,
-        )?;
+        let exit = run_action_idle(s, &[], false)?;
+        if exit {
+            return Ok(true);
+        }
+    }
+}
+
+#[cfg(all(windows, not(feature = "async"), not(feature = "polling")))]
+fn interact_buzy_loop<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> ExpectResult<bool>
+where
+    S: Healthcheck + NonBlocking + Write + Read,
+    O: Write,
+    I: Read,
+{
+    let mut buf = [0; 512];
+
+    loop {
+        if !s.session.is_alive()? {
+            return Ok(false);
+        }
+
+        if let Some(n) = try_read(&mut s.session, &mut buf)? {
+            let eof = n == 0;
+            let buf = &buf[..n];
+            let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
+
+            let exit = run_action_output(s, &buf, eof)?;
+            if eof || exit {
+                return Ok(true);
+            }
+
+            spin_write(&mut s.output, &buf)?;
+            spin_flush(&mut s.output)?;
+        }
+
+        // We dont't print user input back to the screen.
+        // In terminal mode it will be ECHOed back automatically.
+        // This way we preserve terminal seetings for example when user inputs password.
+        // The terminal must have been prepared before.
+        match s.input.read(&mut buf) {
+            Ok(n) => {
+                let eof = n == 0;
+                let buf = &buf[..n];
+                let buf = call_filter(s.opts.input_filter.as_mut(), buf)?;
+
+                let exit = run_action_input(s, &buf, eof)?;
+                if eof | exit {
+                    return Ok(true);
+                }
+
+                let escape_char_position = buf.iter().position(|c| *c == s.escape_character);
+                match escape_char_position {
+                    Some(pos) => {
+                        s.session.write_all(&buf[..pos])?;
+                        return Ok(true);
+                    }
+                    None => {
+                        s.session.write_all(&buf[..])?;
+                    }
+                }
+            }
+            Err(err) if err.kind() == ErrorKind::WouldBlock => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        let exit = run_action_idle(s, &[], false)?;
         if exit {
             return Ok(true);
         }
@@ -791,6 +901,95 @@ where
     }
 }
 
+
+#[cfg(all(windows, feature = "async"))]
+async fn interact_async<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> Result<bool, Error>
+where
+    S: Healthcheck + AsyncRead + AsyncWrite + Unpin,
+    I: AsyncRead + Unpin,
+    O: AsyncWrite + Unpin,
+{
+    #[derive(Debug)]
+    enum ReadFrom {
+        Input,
+        Proc,
+        Timeout,
+    }
+
+    const TIMEOUT: Duration = Duration::from_secs(5);
+    let mut input_buf = [0; 512];
+    let mut proc_buf = [0; 512];
+
+    loop {
+        if !s.session.is_alive()? {
+            return Ok(false);
+        }
+
+        let read_process = async { (ReadFrom::Proc, s.session.read(&mut proc_buf).await) };
+        let read_input = async { (ReadFrom::Input, s.input.read(&mut input_buf).await) };
+        let timeout = async { (ReadFrom::Timeout, async_timeout(TIMEOUT).await) };
+
+        let read_any = future::or(read_process, read_input);
+        let read_output = future::or(read_any, timeout).await;
+        let read_target = read_output.0;
+        let read_result = read_output.1;
+
+        match read_target {
+            ReadFrom::Proc => {
+                let n = read_result?;
+                let eof = n == 0;
+                let buf = &proc_buf[..n];
+                let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
+
+                let exit = run_action_output(s, &buf, eof)?;
+
+                if eof || exit {
+                    return Ok(true);
+                }
+
+                s.output.write(&buf).await?;
+                s.output.flush().await?;
+            }
+            ReadFrom::Input => {
+                // We dont't print user input back to the screen.
+                // In terminal mode it will be ECHOed back automatically.
+                // This way we preserve terminal seetings for example when user inputs password.
+                // The terminal must have been prepared before.
+                match read_result {
+                    Ok(n) => {
+                        let eof = n == 0;
+                        let buf = &input_buf[..n];
+                        let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
+
+                        let exit = run_action_input(s, &buf, eof)?;
+
+                        if eof || exit {
+                            return Ok(true);
+                        }
+
+                        let escape_char_pos = buf.iter().position(|c| *c == s.escape_character);
+                        match escape_char_pos {
+                            Some(pos) => {
+                                s.session.write_all(&buf[..pos]).await?;
+                                return Ok(true);
+                            }
+                            None => s.session.write_all(&buf[..]).await?,
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            ReadFrom::Timeout => {
+                let exit = run_action_idle(s, &[], false)?;
+                if exit {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(feature = "async")]
 async fn async_timeout(timeout: Duration) -> io::Result<usize> {
     Delay::new(timeout).await;
@@ -873,7 +1072,6 @@ where
     }
 }
 
-#[cfg(unix)]
 #[cfg(not(feature = "async"))]
 fn try_read<S>(session: &mut S, buf: &mut [u8]) -> ExpectResult<Option<usize>>
 where
