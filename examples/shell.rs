@@ -1,10 +1,9 @@
+use expectrl::process::Termios;
 use expectrl::repl::ReplSession;
 use std::io::Result;
-use expectrl::process::Termios;
 
 #[cfg(all(unix, not(feature = "async")))]
 fn main() -> Result<()> {
-
     let mut p = expectrl::spawn("sh")?;
     p.set_echo(true)?;
 

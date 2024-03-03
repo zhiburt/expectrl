@@ -9,8 +9,7 @@ use crate::{
     error::Error,
     process::{Healthcheck, Termios},
     session::OsSession,
-    Captures, Expect, Needle,
-    spawn,
+    spawn, Captures, Expect, Needle,
 };
 
 #[cfg(feature = "async")]
@@ -20,7 +19,7 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use futures_lite::{AsyncRead, AsyncWrite, io::AsyncBufRead};
+use futures_lite::{io::AsyncBufRead, AsyncRead, AsyncWrite};
 
 #[cfg(feature = "async")]
 use crate::AsyncExpect;
@@ -33,7 +32,7 @@ use crate::AsyncExpect;
 /// Because we don't handle echoes here (currently). Ideally we need to.
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
-pub fn spawn_bash() -> Result<ReplSession<Session<OsProcess, OsProcessStream>>, Error> {
+pub fn spawn_bash() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECT_PROMPT";
 
     let mut cmd = Command::new("bash");
@@ -132,10 +131,7 @@ pub async fn spawn_python() -> Result<ReplSession<OsSession>, Error> {
 pub fn spawn_powershell() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
-    let mut powershell = ReplSession::new(
-        session,
-        DEFAULT_PROMPT,
-    );
+    let mut powershell = ReplSession::new(session, DEFAULT_PROMPT);
     powershell.set_quit_command("exit");
     powershell.set_echo(true);
 
@@ -163,10 +159,7 @@ pub fn spawn_powershell() -> Result<ReplSession<OsSession>, Error> {
 pub async fn spawn_powershell() -> Result<ReplSession<OsSession>, Error> {
     const DEFAULT_PROMPT: &str = "EXPECTED_PROMPT>";
     let session = spawn("pwsh -NoProfile -NonInteractive -NoLogo")?;
-    let mut powershell = ReplSession::new(
-        session,
-        DEFAULT_PROMPT,
-    );
+    let mut powershell = ReplSession::new(session, DEFAULT_PROMPT);
     powershell.set_quit_command("exit");
     powershell.set_echo(true);
 

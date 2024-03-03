@@ -91,7 +91,10 @@ fn bash_with_log() {
 
         let p = spawn_bash().await.unwrap();
         let prompt = p.get_prompt().to_owned();
-        let quit_cmd = p.get_quit_command().map(|c| c.to_owned()).unwrap_or_default();
+        let quit_cmd = p
+            .get_quit_command()
+            .map(|c| c.to_owned())
+            .unwrap_or_default();
         let is_echo = p.is_echo();
         let session = session::log(p.into_session(), std::io::stderr()).unwrap();
         let mut p = ReplSession::new(session, prompt);

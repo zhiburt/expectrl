@@ -677,14 +677,15 @@ fn _p_interact(proc: &mut OsSession) -> Result<(), expectrl::Error> {
     use std::io::stdout;
 
     let mut stdin = Stdin::open()?;
-    let stdout = AsyncWriter(stdout());
 
     #[cfg(not(feature = "async"))]
     {
+        let stdout = stdout();
         proc.interact(&mut stdin, stdout).spawn()?;
     }
     #[cfg(feature = "async")]
     {
+        let stdout = AsyncWriter(stdout());
         block_on(proc.interact(&mut stdin, stdout).spawn())?;
     }
 

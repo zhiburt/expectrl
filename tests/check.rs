@@ -291,7 +291,7 @@ fn check_macro_doest_consume_missmatch() {
         thread::sleep(Duration::from_millis(600));
 
         expectrl::check!(
-            session,
+            &mut session,
             _ = "Something which is not inside" => {
                 panic!("Unexpected result");
             },
@@ -303,7 +303,7 @@ fn check_macro_doest_consume_missmatch() {
         thread::sleep(Duration::from_millis(600));
 
         expectrl::check!(
-            session,
+            &mut session,
             buffer = Eof => {
                 assert_eq!(buffer.get(0).unwrap(), b"Hello World\r\n")
             },
@@ -355,7 +355,7 @@ fn check_macro_with_different_needles() {
 
         thread::sleep(Duration::from_millis(600));
         expectrl::check!(
-            session,
+            &mut session,
             number = Any(["123", "345"]) => {
                 assert_eq!(number.get(0).unwrap(), b"345")
             },
@@ -373,7 +373,7 @@ fn check_macro_with_different_needles() {
 
         thread::sleep(Duration::from_millis(600));
         expectrl::check!(
-            session,
+            &mut session,
             number = Any(["123", "345"]) => {
                 assert_eq!(number.get(0).unwrap(), b"345")
             },

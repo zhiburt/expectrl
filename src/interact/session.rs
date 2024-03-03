@@ -23,10 +23,7 @@ use futures_lite::{
     AsyncReadExt, AsyncWriteExt,
 };
 
-use crate::{
-    process::Healthcheck,
-    Error,
-};
+use crate::{process::Healthcheck, Error};
 
 #[cfg(unix)]
 use crate::process::Termios;
@@ -216,27 +213,19 @@ where
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     pub fn spawn(&mut self) -> ExpectResult<bool> {
-        #[cfg(unix)]
-        {
-            let is_echo = self.session.is_echo()?;
-            if !is_echo {
-                let _ = self.session.set_echo(true);
-            }
-
-            self.status = None;
-            let is_alive = interact_buzy_loop(self)?;
-
-            if !is_echo {
-                let _ = self.session.set_echo(false);
-            }
-
-            Ok(is_alive)
+        let is_echo = self.session.is_echo()?;
+        if !is_echo {
+            let _ = self.session.set_echo(true);
         }
 
-        #[cfg(windows)]
-        {
-            interact_buzy_loop(self)
+        self.status = None;
+        let is_alive = interact_buzy_loop(self)?;
+
+        if !is_echo {
+            let _ = self.session.set_echo(false);
         }
+
+        Ok(is_alive)
     }
 }
 
@@ -253,6 +242,28 @@ where
     ///
     /// [`Session::interact`]: crate::session::Session::interact
     pub fn spawn(&mut self) -> ExpectResult<bool> {
+        interact_buzy_loop(self)
+    }
+}
+
+#[cfg(all(unix, not(feature = "async"), feature = "polling"))]
+impl<S, I, O, C> InteractSession<S, I, O, C>
+where
+    I: Read + std::os::unix::io::AsRawFd,
+    O: Write,
+    S: Expect
+        + Termios
+        + Healthcheck<Status = WaitStatus>
+        + Write
+        + Read
+        + std::os::unix::io::AsRawFd,
+{
+    /// Runs the session.
+    ///
+    /// See [`Session::interact`].
+    ///
+    /// [`Session::interact`]: crate::session::Session::interact
+    pub fn spawn(&mut self) -> ExpectResult<bool> {
         #[cfg(unix)]
         {
             let is_echo = self.session.is_echo()?;
@@ -261,7 +272,7 @@ where
             }
 
             self.status = None;
-            let is_alive = interact_buzy_loop(self)?;
+            let is_alive = interact_polling(self)?;
 
             if !is_echo {
                 let _ = self.session.set_echo(false);
@@ -274,47 +285,6 @@ where
         {
             interact_buzy_loop(self)
         }
-    }
-}
-
-#[cfg(all(unix, feature = "polling", not(feature = "async")))]
-impl<S, I, O> InteractSession<&mut Session<OsProcess, S>, I, O>
-where
-    I: Read + std::os::unix::io::AsRawFd,
-    O: Write,
-    S: Write + Read + std::os::unix::io::AsRawFd,
-{
-    /// Runs the session.
-    ///
-    /// See [`Session::interact`].
-    ///
-    /// [`Session::interact`]: crate::session::Session::interact
-    pub fn spawn<C, IF, OF, IA, OA, WA, OPS>(&mut self, mut ops: OPS) -> Result<bool, Error>
-    where
-        OPS: BorrowMut<InteractOptions<C, IF, OF, IA, OA, WA>>,
-        IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-        IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-        WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    {
-        let is_echo = self
-            .session
-            .get_process()
-            .get_echo()
-            .map_err(|e| Error::unknown("failed to get echo", e.to_string()))?;
-        if !is_echo {
-            let _ = self.session.get_process_mut().set_echo(true, None);
-        }
-
-        self.status = None;
-        let is_alive = interact_polling(self, ops.borrow_mut())?;
-
-        if !is_echo {
-            let _ = self.session.get_process_mut().set_echo(false, None);
-        }
-
-        Ok(is_alive)
     }
 }
 
@@ -404,7 +374,7 @@ where
 
         #[cfg(unix)]
         {
-            s.field("status", &self.status);
+            let _ = s.field("status", &self.status);
         }
 
         let _ = s
@@ -414,7 +384,7 @@ where
             .field("opts:on_output", &get_pointer(&self.opts.output_action))
             .field("opts:input_filter", &get_pointer(&self.opts.input_filter))
             .field("opts:output_filter", &get_pointer(&self.opts.output_filter));
-        
+
         s.finish()
     }
 }
@@ -553,38 +523,27 @@ where
 }
 
 #[cfg(all(unix, not(feature = "async"), feature = "polling"))]
-fn interact_polling<S, O, I, C, IF, OF, IA, OA, WA>(
-    interact: &mut InteractSession<&mut Session<OsProcess, S>, I, O>,
-    opts: &mut InteractOptions<C, IF, OF, IA, OA, WA>,
-) -> Result<bool, Error>
+fn interact_polling<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> Result<bool, Error>
 where
-    S: Write + Read + std::os::unix::io::AsRawFd,
+    S: Healthcheck<Status = WaitStatus> + Write + Read + std::os::unix::io::AsRawFd,
     I: Read + std::os::unix::io::AsRawFd,
     O: Write,
-    IF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    OF: FnMut(&[u8]) -> Result<Cow<'_, [u8]>, Error>,
-    IA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    OA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
-    WA: FnMut(Context<'_, Session<OsProcess, S>, I, O, C>) -> Result<bool, Error>,
 {
     use polling::{Event, Poller};
 
     // Create a poller and register interest in readability on the socket.
     let poller = Poller::new()?;
-    poller.add(interact.input.as_raw_fd(), Event::readable(0))?;
-    poller.add(
-        interact.session.get_stream().as_raw_fd(),
-        Event::readable(1),
-    )?;
+    poller.add(s.input.as_raw_fd(), Event::readable(0))?;
+    poller.add(s.session.as_raw_fd(), Event::readable(1))?;
 
     let mut buf = [0; 512];
 
     // The event loop.
     let mut events = Vec::new();
     loop {
-        let status = get_status(interact.session)?;
-        if !matches!(status, Some(crate::WaitStatus::StillAlive)) {
-            interact.status = status;
+        let status = get_status(&s.session)?;
+        if !matches!(status, Some(WaitStatus::StillAlive)) {
+            s.status = status;
             return Ok(false);
         }
 
@@ -598,34 +557,24 @@ where
                 // In terminal mode it will be ECHOed back automatically.
                 // This way we preserve terminal seetings for example when user inputs password.
                 // The terminal must have been prepared before.
-                match interact.input.read(&mut buf) {
+                match s.input.read(&mut buf) {
                     Ok(n) => {
                         let eof = n == 0;
                         let buf = &buf[..n];
-                        let buf = call_filter(opts.input_filter.as_mut(), buf)?;
+                        let buf = call_filter(s.opts.input_filter.as_mut(), buf)?;
 
-                        let exit = call_action(
-                            opts.input_action.as_mut(),
-                            interact.session,
-                            &mut interact.input,
-                            &mut interact.output,
-                            &mut opts.state,
-                            &buf,
-                            eof,
-                        )?;
-
+                        let exit = run_action_input(s, &buf, eof)?;
                         if eof || exit {
                             return Ok(true);
                         }
 
-                        let escape_char_pos =
-                            buf.iter().position(|c| *c == interact.escape_character);
+                        let escape_char_pos = buf.iter().position(|c| *c == s.escape_character);
                         match escape_char_pos {
                             Some(pos) => {
-                                interact.session.write_all(&buf[..pos]).map_err(Error::IO)?;
+                                s.session.write_all(&buf[..pos]).map_err(Error::IO)?;
                                 return Ok(true);
                             }
-                            None => interact.session.write_all(&buf[..])?,
+                            None => s.session.write_all(&buf[..])?,
                         }
                     }
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {}
@@ -633,55 +582,35 @@ where
                 }
 
                 // Set interest in the next readability event.
-                poller.modify(interact.input.as_raw_fd(), Event::readable(0))?;
+                poller.modify(s.input.as_raw_fd(), Event::readable(0))?;
             }
 
             if ev.key == 1 {
-                match interact.session.read(&mut buf) {
+                match s.session.read(&mut buf) {
                     Ok(n) => {
                         let eof = n == 0;
                         let buf = &buf[..n];
-                        let buf = call_filter(opts.output_filter.as_mut(), buf)?;
+                        let buf = call_filter(s.opts.output_filter.as_mut(), buf)?;
 
-                        let exit = call_action(
-                            opts.output_action.as_mut(),
-                            interact.session,
-                            &mut interact.input,
-                            &mut interact.output,
-                            &mut opts.state,
-                            &buf,
-                            eof,
-                        )?;
+                        let exit = run_action_output(s, &buf, eof)?;
 
                         if eof || exit {
                             return Ok(true);
                         }
 
-                        spin_write(&mut interact.output, &buf)?;
-                        spin_flush(&mut interact.output)?;
+                        spin_write(&mut s.output, &buf)?;
+                        spin_flush(&mut s.output)?;
                     }
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {}
                     Err(err) => return Err(err.into()),
                 }
 
                 // Set interest in the next readability event.
-                poller.modify(
-                    interact.session.get_stream().as_raw_fd(),
-                    Event::readable(1),
-                )?;
+                poller.modify(s.session.as_raw_fd(), Event::readable(1))?;
             }
         }
 
-        let exit = call_action(
-            opts.idle_action.as_mut(),
-            interact.session,
-            &mut interact.input,
-            &mut interact.output,
-            &mut opts.state,
-            &[],
-            false,
-        )?;
-
+        let exit = run_action_idle(s, &[], false)?;
         if exit {
             return Ok(true);
         }
@@ -901,7 +830,6 @@ where
     }
 }
 
-
 #[cfg(all(windows, feature = "async"))]
 async fn interact_async<S, O, I, C>(s: &mut InteractSession<S, I, O, C>) -> Result<bool, Error>
 where
@@ -1024,19 +952,19 @@ where
 
 #[rustfmt::skip]
 fn run_action_input<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
-    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, buf, eof);
     opt_action(ctx, &mut s.opts.input_action)
 }
 
 #[rustfmt::skip]
 fn run_action_output<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
-    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, buf, eof);
     opt_action(ctx, &mut s.opts.output_action)
 }
 
 #[rustfmt::skip]
 fn run_action_idle<S, I, O, C>(s: &mut InteractSession<S, I, O, C>, buf: &[u8], eof: bool) -> ExpectResult<bool> {
-    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, &buf, eof);
+    let ctx = Context::new(&mut s.session, &mut s.input, &mut s.output, &mut s.opts.state, buf, eof);
     opt_action(ctx, &mut s.opts.idle_action)
 }
 
@@ -1072,7 +1000,7 @@ where
     }
 }
 
-#[cfg(not(feature = "async"))]
+#[cfg(all(not(feature = "async"), not(feature = "polling")))]
 fn try_read<S>(session: &mut S, buf: &mut [u8]) -> ExpectResult<Option<usize>>
 where
     S: NonBlocking + Read,

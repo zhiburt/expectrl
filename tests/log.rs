@@ -6,7 +6,7 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use futures_lite::{AsyncReadExt, AsyncBufReadExt};
+use futures_lite::{AsyncBufReadExt, AsyncReadExt};
 
 use expectrl::{session, spawn, Expect};
 

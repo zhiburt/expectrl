@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use expectrl::{spawn, Eof, NBytes, Regex, process::unix::WaitStatus, Expect};
+use expectrl::{process::unix::WaitStatus, spawn, Eof, Expect, NBytes, Regex};
 use std::thread;
 use std::time::Duration;
 
@@ -183,7 +183,10 @@ fn check_after_is_matched_eof() {
 fn check_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-        assert_eq!(WaitStatus::Exited(p.get_process().pid(), 0), p.get_process().wait().unwrap());
+        assert_eq!(
+            WaitStatus::Exited(p.get_process().pid(), 0),
+            p.get_process().wait().unwrap()
+        );
 
         assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());
@@ -226,7 +229,10 @@ fn expect_after_is_matched_eof() {
 fn expect_after_is_matched_eof() {
     futures_lite::future::block_on(async {
         let mut p = spawn("echo AfterSleep").expect("cannot run echo");
-        assert_eq!(WaitStatus::Exited(p.get_process().pid(), 0), p.get_process().wait().unwrap());
+        assert_eq!(
+            WaitStatus::Exited(p.get_process().pid(), 0),
+            p.get_process().wait().unwrap()
+        );
 
         assert!(!p.is_matched(Eof).await.unwrap());
         assert!(p.is_matched(Eof).await.unwrap());

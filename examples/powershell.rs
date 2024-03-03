@@ -1,5 +1,5 @@
 #[cfg(windows)]
-use expectrl::{repl::spawn_powershell, ControlCode, Regex, Expect};
+use expectrl::{repl::spawn_powershell, ControlCode, Expect, Regex};
 
 #[cfg(windows)]
 fn main() {

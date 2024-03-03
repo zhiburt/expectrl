@@ -133,13 +133,12 @@ impl<P, S> Session<P, S> {
         doc = "```ignore"
     )]
     /// use std::io::{stdout, Cursor};
-    /// use expectrl::{self, interact::InteractOptions};
     ///
     /// let mut p = expectrl::spawn("cat").unwrap();
     ///
     /// let input = Cursor::new(String::from("Some text right here"));
     ///
-    /// p.interact(input, stdout()).spawn(InteractOptions::default()).unwrap();
+    /// p.interact(input, stdout()).spawn().unwrap();
     /// ```
     ///
     /// [`Read`]: std::io::Read

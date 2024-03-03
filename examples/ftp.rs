@@ -1,4 +1,4 @@
-use expectrl::{spawn, ControlCode, Error, Regex, Expect};
+use expectrl::{spawn, ControlCode, Error, Expect, Regex};
 
 #[cfg(not(feature = "async"))]
 fn main() -> Result<(), Error> {
