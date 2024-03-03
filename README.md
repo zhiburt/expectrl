@@ -31,10 +31,10 @@ expectrl = "0.7"
 An example where the program simulates a used interacting with `ftp`.
 
 ```rust
-use expectrl::{spawn, Regex, Eof, Error};
+use expectrl::{Regex, Eof, Error, Expect};
 
 fn main() -> Result<(), Error> {
-    let mut p = spawn("ftp speedtest.tele2.net")?;
+    let mut p = expectrl::spawn("ftp speedtest.tele2.net")?;
     p.expect(Regex("Name \\(.*\\):"))?;
     p.send_line("anonymous")?;
     p.expect("Password")?;
@@ -46,6 +46,7 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send_line("exit")?;
     p.expect(Eof)?;
+
     Ok(())
 }
 ```
@@ -54,31 +55,34 @@ The same example but the password will be read from stdin.
 
 ```rust
 use std::io::stdout;
+
 use expectrl::{
-    interact::{actions::lookup::Lookup, InteractOptions},
-    spawn, stream::stdin::Stdin,
-    ControlCode, Error, Regex,
+    interact::{actions::lookup::Lookup, InteractSession},
+    stream::stdin::Stdin,
+    ControlCode, Error, Expect, Regex,
 };
 
 fn main() -> Result<(), Error> {
+    let mut p = expectrl::spawn("ftp bks4-speedtest-1.tele2.net")?;
+
     let mut auth = false;
     let mut login_lookup = Lookup::new();
-    let opts = InteractOptions::new(&mut auth).on_output(|ctx| {
-        if login_lookup
-            .on(ctx.buf, ctx.eof, "Login successful")?
-            .is_some()
-        {
-            **ctx.state = true;
-            return Ok(true);
-        }
-
-        Ok(false)
-    });
-
-    let mut p = spawn("ftp bks4-speedtest-1.tele2.net")?;
-
     let mut stdin = Stdin::open()?;
-    p.interact(&mut stdin, stdout()).spawn(opts)?;
+
+    InteractSession::new(&mut p, &mut stdin, stdout(), &mut auth)
+        .set_output_action(move |ctx| {
+            if login_lookup
+                .on(ctx.buf, ctx.eof, "Login successful")?
+                .is_some()
+            {
+                **ctx.state = true;
+                return Ok(true);
+            }
+
+            Ok(false)
+        })
+        .spawn()?;
+
     stdin.close()?;
 
     if !auth {
@@ -93,6 +97,7 @@ fn main() -> Result<(), Error> {
     p.expect(Regex("[0-9]+ \"/upload\""))?;
     p.send(ControlCode::EndOfTransmission)?;
     p.expect("Goodbye.")?;
+
     Ok(())
 }
 ```
