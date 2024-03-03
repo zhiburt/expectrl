@@ -47,7 +47,9 @@ type OsProcStream = crate::process::windows::AsyncProcessStream;
 /// A type alias for OS process which can run a [`Session`] and a default one.
 pub type OsProcess = OsProc;
 /// A type alias for OS process stream which is a default one for [`Session`].
-pub type OsProcessStream = OsProcStream;
+pub type OsStream = OsProcStream;
+/// A type alias for OS session.
+pub type OsSession = Session<OsProc, OsStream>;
 
 #[cfg(feature = "async")]
 pub use async_session::Session;
@@ -55,7 +57,7 @@ pub use async_session::Session;
 #[cfg(not(feature = "async"))]
 pub use sync_session::Session;
 
-impl Session {
+impl Session<OsProc, OsProcStream> {
     /// Spawns a session on a platform process.
     ///
     /// # Example
@@ -131,18 +133,17 @@ impl<P, S> Session<P, S> {
         doc = "```ignore"
     )]
     /// use std::io::{stdout, Cursor};
-    /// use expectrl::{self, interact::InteractOptions};
     ///
     /// let mut p = expectrl::spawn("cat").unwrap();
     ///
     /// let input = Cursor::new(String::from("Some text right here"));
     ///
-    /// p.interact(input, stdout()).spawn(InteractOptions::default()).unwrap();
+    /// p.interact(input, stdout()).spawn().unwrap();
     /// ```
     ///
     /// [`Read`]: std::io::Read
-    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O> {
-        InteractSession::new(self, input, output)
+    pub fn interact<I, O>(&mut self, input: I, output: O) -> InteractSession<&mut Self, I, O, ()> {
+        InteractSession::new(self, input, output, ())
     }
 }
 

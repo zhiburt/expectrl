@@ -2,7 +2,10 @@
 //!
 #![cfg_attr(all(unix, not(feature = "async")), doc = "```no_run")]
 #![cfg_attr(not(all(unix, not(feature = "async"))), doc = "```ignore")]
-//! use expectrl::{interact::{InteractOptions, actions::lookup::Lookup}, spawn, stream::stdin::Stdin, Regex};
+//! use expectrl::{
+//!     interact::actions::lookup::Lookup,
+//!     spawn, stream::stdin::Stdin, Regex
+//! };
 //!
 //! #[derive(Debug)]
 //! enum Answer {
@@ -18,26 +21,24 @@
 //! let mut stdin = Stdin::open().unwrap();
 //! let stdout = std::io::stdout();
 //!
-//! let mut opts = InteractOptions::new(Answer::Unrecognized)
-//!     .on_input(|mut ctx| {
-//!         let m = input_action.on(ctx.buf, ctx.eof, "yes")?;
-//!         if m.is_some() {
-//!             *ctx.state = Answer::Yes;
-//!         };
+//! let mut term = session.interact(&mut stdin, stdout).with_state(Answer::Unrecognized);
+//! term.set_input_action(move |mut ctx| {
+//!     let m = input_action.on(ctx.buf, ctx.eof, "yes")?;
+//!     if m.is_some() {
+//!         *ctx.state = Answer::Yes;
+//!     };
 //!
-//!         let m = input_action.on(ctx.buf, ctx.eof, "no")?;
-//!         if m.is_some() {
-//!             *ctx.state = Answer::No;
-//!         };
+//!     let m = input_action.on(ctx.buf, ctx.eof, "no")?;
+//!     if m.is_some() {
+//!         *ctx.state = Answer::No;
+//!     };
 //!
-//!         Ok(false)
-//!     });
+//!     Ok(false)
+//! });
 //!
-//! session.interact(&mut stdin, stdout)
-//!     .spawn(&mut opts)
-//!     .expect("Failed to run an interact session");
+//! term.spawn().expect("Failed to run an interact session");
 //!
-//! let answer = opts.into_inner();
+//! let answer = term.into_state();
 //!
 //! stdin.close().unwrap();
 //!
@@ -48,9 +49,7 @@
 
 pub mod actions;
 mod context;
-mod opts;
 mod session;
 
 pub use context::Context;
-pub use opts::{InteractOptions, NoAction, NoFilter};
 pub use session::InteractSession;

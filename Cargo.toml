@@ -14,7 +14,7 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-# "pooling" feature works only for not async version
+# "pooling" feature works only for not async version on UNIX
 polling = ["dep:polling", "dep:crossbeam-channel"]
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
 
@@ -36,3 +36,12 @@ crossbeam-channel = { version = "0.5.6", optional = true }
 
 [package.metadata.docs.rs]
 all-features = false
+
+[[target.'cfg(unix)'.example]]
+name = "log"
+path = "examples/log.rs"
+
+[[target.'cfg(windows)'.example]]
+name = "powershell"
+path = "examples/powershell.rs"
+

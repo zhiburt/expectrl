@@ -1,7 +1,7 @@
 // An example is based on README.md from https://github.com/philippkeller/rexpect
 
 #[cfg(unix)]
-use expectrl::{repl::spawn_bash, ControlCode, Regex};
+use expectrl::{repl::spawn_bash, ControlCode, Expect, Regex};
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
@@ -40,6 +40,7 @@ fn main() {
 #[cfg(unix)]
 #[cfg(feature = "async")]
 fn main() {
+    use expectrl::AsyncExpect;
     use futures_lite::io::AsyncBufReadExt;
 
     futures_lite::future::block_on(async {

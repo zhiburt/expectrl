@@ -1,11 +1,11 @@
-use expectrl::{self, Any, Eof};
+use expectrl::{self, Any, Eof, Expect};
 
 #[cfg(not(feature = "async"))]
 fn main() {
-    let mut session = expectrl::spawn("ls -al").expect("Can't spawn a session");
+    let mut p = expectrl::spawn("ls -al").expect("Can't spawn a session");
 
     loop {
-        let m = session
+        let m = p
             .expect(Any::boxed(vec![
                 Box::new("\r"),
                 Box::new("\n"),
@@ -31,6 +31,8 @@ fn main() {
 #[cfg(feature = "async")]
 fn main() {
     futures_lite::future::block_on(async {
+        use expectrl::AsyncExpect;
+
         let mut session = expectrl::spawn("ls -al").expect("Can't spawn a session");
 
         loop {

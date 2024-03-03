@@ -9,7 +9,7 @@
 ///
 /// You can specify a default branch which will be called if nothing was matched.
 ///
-/// The macros levareges [crate::Session::check] function, so its just made for convience.
+/// The macros levareges [`Expect::check`] function, so its just made for convience.
 ///
 /// # Example
 /// ```no_run
@@ -31,6 +31,8 @@
 ///     .unwrap();
 /// }
 /// ```
+///
+/// [`Expect::check`]: crate::Expect::check
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! check {
@@ -101,7 +103,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $crate::session::Session::check($session, $exp) {
+        match $crate::Expect::check($session, $exp) {
             result if result.as_ref().map(|found| !found.is_empty()).unwrap_or(false) => {
                 let $var = result.unwrap();
                 $body;
@@ -217,7 +219,7 @@ macro_rules! check {
     // The question is which solution is more effichient.
     // I took the following approach because there's no chance we influence user's land via the variable name we pick.
     (@branch $session:expr, ($var:tt = $exp:expr => $body:tt, $($tail:tt)*), ($($default:tt)*)) => {
-        match $crate::session::Session::check(&mut $session, $exp).await {
+        match $crate::AsyncExpect::check($session, $exp).await {
             Ok(found) => {
                 if !found.is_empty() {
                     let $var = found;
@@ -319,28 +321,29 @@ mod tests {
             })
             .unwrap();
         }
+
         #[cfg(feature = "async")]
         async {
             crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             }
             .await
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             })
             .await
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {},
             })
             .await
             .unwrap();
             (crate::check! {
-                session,
+                &mut session,
                 as11d = "zxc" => {
                     println!("asd")
                 },

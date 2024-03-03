@@ -1,4 +1,4 @@
-use expectrl::{spawn, Session};
+use expectrl::{session::OsSession, spawn, Expect};
 
 #[cfg(feature = "async")]
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
@@ -6,6 +6,9 @@ use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(feature = "async"))]
 #[cfg(not(windows))]
 use std::io::{Read, Write};
+
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
 
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
@@ -113,7 +116,7 @@ fn send_multiline() {
 
         futures_lite::future::block_on(async {
             session.send("Hello World\r\n").await.unwrap();
-            let m = session.expect('\n').unwrap();
+            let m = session.expect('\n').await.unwrap();
             let buf = String::from_utf8_lossy(m.before());
             assert!(buf.contains("Hello World"), "{:?}", buf);
             session.get_process_mut().exit(0).unwrap();
@@ -170,7 +173,7 @@ fn send_line() {
 
         futures_lite::future::block_on(async {
             session.send_line("Hello World").await.unwrap();
-            let m = session.expect('\n').unwrap();
+            let m = session.expect('\n').await.unwrap();
             let buf = String::from_utf8_lossy(m.before());
             assert!(buf.contains("Hello World"), "{:?}", buf);
             session.get_process_mut().exit(0).unwrap();
@@ -195,7 +198,7 @@ fn test_session_as_writer() {
         let _: Box<dyn std::io::Read> = Box::new(spawn("ls").unwrap());
         let _: Box<dyn std::io::BufRead> = Box::new(spawn("ls").unwrap());
 
-        fn _io_copy(mut session: Session) {
+        fn _io_copy(mut session: OsSession) {
             let _ = std::io::copy(&mut std::io::empty(), &mut session).unwrap();
         }
     }
@@ -208,7 +211,7 @@ fn test_session_as_writer() {
         let _: Box<dyn futures_lite::AsyncBufRead> =
             Box::new(spawn("ls").unwrap()) as Box<dyn futures_lite::AsyncBufRead>;
 
-        async fn _io_copy(mut session: Session) {
+        async fn _io_copy(mut session: OsSession) {
             futures_lite::io::copy(futures_lite::io::empty(), &mut session)
                 .await
                 .unwrap();

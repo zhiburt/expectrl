@@ -82,13 +82,12 @@ impl<S: Read, W: Write> Read for LogStream<S, W> {
     }
 }
 
-impl<S: NonBlocking, W> NonBlocking for LogStream<S, W> {
-    fn set_non_blocking(&mut self) -> Result<()> {
-        self.stream.set_non_blocking()
-    }
-
-    fn set_blocking(&mut self) -> Result<()> {
-        self.stream.set_blocking()
+impl<S, W> NonBlocking for LogStream<S, W>
+where
+    S: NonBlocking,
+{
+    fn set_blocking(&mut self, on: bool) -> Result<()> {
+        self.stream.set_blocking(on)
     }
 }
 

@@ -114,6 +114,7 @@ mod captures;
 mod check_macros;
 mod control_code;
 mod error;
+mod expect;
 mod needle;
 
 #[cfg(all(windows, feature = "polling"))]
@@ -130,10 +131,13 @@ pub use control_code::ControlCode;
 pub use error::Error;
 pub use needle::{Any, Eof, NBytes, Needle, Regex};
 
-#[cfg(unix)]
-pub use ptyprocess::{Signal, WaitStatus};
-
+pub use expect::Expect;
 pub use session::Session;
+
+#[cfg(feature = "async")]
+pub use expect::AsyncExpect;
+
+use session::OsSession;
 
 /// Spawn spawnes a new session.
 ///
@@ -159,6 +163,9 @@ pub use session::Session;
 /// ```
 ///
 /// [`Session::spawn`]: ./struct.Session.html?#spawn
-pub fn spawn<S: AsRef<str>>(cmd: S) -> Result<Session, Error> {
+pub fn spawn<S>(cmd: S) -> Result<OsSession, Error>
+where
+    S: AsRef<str>,
+{
     Session::spawn_cmd(cmd.as_ref())
 }

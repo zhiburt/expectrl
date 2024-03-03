@@ -7,15 +7,16 @@ use std::{
 
 use crate::{
     error::Error,
+    expect::Expect,
     needle::Needle,
-    process::{Healthcheck, NonBlocking},
+    process::{Healthcheck, NonBlocking, Termios},
     Captures,
 };
 
 /// Session represents a spawned process and its streams.
 /// It controlls process and communication with it.
 #[derive(Debug)]
-pub struct Session<P = super::OsProcess, S = super::OsProcessStream> {
+pub struct Session<P, S> {
     proc: P,
     stream: TryStream<S>,
     expect_timeout: Option<Duration>,
@@ -29,6 +30,7 @@ where
     /// Creates a new session.
     pub fn new(process: P, stream: S) -> io::Result<Self> {
         let stream = TryStream::new(stream)?;
+
         Ok(Self {
             proc: process,
             stream,
@@ -37,7 +39,7 @@ where
         })
     }
 
-    pub(crate) fn swap_stream<F, R>(mut self, new_stream: F) -> Result<Session<P, R>, Error>
+    pub(crate) fn swap_stream<F, R>(mut self, new: F) -> Result<Session<P, R>, Error>
     where
         F: FnOnce(S) -> R,
         R: Read,
@@ -46,10 +48,11 @@ where
         let buf = self.stream.get_available().to_owned();
 
         let stream = self.stream.into_inner();
-        let new_stream = new_stream(stream);
+        let stream = new(stream);
 
-        let mut session = Session::new(self.proc, new_stream)?;
+        let mut session = Session::new(self.proc, stream)?;
         session.stream.keep_in_buffer(&buf);
+
         Ok(session)
     }
 }
@@ -90,53 +93,11 @@ impl<P, S> Session<P, S> {
     }
 }
 
-impl<P: Healthcheck, S> Session<P, S> {
-    /// Verifies whether process is still alive.
-    pub fn is_alive(&mut self) -> Result<bool, Error> {
-        self.proc.is_alive().map_err(|err| err.into())
-    }
-}
-
-impl<P, S: Read + NonBlocking> Session<P, S> {
-    /// Expect waits until a pattern is matched.
-    ///
-    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
-    ///
-    /// The match algorthm can be either
-    ///     - gready
-    ///     - lazy
-    ///
-    /// You can set one via [Session::set_expect_lazy].
-    /// Default version is gready.
-    ///
-    /// The implications are.
-    /// Imagine you use [crate::Regex] `"\d+"` to find a match.
-    /// And your process outputs `123`.
-    /// In case of lazy approach we will match `1`.
-    /// Where's in case of gready one we will match `123`.
-    ///
-    /// # Example
-    ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.get(0).unwrap(), b"123");
-    /// ```
-    ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
-    /// let mut p = expectrl::spawn("echo 123").unwrap();
-    /// p.set_expect_lazy(true);
-    /// let m = p.expect(expectrl::Regex("\\d+")).unwrap();
-    /// assert_eq!(m.get(0).unwrap(), b"1");
-    /// ```
-    ///
-    /// This behaviour is different from [Session::check].
-    ///
-    /// It returns an error if timeout is reached.
-    /// You can specify a timeout value by [Session::set_expect_timeout] method.
-    pub fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
+impl<P, S> Expect for Session<P, S>
+where
+    S: Write + Read + NonBlocking,
+{
+    fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle,
     {
@@ -146,6 +107,76 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
         }
     }
 
+    fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
+    where
+        N: Needle,
+    {
+        let eof = self.stream.read_available()?;
+        let buf = self.stream.get_available();
+
+        let found = needle.check(buf, eof)?;
+        if !found.is_empty() {
+            let end_index = Captures::right_most_index(&found);
+            let involved_bytes = buf[..end_index].to_vec();
+            self.stream.consume_available(end_index);
+            return Ok(Captures::new(involved_bytes, found));
+        }
+
+        if eof {
+            return Err(Error::Eof);
+        }
+
+        Ok(Captures::new(Vec::new(), Vec::new()))
+    }
+
+    fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
+    where
+        N: Needle,
+    {
+        let eof = self.stream.read_available()?;
+        let buf = self.stream.get_available();
+
+        let found = needle.check(buf, eof)?;
+        if !found.is_empty() {
+            return Ok(true);
+        }
+
+        if eof {
+            return Err(Error::Eof);
+        }
+
+        Ok(false)
+    }
+
+    fn send<B>(&mut self, buf: B) -> Result<(), Error>
+    where
+        B: AsRef<[u8]>,
+    {
+        self.stream.write_all(buf.as_ref())?;
+
+        Ok(())
+    }
+
+    fn send_line<B>(&mut self, buf: B) -> Result<(), Error>
+    where
+        B: AsRef<[u8]>,
+    {
+        #[cfg(windows)]
+        const LINE_ENDING: &[u8] = b"\r\n";
+        #[cfg(not(windows))]
+        const LINE_ENDING: &[u8] = b"\n";
+
+        self.stream.write_all(buf.as_ref())?;
+        self.write_all(LINE_ENDING)?;
+
+        Ok(())
+    }
+}
+
+impl<P, S> Session<P, S>
+where
+    S: Read + NonBlocking,
+{
     /// Expect which fills as much as possible to the buffer.
     ///
     /// See [Session::expect].
@@ -237,154 +268,16 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
             }
         }
     }
-
-    /// Check verifies if a pattern is matched.
-    /// Returns empty found structure if nothing found.
-    ///
-    /// Is a non blocking version of [Session::expect].
-    /// But its strategy of matching is different from it.
-    /// It makes search against all bytes available.
-    ///
-    /// # Example
-    ///
-    #[cfg_attr(any(windows, target_os = "macos"), doc = "```no_run")]
-    #[cfg_attr(not(any(target_os = "macos", windows)), doc = "```")]
-    /// use expectrl::{spawn, Regex};
-    /// use std::time::Duration;
-    ///
-    /// let mut p = spawn("echo 123").unwrap();
-    /// #
-    /// # // wait to guarantee that check echo worked out (most likely)
-    /// # std::thread::sleep(Duration::from_millis(500));
-    /// #
-    /// let m = p.check(Regex("\\d+")).unwrap();
-    /// assert_eq!(m.get(0).unwrap(), b"123");
-    /// ```
-    pub fn check<N>(&mut self, needle: N) -> Result<Captures, Error>
-    where
-        N: Needle,
-    {
-        let eof = self.stream.read_available()?;
-        let buf = self.stream.get_available();
-
-        let found = needle.check(buf, eof)?;
-        if !found.is_empty() {
-            let end_index = Captures::right_most_index(&found);
-            let involved_bytes = buf[..end_index].to_vec();
-            self.stream.consume_available(end_index);
-            return Ok(Captures::new(involved_bytes, found));
-        }
-
-        if eof {
-            return Err(Error::Eof);
-        }
-
-        Ok(Captures::new(Vec::new(), Vec::new()))
-    }
-
-    /// The functions checks if a pattern is matched.
-    /// It doesn’t consumes bytes from stream.
-    ///
-    /// Its strategy of matching is different from the one in [Session::expect].
-    /// It makes search agains all bytes available.
-    ///
-    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option.
-    /// Because it is not guaranteed that [Session::check] or [Session::expect] with the same parameters:
-    ///     - will successed even right after Session::is_matched call.
-    ///     - will operate on the same bytes.
-    ///
-    /// IMPORTANT:
-    ///  
-    /// If you call this method with [crate::Eof] pattern be aware that eof
-    /// indication MAY be lost on the next interactions.
-    /// It depends from a process you spawn.
-    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
-    ///
-    /// # Example
-    ///
-    #[cfg_attr(windows, doc = "```no_run")]
-    #[cfg_attr(unix, doc = "```")]
-    /// use expectrl::{spawn, Regex};
-    /// use std::time::Duration;
-    ///
-    /// let mut p = spawn("cat").unwrap();
-    /// p.send_line("123");
-    /// # // wait to guarantee that check echo worked out (most likely)
-    /// # std::thread::sleep(Duration::from_secs(1));
-    /// let m = p.is_matched(Regex("\\d+")).unwrap();
-    /// assert_eq!(m, true);
-    /// ```
-    pub fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
-    where
-        N: Needle,
-    {
-        let eof = self.stream.read_available()?;
-        let buf = self.stream.get_available();
-
-        let found = needle.check(buf, eof)?;
-        if !found.is_empty() {
-            return Ok(true);
-        }
-
-        if eof {
-            return Err(Error::Eof);
-        }
-
-        Ok(false)
-    }
 }
 
-impl<Proc, Stream: Write> Session<Proc, Stream> {
-    /// Send text to child’s STDIN.
-    ///
-    /// You can also use methods from [std::io::Write] instead.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use expectrl::{spawn, ControlCode};
-    ///
-    /// let mut proc = spawn("cat").unwrap();
-    ///
-    /// proc.send("Hello");
-    /// proc.send(b"World");
-    /// proc.send(ControlCode::try_from("^C").unwrap());
-    /// ```
-    pub fn send<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
-        self.stream.write_all(buf.as_ref())
-    }
-
-    /// Send a line to child’s STDIN.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use expectrl::{spawn, ControlCode};
-    ///
-    /// let mut proc = spawn("cat").unwrap();
-    ///
-    /// proc.send_line("Hello");
-    /// proc.send_line(b"World");
-    /// proc.send_line(ControlCode::try_from("^C").unwrap());
-    /// ```
-    pub fn send_line<B: AsRef<[u8]>>(&mut self, buf: B) -> io::Result<()> {
-        #[cfg(windows)]
-        const LINE_ENDING: &[u8] = b"\r\n";
-        #[cfg(not(windows))]
-        const LINE_ENDING: &[u8] = b"\n";
-
-        self.stream.write_all(buf.as_ref())?;
-        self.write_all(LINE_ENDING)?;
-
-        Ok(())
-    }
-}
-
-impl<P, S: Read + NonBlocking> Session<P, S> {
+impl<P, S> Session<P, S>
+where
+    S: Read + NonBlocking,
+{
     /// Try to read in a non-blocking mode.
     ///
-    /// Returns `[std::io::ErrorKind::WouldBlock]`
-    /// in case if there's nothing to read.
+    /// Returns [`std::io::ErrorKind::WouldBlock`]
+    /// in case there's nothing to read.
     pub fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.try_read(buf)
     }
@@ -395,7 +288,10 @@ impl<P, S: Read + NonBlocking> Session<P, S> {
     }
 }
 
-impl<P, S: Write> Write for Session<P, S> {
+impl<P, S> Write for Session<P, S>
+where
+    S: Write,
+{
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stream.write(buf)
     }
@@ -409,19 +305,92 @@ impl<P, S: Write> Write for Session<P, S> {
     }
 }
 
-impl<P, S: Read> Read for Session<P, S> {
+impl<P, S> Read for Session<P, S>
+where
+    S: Read,
+{
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.stream.read(buf)
     }
 }
 
-impl<P, S: Read> BufRead for Session<P, S> {
+impl<P, S> BufRead for Session<P, S>
+where
+    S: Read,
+{
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         self.stream.fill_buf()
     }
 
     fn consume(&mut self, amt: usize) {
         self.stream.consume(amt)
+    }
+}
+
+impl<P, S> Healthcheck for Session<P, S>
+where
+    P: Healthcheck,
+{
+    type Status = P::Status;
+
+    fn get_status(&self) -> io::Result<Self::Status> {
+        self.get_process().get_status()
+    }
+
+    fn is_alive(&self) -> io::Result<bool> {
+        self.get_process().is_alive()
+    }
+}
+
+impl<P, S> Termios for Session<P, S>
+where
+    P: Termios,
+{
+    fn is_echo(&self) -> io::Result<bool> {
+        self.get_process().is_echo()
+    }
+
+    fn set_echo(&mut self, on: bool) -> io::Result<bool> {
+        self.get_process_mut().set_echo(on)
+    }
+}
+
+impl<P, S> NonBlocking for Session<P, S>
+where
+    S: NonBlocking,
+{
+    fn set_blocking(&mut self, on: bool) -> io::Result<()> {
+        S::set_blocking(self.get_stream_mut(), on)
+    }
+}
+
+#[cfg(unix)]
+impl<P, S> std::os::fd::AsRawFd for Session<P, S>
+where
+    S: std::os::fd::AsRawFd,
+{
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.get_stream().as_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl<P, S> std::os::fd::AsRawFd for &Session<P, S>
+where
+    S: std::os::fd::AsRawFd,
+{
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.get_stream().as_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl<P, S> std::os::fd::AsRawFd for &mut Session<P, S>
+where
+    S: std::os::fd::AsRawFd,
+{
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.get_stream().as_raw_fd()
     }
 }
 
@@ -444,7 +413,10 @@ impl<S> TryStream<S> {
     }
 }
 
-impl<S: Read> TryStream<S> {
+impl<S> TryStream<S>
+where
+    S: Read,
+{
     /// The function returns a new Stream from a file.
     fn new(stream: S) -> io::Result<Self> {
         Ok(Self {
@@ -471,18 +443,21 @@ impl<S> TryStream<S> {
     }
 }
 
-impl<R: Read + NonBlocking> TryStream<R> {
+impl<R> TryStream<R>
+where
+    R: Read + NonBlocking,
+{
     /// Try to read in a non-blocking mode.
     ///
     /// It raises io::ErrorKind::WouldBlock if there's nothing to read.
     fn try_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.get_mut().set_non_blocking()?;
+        self.stream.get_mut().set_blocking(false)?;
 
         let result = self.stream.inner.read(buf);
 
         // As file is DUPed changes in one descriptor affects all ones
         // so we need to make blocking file after we finished.
-        self.stream.get_mut().set_blocking()?;
+        self.stream.get_mut().set_blocking(true)?;
 
         result
     }
@@ -529,19 +504,22 @@ impl<R: Read + NonBlocking> TryStream<R> {
 
     // non-buffered && non-blocking read
     fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.get_mut().set_non_blocking()?;
+        self.stream.get_mut().set_blocking(false)?;
 
         let result = self.stream.get_mut().read(buf);
 
         // As file is DUPed changes in one descriptor affects all ones
         // so we need to make blocking file after we finished.
-        self.stream.get_mut().set_blocking()?;
+        self.stream.get_mut().set_blocking(true)?;
 
         result
     }
 }
 
-impl<S: Write> Write for TryStream<S> {
+impl<S> Write for TryStream<S>
+where
+    S: Write,
+{
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.inner.get_mut().inner.write(buf)
     }
@@ -555,13 +533,19 @@ impl<S: Write> Write for TryStream<S> {
     }
 }
 
-impl<R: Read> Read for TryStream<R> {
+impl<R> Read for TryStream<R>
+where
+    R: Read,
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.inner.read(buf)
     }
 }
 
-impl<R: Read> BufRead for TryStream<R> {
+impl<R> BufRead for TryStream<R>
+where
+    R: Read,
+{
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.stream.inner.fill_buf()
     }
@@ -576,7 +560,10 @@ struct ControlledReader<R> {
     inner: BufReader<BufferedReader<R>>,
 }
 
-impl<R: Read> ControlledReader<R> {
+impl<R> ControlledReader<R>
+where
+    R: Read,
+{
     fn new(reader: R) -> Self {
         Self {
             inner: BufReader::new(BufferedReader::new(reader)),
@@ -627,7 +614,10 @@ impl<R> BufferedReader<R> {
     }
 }
 
-impl<R: Read> Read for BufferedReader<R> {
+impl<R> Read for BufferedReader<R>
+where
+    R: Read,
+{
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
         if self.buffer.is_empty() {
             self.inner.read(buf)

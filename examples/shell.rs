@@ -1,13 +1,15 @@
+use expectrl::process::Termios;
 use expectrl::repl::ReplSession;
 use std::io::Result;
 
 #[cfg(all(unix, not(feature = "async")))]
 fn main() -> Result<()> {
     let mut p = expectrl::spawn("sh")?;
-    p.get_process_mut().set_echo(true, None)?;
+    p.set_echo(true)?;
 
-    let mut shell = ReplSession::new(p, String::from("sh-5.1$"), Some(String::from("exit")), true);
-
+    let mut shell = ReplSession::new(p, String::from("sh-5.1$"));
+    shell.set_echo(true);
+    shell.set_quit_command("exit");
     shell.expect_prompt()?;
 
     let output = exec(&mut shell, "echo Hello World")?;
@@ -20,7 +22,7 @@ fn main() -> Result<()> {
 }
 
 #[cfg(all(unix, not(feature = "async")))]
-fn exec(shell: &mut ReplSession, cmd: &str) -> Result<String> {
+fn exec(shell: &mut ReplSession<expectrl::session::OsSession>, cmd: &str) -> Result<String> {
     let buf = shell.execute(cmd)?;
     let mut string = String::from_utf8_lossy(&buf).into_owned();
     string = string.replace("\r\n\u{1b}[?2004l\r", "");
@@ -33,11 +35,11 @@ fn exec(shell: &mut ReplSession, cmd: &str) -> Result<String> {
 fn main() -> Result<()> {
     futures_lite::future::block_on(async {
         let mut p = expectrl::spawn("sh")?;
-        p.get_process_mut().set_echo(true, None)?;
+        p.set_echo(true)?;
 
-        let mut shell =
-            ReplSession::new(p, String::from("sh-5.1$"), Some(String::from("exit")), true);
-
+        let mut shell = ReplSession::new(p, String::from("sh-5.1$"));
+        shell.set_echo(true);
+        shell.set_quit_command("exit");
         shell.expect_prompt().await?;
 
         let output = exec(&mut shell, "echo Hello World").await?;
@@ -51,7 +53,7 @@ fn main() -> Result<()> {
 }
 
 #[cfg(all(unix, feature = "async"))]
-async fn exec(shell: &mut ReplSession, cmd: &str) -> Result<String> {
+async fn exec(shell: &mut ReplSession<expectrl::session::OsSession>, cmd: &str) -> Result<String> {
     let buf = shell.execute(cmd).await?;
     let mut string = String::from_utf8_lossy(&buf).into_owned();
     string = string.replace("\r\n\u{1b}[?2004l\r", "");

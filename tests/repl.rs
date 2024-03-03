@@ -1,14 +1,18 @@
 #![cfg(unix)]
 
 use expectrl::{
+    process::unix::WaitStatus,
     repl::{spawn_bash, spawn_python},
-    ControlCode, WaitStatus,
+    ControlCode, Expect,
 };
 #[cfg(feature = "async")]
 use futures_lite::io::AsyncBufReadExt;
 #[cfg(not(feature = "async"))]
 use std::io::BufRead;
 use std::{thread, time::Duration};
+
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
 
 #[cfg(not(feature = "async"))]
 #[cfg(target_os = "linux")]
@@ -23,7 +27,7 @@ fn bash() {
 
     p.send(ControlCode::EOT).unwrap();
 
-    p.get_process_mut().exit(true).unwrap();
+    p.get_session_mut().get_process_mut().exit(true).unwrap();
 }
 
 #[cfg(not(feature = "async"))]
@@ -34,10 +38,15 @@ fn bash_with_log() {
 
     let p = spawn_bash().unwrap();
     let prompt = p.get_prompt().to_owned();
-    let quit_cmd = p.get_quit_command().map(|c| c.to_owned());
+    let quit_cmd = p
+        .get_quit_command()
+        .map(|c| c.to_owned())
+        .unwrap_or("exit".to_owned());
     let is_echo = p.is_echo();
     let session = session::log(p.into_session(), std::io::stderr()).unwrap();
-    let mut p = ReplSession::new(session, prompt, quit_cmd, is_echo);
+    let mut p = ReplSession::new(session, prompt);
+    p.set_quit_command(quit_cmd);
+    p.set_echo(is_echo);
 
     p.send_line("echo Hello World").unwrap();
     let mut msg = String::new();
@@ -48,8 +57,8 @@ fn bash_with_log() {
     p.send(ControlCode::EOT).unwrap();
 
     assert_eq!(
-        p.get_process().wait().unwrap(),
-        WaitStatus::Exited(p.get_process().pid(), 0)
+        p.get_session().get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_session().get_process().pid(), 0)
     );
 }
 
@@ -68,7 +77,8 @@ fn bash() {
         thread::sleep(Duration::from_millis(300));
         p.send(ControlCode::EOT).await.unwrap();
 
-        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+        let proc = p.get_session().get_process();
+        assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
     })
 }
 
@@ -81,10 +91,15 @@ fn bash_with_log() {
 
         let p = spawn_bash().await.unwrap();
         let prompt = p.get_prompt().to_owned();
-        let quit_cmd = p.get_quit_command().map(|c| c.to_owned());
+        let quit_cmd = p
+            .get_quit_command()
+            .map(|c| c.to_owned())
+            .unwrap_or_default();
         let is_echo = p.is_echo();
         let session = session::log(p.into_session(), std::io::stderr()).unwrap();
-        let mut p = ReplSession::new(session, prompt, quit_cmd, is_echo);
+        let mut p = ReplSession::new(session, prompt);
+        p.set_quit_command(quit_cmd);
+        p.set_echo(is_echo);
 
         p.send_line("echo Hello World").await.unwrap();
         let mut msg = String::new();
@@ -94,7 +109,8 @@ fn bash_with_log() {
         thread::sleep(Duration::from_millis(300));
         p.send(ControlCode::EOT).await.unwrap();
 
-        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+        let proc = p.get_session().get_process();
+        assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
     })
 }
 
@@ -124,8 +140,8 @@ fn python() {
     p.send(ControlCode::EndOfTransmission).unwrap();
 
     assert_eq!(
-        p.get_process().wait().unwrap(),
-        WaitStatus::Exited(p.get_process().pid(), 0)
+        p.get_session().get_process().wait().unwrap(),
+        WaitStatus::Exited(p.get_session().get_process().pid(), 0)
     );
 }
 
@@ -155,7 +171,8 @@ fn python() {
 
         p.send(ControlCode::EndOfTransmission).await.unwrap();
 
-        assert_eq!(p.wait().unwrap(), WaitStatus::Exited(p.pid(), 0));
+        let proc = p.get_session().get_process();
+        assert_eq!(proc.wait().unwrap(), WaitStatus::Exited(proc.pid(), 0));
     })
 }
 

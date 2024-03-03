@@ -1,4 +1,7 @@
-use expectrl::{spawn, Error};
+use expectrl::{spawn, Error, Expect};
+
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
 
 fn main() -> Result<(), Error> {
     let p = spawn("cat")?;

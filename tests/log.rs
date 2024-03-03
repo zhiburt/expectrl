@@ -6,12 +6,12 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use futures_lite::AsyncBufReadExt;
-#[cfg(feature = "async")]
-use futures_lite::AsyncReadExt;
+use futures_lite::{AsyncBufReadExt, AsyncReadExt};
 
-use expectrl::session;
-use expectrl::spawn;
+use expectrl::{session, spawn, Expect};
+
+#[cfg(feature = "async")]
+use expectrl::AsyncExpect;
 
 #[test]
 #[cfg(windows)]
