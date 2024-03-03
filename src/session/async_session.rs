@@ -81,6 +81,14 @@ impl<P, S> Session<P, S> {
         session.stream.keep(&buf);
         Ok(session)
     }
+
+    /// Verifyes if stream is empty or not.
+    pub async fn is_empty(&mut self) -> io::Result<bool>
+    where
+        S: AsyncRead + Unpin,
+    {
+        self.stream.is_empty().await
+    }
 }
 
 impl<P, S> AsyncExpect for Session<P, S>
