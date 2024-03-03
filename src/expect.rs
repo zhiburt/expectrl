@@ -4,17 +4,17 @@ use crate::{Captures, Error, Needle};
 pub trait Expect {
     /// Expect waits until a pattern is matched.
     ///
-    /// If the method returns [Ok] it is guaranteed that at least 1 match was found.
+    /// If the method returns [`Ok`] it is guaranteed that at least 1 match was found.
     ///
     /// The match algorthm can be either
     ///     - gready
     ///     - lazy
     ///
-    /// You can set one via [Session::set_expect_lazy].
+    /// You can set one via [`Session::set_expect_lazy`].
     /// Default version is gready.
     ///
     /// The implications are.
-    /// Imagine you use [crate::Regex] `"\d+"` to find a match.
+    /// Imagine you use [`crate::Regex`] `"\d+"` to find a match.
     /// And your process outputs `123`.
     /// In case of lazy approach we will match `1`.
     /// Where's in case of gready one we will match `123`.
@@ -40,10 +40,13 @@ pub trait Expect {
     /// assert_eq!(m.get(0).unwrap(), b"1");
     /// ```
     ///
-    /// This behaviour is different from [Session::check].
+    /// This behaviour is different from [`Expect::check`].
     ///
     /// It returns an error if timeout is reached.
-    /// You can specify a timeout value by [Session::set_expect_timeout] method.
+    /// You can specify a timeout value by [`Session::set_expect_timeout`] method.
+    ///
+    /// [`Session::set_expect_timeout`]: crate::Session::set_expect_timeout
+    /// [`Session::set_expect_lazy`]: crate::Session::set_expect_lazy
     fn expect<N>(&mut self, needle: N) -> Result<Captures, Error>
     where
         N: Needle;
@@ -51,7 +54,7 @@ pub trait Expect {
     /// Check verifies if a pattern is matched.
     /// Returns empty found structure if nothing found.
     ///
-    /// Is a non blocking version of [Session::expect].
+    /// Is a non blocking version of [`Expect::expect`].
     /// But its strategy of matching is different from it.
     /// It makes search against all bytes available.
     ///
@@ -80,20 +83,20 @@ pub trait Expect {
     /// The functions checks if a pattern is matched.
     /// It doesn’t consumes bytes from stream.
     ///
-    /// Its strategy of matching is different from the one in [Session::expect].
+    /// Its strategy of matching is different from the one in [`Expect::expect`].
     /// It makes search agains all bytes available.
     ///
-    /// If you want to get a matched result [Session::check] and [Session::expect] is a better option.
-    /// Because it is not guaranteed that [Session::check] or [Session::expect] with the same parameters:
-    ///     - will successed even right after Session::is_matched call.
+    /// If you want to get a matched result [`Expect::check`] and [`Expect::expect`] is a better option.
+    /// Because it is not guaranteed that [`Expect::check`] or [`Expect::expect`] with the same parameters:
+    ///     - will successed even right after Expect::is_matched call.
     ///     - will operate on the same bytes.
     ///
     /// IMPORTANT:
     ///  
-    /// If you call this method with [crate::Eof] pattern be aware that eof
+    /// If you call this method with [`Eof`] pattern be aware that eof
     /// indication MAY be lost on the next interactions.
     /// It depends from a process you spawn.
-    /// So it might be better to use [Session::check] or [Session::expect] with Eof.
+    /// So it might be better to use [`Expect::check`] or [`Expect::expect`] with Eof.
     ///
     /// # Example
     ///
@@ -109,6 +112,8 @@ pub trait Expect {
     /// let m = p.is_matched(Regex("\\d+")).unwrap();
     /// assert_eq!(m, true);
     /// ```
+    ///
+    /// [`Eof`]: crate::Eof
     fn is_matched<N>(&mut self, needle: N) -> Result<bool, Error>
     where
         N: Needle;

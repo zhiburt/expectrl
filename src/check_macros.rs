@@ -9,7 +9,7 @@
 ///
 /// You can specify a default branch which will be called if nothing was matched.
 ///
-/// The macros levareges [crate::Session::check] function, so its just made for convience.
+/// The macros levareges [`Expect::check`] function, so its just made for convience.
 ///
 /// # Example
 /// ```no_run
@@ -31,6 +31,8 @@
 ///     .unwrap();
 /// }
 /// ```
+///
+/// [`Expect::check`]: crate::Expect::check
 #[cfg(not(feature = "async"))]
 #[macro_export]
 macro_rules! check {

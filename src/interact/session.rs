@@ -180,7 +180,7 @@ impl<S, I, O, C> InteractSession<S, I, O, C> {
     ///
     /// IMPORTANT:
     ///
-    /// Please be aware that your use of [Session::expect], [Session::check] and any `read` operation on session
+    /// Please be aware that your use of [`Expect::expect`], [`Expect::check`] and any `read` operation on session
     /// will cause the read bytes not to apeard in the output stream!
     pub fn set_output_action<F>(&mut self, action: F) -> &mut Self
     where

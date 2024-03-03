@@ -28,8 +28,10 @@ use crate::AsyncExpect;
 ///
 /// It uses a custom prompt to be able to controll shell better.
 ///
-/// If you wan't to use [Session::interact] method it is better to use just Session.
+/// If you wan't to use [`Session::interact`] method it is better to use just Session.
 /// Because we don't handle echoes here (currently). Ideally we need to.
+///
+/// [`Session::interact`]: crate::Session::interact
 #[cfg(unix)]
 #[cfg(not(feature = "async"))]
 pub fn spawn_bash() -> Result<ReplSession<OsSession>, Error> {
