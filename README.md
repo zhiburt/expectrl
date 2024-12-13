@@ -16,7 +16,7 @@ Using the library you can:
 - Interact with process's IO(input/output).
 
 `expectrl` like original `expect` may shine when you're working with interactive applications.
-If your application is not interactive you may not find the library the best choise.
+If your application is not interactive you may not find the library the best choiсe.
 
 ## Usage
 
@@ -86,7 +86,7 @@ fn main() -> Result<(), Error> {
     stdin.close()?;
 
     if !auth {
-        println!("An authefication was not passed");
+        println!("An authentication was not passed");
         return Ok(());
     }
 
