@@ -14,9 +14,12 @@ keywords = ["expect", "pty", "testing", "terminal", "automation"]
 readme = "README.md"
 
 [features]
-# "pooling" feature works only for not async version on UNIX
+# polling - feature changes a backend logic of InteractSession from continues check to polling.
 polling = ["dep:polling", "dep:crossbeam-channel"]
+# async - feature sets AIO interface.
 async = ["futures-lite", "futures-timer", "async-io", "blocking"]
+# close-range - feature activates ptyprocess close() optimization (UNIX only).
+close-range = ["ptyprocess/close-range"]
 
 [dependencies]
 regex = "1.6.0"
@@ -24,7 +27,7 @@ futures-lite = { version = "1.12.0", optional = true }
 futures-timer = { version = "3.0.2", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-ptyprocess = "0.4.1"
+ptyprocess = "0.5.0"
 nix = "0.26"
 async-io = { version = "1.9.0", optional = true }
 polling = { version = "2.3.0", optional = true }
