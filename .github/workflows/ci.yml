@@ -67,6 +67,23 @@ jobs:
           command: test
           args: --verbose ${{ matrix.feauture }}
 
+  test-close-range:
+    name: Test Suite (close-range)
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest]
+        feauture:
+          ["", "--features close-range"]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose ${{ matrix.feauture }}
+
+
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
