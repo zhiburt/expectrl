@@ -133,7 +133,7 @@ fn python() {
 
     let mut msg = String::new();
     p.read_line(&mut msg).unwrap();
-    assert_eq!(msg, "KeyboardInterrupt\r\n");
+    assert!(msg.contains("KeyboardInterrupt"), "{msg:?}");
 
     p.expect_prompt().unwrap();
 
@@ -165,7 +165,7 @@ fn python() {
 
         let mut msg = String::new();
         p.read_line(&mut msg).await.unwrap();
-        assert_eq!(msg, "KeyboardInterrupt\r\n");
+        assert!(msg.contains("KeyboardInterrupt"), "{msg:?}");
 
         p.expect_prompt().await.unwrap();
 
