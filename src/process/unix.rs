@@ -229,7 +229,7 @@ pub(crate) fn make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
 }
 
 fn nix_error_to_io(err: nix::Error) -> io::Error {
-    io::Error::new(ErrorKind::Other, err)
+    io::Error::other(err)
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
@@ -251,13 +251,13 @@ fn get_status(proc: &PtyProcess) -> std::prelude::v1::Result<WaitStatus, io::Err
         Ok(status) => Ok(status),
         Err(err) => match err {
             Errno::ECHILD | Errno::ESRCH => Err(io::Error::new(ErrorKind::WouldBlock, err)),
-            err => Err(io::Error::new(ErrorKind::Other, err)),
+            err => Err(io::Error::other(err)),
         },
     }
 }
 
 fn io_error(msg: &str) -> io::Error {
-    io::Error::new(ErrorKind::Other, msg)
+    io::Error::other(msg)
 }
 
 #[cfg(test)]
