@@ -292,11 +292,11 @@ impl<P, S> Write for Session<P, S>
 where
     S: Write,
 {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.stream.flush()
     }
 
@@ -309,7 +309,7 @@ impl<P, S> Read for Session<P, S>
 where
     S: Read,
 {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.read(buf)
     }
 }
@@ -318,7 +318,7 @@ impl<P, S> BufRead for Session<P, S>
 where
     S: Read,
 {
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.stream.fill_buf()
     }
 
@@ -472,7 +472,7 @@ where
         }
     }
 
-    fn read_available(&mut self) -> std::io::Result<bool> {
+    fn read_available(&mut self) -> io::Result<bool> {
         self.stream.flush_in_buffer();
 
         let mut buf = [0; 248];
@@ -488,7 +488,7 @@ where
         }
     }
 
-    fn read_available_once(&mut self, buf: &mut [u8]) -> std::io::Result<Option<usize>> {
+    fn read_available_once(&mut self, buf: &mut [u8]) -> io::Result<Option<usize>> {
         self.stream.flush_in_buffer();
 
         match self.try_read_inner(buf) {
@@ -618,7 +618,7 @@ impl<R> Read for BufferedReader<R>
 where
     R: Read,
 {
-    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
         if self.buffer.is_empty() {
             self.inner.read(buf)
         } else {

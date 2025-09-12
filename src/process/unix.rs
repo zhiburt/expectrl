@@ -45,7 +45,7 @@ impl Process for UnixProcess {
             return Err(io_error("failed to parse a command"));
         }
 
-        let mut command = std::process::Command::new(&args[0]);
+        let mut command = Command::new(&args[0]);
         let _ = command.args(args.iter().skip(1));
 
         Self::spawn_command(command)
@@ -229,7 +229,7 @@ pub(crate) fn make_non_blocking(fd: RawFd, blocking: bool) -> Result<()> {
 }
 
 fn nix_error_to_io(err: nix::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
+    io::Error::new(ErrorKind::Other, err)
 }
 
 /// Turn e.g. "prog arg1 arg2" into ["prog", "arg1", "arg2"]
@@ -257,7 +257,7 @@ fn get_status(proc: &PtyProcess) -> std::prelude::v1::Result<WaitStatus, io::Err
 }
 
 fn io_error(msg: &str) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, msg)
+    io::Error::new(ErrorKind::Other, msg)
 }
 
 #[cfg(test)]

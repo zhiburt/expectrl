@@ -120,14 +120,14 @@ mod inner {
     pub(super) struct StdinInner {
         orig_flags: Option<Termios>,
         #[cfg(feature = "async")]
-        stdin: async_io::Async<std::io::Stdin>,
+        stdin: async_io::Async<io::Stdin>,
         #[cfg(not(feature = "async"))]
-        stdin: std::io::Stdin,
+        stdin: io::Stdin,
     }
 
     impl StdinInner {
         pub(super) fn new() -> Result<Self, Error> {
-            let stdin = std::io::stdin();
+            let stdin = io::stdin();
             #[cfg(feature = "async")]
             let stdin = async_io::Async::new(stdin)?;
 

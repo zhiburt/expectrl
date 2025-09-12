@@ -890,8 +890,11 @@ where
     loop {
         match writer.write_all(buf) {
             Ok(_) => return Ok(()),
-            Err(err) if err.kind() != std::io::ErrorKind::WouldBlock => return Err(err),
-            Err(_) => (),
+            Err(err) => {
+                if err.kind() != ErrorKind::WouldBlock {
+                    return Err(err);
+                }
+            }
         }
     }
 }
@@ -903,8 +906,11 @@ where
     loop {
         match writer.flush() {
             Ok(_) => return Ok(()),
-            Err(err) if err.kind() != std::io::ErrorKind::WouldBlock => return Err(err),
-            Err(_) => (),
+            Err(err) => {
+                if err.kind() != ErrorKind::WouldBlock {
+                    return Err(err);
+                }
+            }
         }
     }
 }
