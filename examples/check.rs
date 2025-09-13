@@ -30,7 +30,7 @@ fn main() {
     use expectrl::AsyncExpect;
 
     let f = async {
-        let mut session = spawn("python ./tests/source/ansi.py").unwrap();
+        let mut p = spawn("python ./tests/source/ansi.py").unwrap();
 
         loop {
             let result = check! {
