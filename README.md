@@ -25,7 +25,7 @@ Add `expectrl` to your Cargo.toml.
 ```toml
 # Cargo.toml
 [dependencies]
-expectrl = "0.7"
+expectrl = "0.8"
 ```
 
 An example where the program simulates a used interacting with `ftp`.
@@ -65,27 +65,29 @@ use expectrl::{
 fn main() -> Result<(), Error> {
     let mut p = expectrl::spawn("ftp bks4-speedtest-1.tele2.net")?;
 
-    let mut auth = false;
-    let mut login_lookup = Lookup::new();
+    let mut search = Lookup::new();
     let mut stdin = Stdin::open()?;
 
-    InteractSession::new(&mut p, &mut stdin, stdout(), &mut auth)
-        .set_output_action(move |ctx| {
-            if login_lookup
-                .on(ctx.buf, ctx.eof, "Login successful")?
-                .is_some()
-            {
-                **ctx.state = true;
+    let authenticated = {
+        let mut session = InteractSession::new(&mut p, &mut stdin, stdout(), false);
+        session.set_output_action(move |ctx| {
+            let found = search.on(ctx.buf, ctx.eof, "Login successful")?;
+            if found.is_some() {
+                *ctx.state = true;
                 return Ok(true);
             }
 
             Ok(false)
-        })
-        .spawn()?;
+        });
+
+        session.spawn()?;
+
+        session.into_state()
+    };
 
     stdin.close()?;
 
-    if !auth {
+    if !authenticated {
         println!("An authentication was not passed");
         return Ok(());
     }

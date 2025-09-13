@@ -2,10 +2,10 @@ use expectrl::{check, spawn, Error, Expect};
 
 #[cfg(not(feature = "async"))]
 fn main() {
-    let mut p = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
+    let mut p = spawn("python ./tests/source/ansi.py").unwrap();
 
     loop {
-        match check!(
+        let result = check! {
             &mut p,
             _ = "Password: " => {
                 println!("Set password to SECURE_PASSWORD");
@@ -15,9 +15,12 @@ fn main() {
                 println!("Stop processing");
                 p.send_line("n").unwrap();
             },
-        ) {
+        };
+
+        match result {
+            Ok(_) => {}
             Err(Error::Eof) => break,
-            result => result.unwrap(),
+            Err(_) => result.unwrap(),
         };
     }
 }
@@ -26,26 +29,30 @@ fn main() {
 fn main() {
     use expectrl::AsyncExpect;
 
-    futures_lite::future::block_on(async {
-        let mut session = spawn("python ./tests/source/ansi.py").expect("Can't spawn a session");
+    let f = async {
+        let mut session = spawn("python ./tests/source/ansi.py").unwrap();
 
         loop {
-            match check!(
-                &mut session,
+            let result = check! {
+                &mut p,
                 _ = "Password: " => {
                     println!("Set password to SECURE_PASSWORD");
-                    session.send_line("SECURE_PASSWORD").await.unwrap();
+                    p.send_line("SECURE_PASSWORD").await.unwrap();
                 },
                 _ = "Continue [y/n]:" => {
                     println!("Stop processing");
-                    session.send_line("n").await.unwrap();
+                    p.send_line("n").await.unwrap();
                 },
-            )
-            .await
-            {
+            }
+            .await;
+
+            match result {
+                Ok(_) => {}
                 Err(Error::Eof) => break,
-                result => result.unwrap(),
+                Err(_) => result.unwrap(),
             };
         }
-    })
+    };
+
+    futures_lite::future::block_on(f);
 }

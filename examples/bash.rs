@@ -14,16 +14,15 @@ fn main() {
 
     // case 2: wait until done, only extract a few infos
     p.send_line("wc /etc/passwd").unwrap();
-    // `exp_regex` returns both string-before-match and match itself, discard first
-    let lines = p.expect(Regex("[0-9]+")).unwrap();
-    let words = p.expect(Regex("[0-9]+")).unwrap();
-    let bytes = p.expect(Regex("[0-9]+")).unwrap();
+    // `expect` returns both string-before-match and match itself, discard first
+    let found = p.expect(Regex("([0-9]+).*([0-9]+).*([0-9]+)")).unwrap();
+    let lines = String::from_utf8_lossy(&found[1]);
+    let words = String::from_utf8_lossy(&found[2]);
+    let chars = String::from_utf8_lossy(&found[3]);
     p.expect_prompt().unwrap(); // go sure `wc` is really done
     println!(
         "/etc/passwd has {} lines, {} words, {} chars",
-        String::from_utf8_lossy(&lines[0]),
-        String::from_utf8_lossy(&words[0]),
-        String::from_utf8_lossy(&bytes[0]),
+        lines, words, chars,
     );
 
     // case 3: read while program is still executing
@@ -43,7 +42,7 @@ fn main() {
     use expectrl::AsyncExpect;
     use futures_lite::io::AsyncBufReadExt;
 
-    futures_lite::future::block_on(async {
+    let f = async {
         let mut p = spawn_bash().await.unwrap();
 
         // case 1: wait until program is done
@@ -55,16 +54,18 @@ fn main() {
 
         // case 2: wait until done, only extract a few infos
         p.send_line("wc /etc/passwd").await.unwrap();
-        // `exp_regex` returns both string-before-match and match itself, discard first
-        let lines = p.expect(Regex("[0-9]+")).await.unwrap();
-        let words = p.expect(Regex("[0-9]+")).await.unwrap();
-        let bytes = p.expect(Regex("[0-9]+")).await.unwrap();
+        // `expect` returns both string-before-match and match itself, discard first
+        let found = p
+            .expect(Regex("([0-9]+).*([0-9]+).*([0-9]+)"))
+            .await
+            .unwrap();
+        let lines = String::from_utf8_lossy(&found[1]);
+        let words = String::from_utf8_lossy(&found[2]);
+        let chars = String::from_utf8_lossy(&found[3]);
         p.expect_prompt().await.unwrap(); // go sure `wc` is really done
         println!(
             "/etc/passwd has {} lines, {} words, {} chars",
-            String::from_utf8_lossy(lines.get(0).unwrap()),
-            String::from_utf8_lossy(words.get(0).unwrap()),
-            String::from_utf8_lossy(bytes.get(0).unwrap()),
+            lines, words, chars,
         );
 
         // case 3: read while program is still executing
@@ -79,10 +80,12 @@ fn main() {
         }
 
         p.send(ControlCode::EOT).await.unwrap();
-    })
+    };
+
+    futures_lite::future::block_on(f);
 }
 
 #[cfg(windows)]
 fn main() {
-    panic!("An example doesn't supported on windows")
+    panic!("An example is not supported on windows")
 }
