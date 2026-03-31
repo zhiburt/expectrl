@@ -149,6 +149,19 @@ impl NonBlocking for PtyStream {
             false => make_non_blocking(fd, true),
         }
     }
+
+    #[cfg(feature = "polling")]
+    fn ready(&self, timeout: std::time::Duration) -> Result<bool> {
+        use polling::{Event, Poller};
+
+        let poller = Poller::new()?;
+        poller.add(self.handle.as_raw_fd(), Event::readable(1))?;
+
+        let mut events = Vec::new();
+        let num_ready = poller.wait(&mut events, Some(timeout))?;
+
+        Ok(num_ready > 0)
+    }
 }
 
 impl AsRawFd for PtyStream {
