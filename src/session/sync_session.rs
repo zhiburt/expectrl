@@ -508,6 +508,12 @@ where
 
     // non-buffered && non-blocking read
     fn try_read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // We don't know what the session timeout is but it is unlikely to be
+        // less than 100ms (and if it is then polling is optional anyway).
+        if !self.stream.get_mut().ready(Duration::from_millis(100))? {
+            return Err(io::Error::from(io::ErrorKind::WouldBlock));
+        }
+
         self.stream.get_mut().set_blocking(false)?;
 
         let result = self.stream.get_mut().read(buf);
