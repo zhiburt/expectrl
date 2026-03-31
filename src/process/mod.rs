@@ -1,6 +1,6 @@
 //! This module contains a platform independent abstraction over an os process.
 
-use std::io::Result;
+use std::{io::Result, time::Duration};
 
 #[cfg(unix)]
 pub mod unix;
@@ -72,6 +72,17 @@ where
 pub trait NonBlocking {
     /// Sets a [std::io::Read]er into a non/blocking mode.
     fn set_blocking(&mut self, on: bool) -> Result<()>;
+
+    /// Wait for data to be available from the stream.
+    ///
+    /// Returns true if there is data available or if availability is unknown.
+    fn ready(&self, timeout: Duration) -> Result<bool> {
+        let _ = timeout;
+
+        // The default implementation is always ready, meaning we fallback
+        // to a busy-wait if the platform code doesn't provide an implementation.
+        Ok(true)
+    }
 }
 
 impl<T> NonBlocking for &mut T
@@ -80,6 +91,10 @@ where
 {
     fn set_blocking(&mut self, on: bool) -> Result<()> {
         T::set_blocking(self, on)
+    }
+
+    fn ready(&self, timeout: Duration) -> Result<bool> {
+        T::ready(self, timeout)
     }
 }
 

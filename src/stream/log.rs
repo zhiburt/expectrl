@@ -4,6 +4,7 @@
 use std::{
     io::{self, Read, Result, Write},
     ops::{Deref, DerefMut},
+    time::Duration,
 };
 
 #[cfg(feature = "async")]
@@ -88,6 +89,10 @@ where
 {
     fn set_blocking(&mut self, on: bool) -> Result<()> {
         self.stream.set_blocking(on)
+    }
+
+    fn ready(&self, timeout: Duration) -> Result<bool> {
+        self.stream.ready(timeout)
     }
 }
 

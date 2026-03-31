@@ -362,6 +362,10 @@ where
     fn set_blocking(&mut self, on: bool) -> io::Result<()> {
         S::set_blocking(self.get_stream_mut(), on)
     }
+
+    fn ready(&self, timeout: Duration) -> io::Result<bool> {
+        S::ready(self.get_stream(), timeout)
+    }
 }
 
 #[cfg(unix)]
