@@ -25,11 +25,11 @@
 //! - Interact with process's IO(input/output).
 //!
 //! `expectrl` like original `expect` may shine when you're working with interactive applications.
-//! If your application is not interactive you may not find the library the best choise.
+//! If your application is not interactive you may not find the library the best choice.
 //!
 //! ## Feature flags
 //!
-//! - `async`: Enables a async/await public API.
+//! - `async`: Enables an async/await public API.
 //! - `polling`: Enables polling backend in interact session. Be cautious to use it on windows.
 //!
 //! ## Examples

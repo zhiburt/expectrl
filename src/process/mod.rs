@@ -11,7 +11,7 @@ pub mod windows;
 pub trait Process: Sized {
     /// A command which process can run.
     type Command;
-    /// A representation of IO stream of communication with a programm a process is running.
+    /// A representation of IO stream of communication with a program a process is running.
     type Stream;
 
     /// Spawn parses a given string as a commandline string and spawns it on a process.
@@ -67,8 +67,8 @@ where
     }
 }
 
-/// NonBlocking interface represens a [std::io::Read]er which can be turned in a non blocking mode
-/// so its read operations will return imideately.
+/// NonBlocking interface represents a [std::io::Read]er which can be turned in a non blocking mode
+/// so its read operations will return immediately.
 pub trait NonBlocking {
     /// Sets a [std::io::Read]er into a non/blocking mode.
     fn set_blocking(&mut self, on: bool) -> Result<()>;
@@ -112,6 +112,6 @@ pub trait IntoAsyncStream {
     /// Like [Process::Stream] but it represents an async IO stream.
     type AsyncStream;
 
-    /// Turns an object into a async stream.
+    /// Turns an object into an async stream.
     fn into_async_stream(self) -> Result<Self::AsyncStream>;
 }
