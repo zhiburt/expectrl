@@ -3,7 +3,10 @@
 use std::{
     io::{self, ErrorKind, Read, Result, Write},
     ops::{Deref, DerefMut},
-    os::unix::prelude::{AsRawFd, RawFd},
+    os::{
+        fd::{AsFd, BorrowedFd},
+        unix::prelude::{AsRawFd, RawFd},
+    },
     process::Command,
 };
 
@@ -12,6 +15,7 @@ use crate::{
     process::{Healthcheck, NonBlocking, Process, Termios},
 };
 
+use async_io::IoSafe;
 use ptyprocess::{errno::Errno, stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]
@@ -157,6 +161,13 @@ impl AsRawFd for PtyStream {
     }
 }
 
+impl AsFd for PtyStream {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        // SAFETY: It's all right
+        unsafe { BorrowedFd::borrow_raw(self.handle.as_raw_fd()) }
+    }
+}
+
 #[cfg(feature = "async")]
 impl IntoAsyncStream for PtyStream {
     type AsyncStream = AsyncPtyStream;
@@ -165,6 +176,8 @@ impl IntoAsyncStream for PtyStream {
         AsyncPtyStream::new(self)
     }
 }
+
+unsafe impl IoSafe for PtyStream {}
 
 /// An async version of IO stream of [UnixProcess].
 #[cfg(feature = "async")]
