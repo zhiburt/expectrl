@@ -235,7 +235,7 @@ where
                 //
                 // We could read all data available via `read_available` to reduce IO operations,
                 // but in such case we would need to keep a EOF indicator internally in stream,
-                // which is OK if EOF happens onces, but I am not sure if this is a case.
+                // which is OK if EOF happens once, but I am not sure if this is a case.
                 eof = self.stream.read_available_once(&mut [0; 1])? == Some(0);
                 available = self.stream.get_available();
             }
