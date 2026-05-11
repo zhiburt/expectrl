@@ -15,7 +15,6 @@ use crate::{
     process::{Healthcheck, NonBlocking, Process, Termios},
 };
 
-use async_io::IoSafe;
 use ptyprocess::{errno::Errno, stream::Stream, PtyProcess};
 
 #[cfg(feature = "async")]
@@ -177,7 +176,8 @@ impl IntoAsyncStream for PtyStream {
     }
 }
 
-unsafe impl IoSafe for PtyStream {}
+#[cfg(feature = "async")]
+unsafe impl async_io::IoSafe for PtyStream {}
 
 /// An async version of IO stream of [UnixProcess].
 #[cfg(feature = "async")]
