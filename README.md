@@ -16,7 +16,7 @@ Using the library you can:
 - Interact with process's IO(input/output).
 
 `expectrl` like original `expect` may shine when you're working with interactive applications.
-If your application is not interactive you may not find the library the best choiсe.
+If your application is not interactive you may not find the library the best choice.
 
 ## Usage
 
@@ -25,10 +25,10 @@ Add `expectrl` to your Cargo.toml.
 ```toml
 # Cargo.toml
 [dependencies]
-expectrl = "0.8"
+expectrl = "0.9"
 ```
 
-An example where the program simulates a used interacting with `ftp`.
+An example where the program simulates a user interacting with `ftp`.
 
 ```rust
 use expectrl::{Regex, Eof, Error, Expect};
